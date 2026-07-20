@@ -49,7 +49,6 @@ git diff --cached # staged
 - `__pycache__/`, `*.pyc` — Python 캐시
 - `.venv/`, `node_modules/` — 가상환경·의존성
 - `.ruff_cache/`, `.pytest_cache/`, `dist/` — 도구·빌드 산출물
-- `data/` — 수집 원본·데이터 산출물 (대용량은 별도 관리)
 
 ---
 
