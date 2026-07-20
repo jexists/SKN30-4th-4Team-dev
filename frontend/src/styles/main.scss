@@ -1,0 +1,15 @@
+@use 'variables' as v;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  color: v.$color-text;
+}
+
+a {
+  color: inherit;
+}

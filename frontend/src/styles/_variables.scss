@@ -1,0 +1,10 @@
+// 디자인 토큰 — 색·간격 등. SCSS 변수로 관리하고 @use 로 참조합니다.
+$color-text: #1a1a1a;
+$color-muted: #888888;
+$color-ok: #2e7d32;
+$color-error: #c62828;
+$color-border: #e0e0e0;
+
+$space-sm: 0.5rem;
+$space-md: 1rem;
+$space-lg: 2rem;
