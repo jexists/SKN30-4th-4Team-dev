@@ -1,0 +1,31 @@
+import { createBrowserRouter } from 'react-router-dom'
+
+import App from './App'
+import { Analyze } from './pages/Analyze/Analyze'
+import { AnalyzeResult } from './pages/AnalyzeResult/AnalyzeResult'
+import { Chat } from './pages/Chat/Chat'
+import { Home } from './pages/Home/Home'
+import { Login } from './pages/Login/Login'
+import { MyPage } from './pages/MyPage/MyPage'
+import { Onboarding } from './pages/Onboarding/Onboarding'
+import { Privacy } from './pages/Privacy/Privacy'
+import { Terms } from './pages/Terms/Terms'
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <App />,
+    children: [
+      { index: true, element: <Home /> },
+      { path: 'analyze', element: <Analyze /> },
+      { path: 'analyze/:id', element: <AnalyzeResult /> },
+      { path: 'chat', element: <Chat /> },
+      { path: 'chat/:id', element: <Chat /> },
+      { path: 'login', element: <Login /> },
+      { path: 'onboarding', element: <Onboarding /> },
+      { path: 'mypage', element: <MyPage /> },
+      { path: 'terms', element: <Terms /> },
+      { path: 'privacy', element: <Privacy /> },
+    ],
+  },
+])

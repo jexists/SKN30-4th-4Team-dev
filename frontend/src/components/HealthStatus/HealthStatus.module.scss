@@ -1,0 +1,24 @@
+@use '../../styles/variables' as v;
+
+.healthStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: v.$color-muted;
+}
+
+.dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: v.$color-muted;
+}
+
+.healthStatus[data-status='ok'] .dot {
+  background: v.$color-ok;
+}
+
+.healthStatus[data-status='error'] .dot {
+  background: v.$color-error;
+}
