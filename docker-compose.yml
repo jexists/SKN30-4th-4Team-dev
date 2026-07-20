@@ -1,0 +1,35 @@
+# 선택 실행 경로 — 평소 개발은 uv/npm 직접 실행이 더 빠릅니다.
+# 환경 통일·온보딩·배포용으로 `docker compose up --build` 사용.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    # DB는 Supabase(외부 관리형). Supabase 없이 로컬에서 돌리려면 아래 db 서비스 주석을 풀고
+    # backend/.env 의 DATABASE_URL 을 postgresql+psycopg://app:app@db:5432/app 로 설정하세요.
+    # depends_on:
+    #   - db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  # --- Supabase 없이 로컬 Postgres+pgvector 로 개발할 때만 사용 (기본 비활성) ---
+  # db:
+  #   image: pgvector/pgvector:pg16
+  #   environment:
+  #     POSTGRES_USER: app
+  #     POSTGRES_PASSWORD: app
+  #     POSTGRES_DB: app
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+
+# volumes:
+#   pgdata:

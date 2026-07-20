@@ -1,0 +1,34 @@
+# ===== Python / uv (backend) =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+# 로컬 개발 SQLite 폴백 DB
+*.db
+
+# ===== Node / React (frontend) =====
+node_modules/
+dist/
+*.local
+
+# ===== 환경 변수 (키 포함 — 절대 커밋 금지) =====
+.env
+.env.*
+!.env.example
+
+# ===== OS 생성 파일 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== IDE =====
+.idea/
+.vscode/
+
+# ===== 임시 작업 디렉터리 =====
+.tmp_*/
