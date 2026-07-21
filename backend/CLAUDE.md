@@ -15,6 +15,8 @@
 - `app/models/` — **ERD = ORM 모델** (DB 테이블). 실제 엔티티 이름으로 파일 추가 후 `__init__`에서 import
 - `app/schemas/` — **Pydantic = API 입출력**. `common.py` = 표준 응답 봉투
 - `app/services/` — 비즈니스 로직. `ingestion`(청킹·임베딩·색인)·`retrieval`(검색)
+- `app/agent/` — LangGraph 에이전트. `state`(공유 상태)·`prompts`·`model`(LLM 팩토리)·`nodes`(노드)·`graph`(조립·`build_graph`). `services`·`tools` 를 호출하는 상위 계층
+- `app/tools/` — 에이전트가 호출하는 툴. `base`(Tool 인터페이스)·`retrieval_tool`(검색 툴)
 - `pipeline/` — 오프라인 배치 색인 러너
 
 ## 핵심 규칙
@@ -36,5 +38,5 @@ uv run python -m pipeline.build_index     # 배치 색인 (자리표시)
 
 ## 지금은 자리표시 (나중에 채움 / 삭제)
 - `models/` 비어 있음 → ERD 설계(`docs/ERD.md`) 후 채움 + Alembic 도입
-- `services/ingestion`·`retrieval`, `pipeline/build_index` → RAG 구현 시 채움
+- `services/ingestion`·`retrieval`, `agent`(LangGraph)·`tools`, `pipeline/build_index` → RAG·에이전트 구현 시 채움(LangGraph 등 의존성도 그때 추가)
 - `/api/v1/hello` → 데모, 실제 개발 시 삭제. **`/api/v1/health` 는 유지**(표준 헬스체크)
