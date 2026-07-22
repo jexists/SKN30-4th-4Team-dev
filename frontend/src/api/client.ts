@@ -13,11 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-/** 표준 응답 봉투를 벗겨 data 를 반환. 실패면 ApiError 로 throw. */
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`)
-  const body = (await res.json()) as ApiResponse<T>
-
+function unwrap<T>(body: ApiResponse<T>): T {
   if (!body.success || body.data === null) {
     throw new ApiError(
       body.error?.title ?? 'ERROR',
@@ -26,4 +22,20 @@ export async function apiGet<T>(path: string): Promise<T> {
     )
   }
   return body.data
+}
+
+/** 표준 응답 봉투를 벗겨 data 를 반환. 실패면 ApiError 로 throw. */
+export async function apiGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`)
+  return unwrap<T>((await res.json()) as ApiResponse<T>)
+}
+
+/** POST + JSON 바디. 표준 응답 봉투를 벗겨 data 반환, 실패면 ApiError. */
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return unwrap<T>((await res.json()) as ApiResponse<T>)
 }

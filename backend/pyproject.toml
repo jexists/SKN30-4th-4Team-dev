@@ -9,6 +9,12 @@ dependencies = [
     "pydantic-settings>=2.4",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
+    "numpy>=2.5.1",
+    "openai>=2.46.0",
+    "sentence-transformers>=5.6.0",
+    "langgraph>=0.2",
+    "langchain-openai>=0.2",
+    "python-dotenv>=1.0",
 ]
 
 [dependency-groups]
@@ -17,6 +23,15 @@ dev = [
     "pytest-cov>=5.0",
     "httpx>=0.27",
     "ruff>=0.6",
+]
+# 색인(ingest) 전용 — 임베딩 모델(KURE-v1)은 무거우므로(torch 전이) API 런타임과 분리한다.
+# openai/numpy 는 임베딩 비교 노트북(tests/chunks)에서도 사용한다.
+# 설치:  uv sync --group ingest
+ingest = [
+    "sentence-transformers>=3.0",
+    "openai>=1.0",
+    "numpy>=1.26",
+    "python-dotenv>=1.0",
 ]
 
 # 애플리케이션(라이브러리 아님) — uv 가 루트를 빌드/설치하지 않도록 설정

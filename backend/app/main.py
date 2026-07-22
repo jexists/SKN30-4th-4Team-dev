@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  (ERD 모델 메타데이터 등록)
-from app.api.routes import health
+from app.api.routes import chat, health
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
@@ -27,3 +27,4 @@ register_exception_handlers(app)
 Base.metadata.create_all(bind=engine)
 
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")

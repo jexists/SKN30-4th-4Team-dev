@@ -1,8 +1,9 @@
-"""런타임 검색 (자리표시).
+"""런타임 검색 — legal_chunks(pgvector) 유사도 검색.
 
-질의를 임베딩해 Supabase(pgvector)에서 유사도 검색하는 로직을 RAG 구현 단계에서 채웁니다.
+질의를 KURE-v1 로 임베딩해 코사인 유사 청크를 돌려준다(services.retrieval.search).
+graph_rag 의 retrieve 노드가 이 search_similar 를 호출한다.
 """
 
+from app.services.retrieval.search import search_similar
 
-def search(query: str, top_k: int = 5) -> list[dict]:
-    raise NotImplementedError("RAG 구현 단계에서 작성")
+__all__ = ["search_similar"]

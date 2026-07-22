@@ -11,6 +11,11 @@
   padding: v.$space-md;
 }
 
+.landingMain {
+  flex: 1;
+  padding: 0;
+}
+
 .footer {
   padding: v.$space-md;
   border-top: 1px solid v.$color-border;

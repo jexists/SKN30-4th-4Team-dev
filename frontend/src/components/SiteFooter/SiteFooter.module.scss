@@ -1,0 +1,56 @@
+@use '../../styles/variables' as v;
+
+.siteFooter {
+  background: v.$navy-900;
+  color: #fff;
+}
+.footerInner {
+  width: 100%;
+  max-width: v.$content-max;
+  margin: 0 auto;
+  padding: 40px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 28px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 19px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+.brandMark {
+  width: 22px;
+  height: 22px;
+  color: #fff;
+}
+.footerBrand {
+  max-width: 30rem;
+
+  p {
+    margin: 14px 0 0;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #8b93a7;
+  }
+}
+.footerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+
+  a {
+    font-size: 14px;
+    color: #c2c9d8;
+    text-decoration: none;
+
+    &:hover {
+      color: #fff;
+    }
+  }
+}
