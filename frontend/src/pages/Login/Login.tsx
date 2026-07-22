@@ -41,11 +41,11 @@ export function Login() {
             <p className={styles.subtitle}>안전한 전세 계약의 시작, 로그인해주세요.</p>
           </div>
 
-          {state?.from && (
+          {/* {state?.from && (
             <p className={styles.redirectNote} role="status">
               로그인이 필요한 화면입니다. 로그인하면 <strong>{state.from}</strong> 으로 이동합니다.
             </p>
-          )}
+          )} */}
 
           <form className={styles.form} onSubmit={handleSubmit}>
             <div className={styles.field}>
