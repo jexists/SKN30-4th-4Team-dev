@@ -32,3 +32,6 @@ desktop.ini
 
 # ===== 임시 작업 디렉터리 =====
 .tmp_*/
+
+# ===== Playwright MCP 산출물 (스냅샷·콘솔 로그·스크린샷) =====
+.playwright-mcp/

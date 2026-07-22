@@ -31,7 +31,7 @@ npm run test:watch   # Vitest (TDD 워치)
 ```
 src/
 ├── main.tsx          # 진입점 (RouterProvider + 전역 SCSS)
-├── App.tsx           # 공통 레이아웃 (NavBar + <Outlet/> + 하단 HealthStatus)
+├── App.tsx           # 공통 레이아웃 (SiteHeader + <Outlet/> + 하단 HealthStatus)
 ├── routes.tsx        # URL ↔ 페이지 매핑
 ├── pages/            # 화면별 스텁 (지금은 이름 텍스트만)
 ├── components/       # 재사용 컴포넌트 (컴포넌트별 폴더, PascalCase)

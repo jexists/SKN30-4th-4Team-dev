@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '../../api/client'
 import { sendChat } from '../../api/chat'
-import { SiteHeader } from '../../components/SiteHeader/SiteHeader'
 import { Info, Paperclip, Send, Shield, User } from '../../components/icons'
+import { BRAND } from '../../config/env'
 import styles from './Chat.module.scss'
 
 const HISTORY = [
@@ -16,8 +16,7 @@ const TOPICS = ['보증금 반환', '수리비 분쟁', '계약 갱신 청구권
 
 const MAX_LEN = 2000
 
-const GREETING =
-  '안녕하세요! HomeShield AI 법률 어시스턴트입니다. 주택임대차보호법에 따른 귀하의 권리를 이해하실 수 있도록 도와드리겠습니다. 오늘 임대차 계약과 관련하여 어떤 도움이 필요하신가요?'
+const GREETING = `안녕하세요! ${BRAND.name} AI 법률 어시스턴트입니다. 주택임대차보호법에 따른 귀하의 권리를 이해하실 수 있도록 도와드리겠습니다. 오늘 임대차 계약과 관련하여 어떤 도움이 필요하신가요?`
 
 type Role = 'user' | 'assistant'
 interface Message {
@@ -75,8 +74,6 @@ export function Chat() {
 
   return (
     <div className={styles.page}>
-      <SiteHeader />
-
       <div className={styles.shell}>
         {/* ── 사이드바 ── */}
         <aside className={styles.sidebar}>
@@ -109,7 +106,7 @@ export function Chat() {
         </aside>
 
         {/* ── 채팅 영역 ── */}
-        <main className={styles.chat}>
+        <section className={styles.chat}>
           <div className={styles.notice}>
             <Info className={styles.noticeIcon} />
             <span>
@@ -129,7 +126,7 @@ export function Chat() {
                     <div className={`${styles.bubbleBot} ${m.error ? styles.bubbleError : ''}`}>
                       {m.content}
                     </div>
-                    <span className={styles.meta}>HomeShield 봇</span>
+                    <span className={styles.meta}>{BRAND.name} 봇</span>
                   </div>
                 </div>
               ) : (
@@ -198,7 +195,7 @@ export function Chat() {
               </span>
             </div>
           </div>
-        </main>
+        </section>
       </div>
     </div>
   )

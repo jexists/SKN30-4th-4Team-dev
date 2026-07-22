@@ -54,3 +54,60 @@
     }
   }
 }
+
+/* ══════════════ compact — 작업 화면용 고지 스트립 ══════════════ */
+/* 자기를 드러내지 않는 마감 띠. 흰색이면 톤이 깔린 본문(진단 #f2f4fb 등) 아래에서
+   덜 칠해진 것처럼 보이므로, 본문 톤과 거의 붙는 $bg-soft 로 깔고 헤어라인만 남긴다. */
+.compact {
+  background: v.$bg-soft;
+  border-top: 1px solid #e3e7ef;
+}
+.compactInner {
+  width: 100%;
+  max-width: v.$content-max;
+  margin: 0 auto;
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+.compactLegal {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: v.$slate;
+}
+.compactMark {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: #a7aec0;
+}
+.compactLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+
+  a {
+    font-size: 13px;
+    color: v.$slate;
+    text-decoration: none;
+
+    &:hover {
+      color: v.$navy-800;
+      text-decoration: underline;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .compactInner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

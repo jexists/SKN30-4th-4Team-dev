@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 
-import { SiteFooter } from '../../components/SiteFooter/SiteFooter'
-import { SiteHeader } from '../../components/SiteHeader/SiteHeader'
 import { Doc, FileLines, Gavel, Shield, Upload } from '../../components/icons'
+import { BRAND } from '../../config/env'
 import styles from './Analyze.module.scss'
 
 const GUIDE = [
@@ -27,9 +26,7 @@ const METRICS = [
 export function Analyze() {
   return (
     <div className={styles.page}>
-      <SiteHeader />
-
-      <main className={styles.main}>
+      <div className={styles.main}>
         <div className={styles.inner}>
           <header className={styles.pageHead}>
             <h1 className={styles.title}>계약 전 권리분석 진단</h1>
@@ -109,10 +106,10 @@ export function Analyze() {
               </section>
 
               <section className={styles.assureCard}>
-                <h3>홈쉴드 안전 보장</h3>
+                <h3>{BRAND.nameKo} 안전 보장</h3>
                 <p>
-                  홈쉴드 AI는 실거래가와 대법원 판례 데이터를 대조하여 계약 체결 전 '전세 사기'
-                  위험을 선제적으로 감지합니다.
+                  {BRAND.nameKo} AI는 실거래가와 대법원 판례 데이터를 대조하여 계약 체결 전 '전세
+                  사기' 위험을 선제적으로 감지합니다.
                 </p>
                 <Link to="/chat" className={styles.assureLink}>
                   분석 방법론 자세히 보기
@@ -122,9 +119,7 @@ export function Analyze() {
             </aside>
           </div>
         </div>
-      </main>
-
-      <SiteFooter />
+      </div>
     </div>
   )
 }

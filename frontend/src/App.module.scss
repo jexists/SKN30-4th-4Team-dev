@@ -11,12 +11,29 @@
   padding: v.$space-md;
 }
 
-.landingMain {
+.fullMain {
   flex: 1;
+  min-height: 0;
   padding: 0;
+  // 채팅처럼 남은 높이를 그대로 쓰는 화면을 위해 flex 컨테이너로 둔다.
+  display: flex;
+  flex-direction: column;
 }
 
-.footer {
-  padding: v.$space-md;
-  border-top: 1px solid v.$color-border;
+/* 개발 전용 백엔드 연결 표시 — 좌하단에 띄우는 칩.
+   레이아웃을 밀지 않도록 fixed 로 빼고, 푸터 링크 클릭을 막지 않도록 pointer-events 를 끈다. */
+.devStatus {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 100;
+  padding: 5px 11px;
+  border: 1px solid v.$color-border;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+  font-size: 11px;
+  pointer-events: none;
+  opacity: 0.7;
 }

@@ -1,14 +1,13 @@
 import { Link } from 'react-router-dom'
 
-import { SiteFooter } from '../../components/SiteFooter/SiteFooter'
-import { SiteHeader } from '../../components/SiteHeader/SiteHeader'
 import { Chat, Compass, Doc, Grid, Refresh, Shield, Warn } from '../../components/icons'
+import { BRAND } from '../../config/env'
 import styles from './Home.module.scss'
 
 const STATS = [
   { num: '68%', label: '첫 계약 임차인의 68%가 계약서의 사기 조항을 발견하지 못합니다.' },
   { num: '2.4조', label: '전세 및 임대 사기로 인한 연간 추정 금융 피해액.' },
-  { num: '15초', label: '홈실드 AI가 계약서 전체를 스캔해 진단하는 데 걸리는 평균 시간.' },
+  { num: '15초', label: `${BRAND.nameKo} AI가 계약서 전체를 스캔해 진단하는 데 걸리는 평균 시간.` },
 ]
 
 const BENEFITS = [
@@ -20,8 +19,6 @@ const BENEFITS = [
 export function Home() {
   return (
     <div className={styles.page}>
-      <SiteHeader />
-
       {/* ── 히어로 ── */}
       <section className={styles.hero}>
         <div className={styles.heroInner}>
@@ -35,8 +32,8 @@ export function Home() {
               법률 보호막.
             </h1>
             <p className={styles.heroDesc}>
-              고급 OCR 진단과 RAG 기반 법률 AI를 통해 사기 계약과 불공정 특약으로부터
-              임차인을 완벽하게 보호합니다.
+              고급 OCR 진단과 RAG 기반 법률 AI를 통해 사기 계약과 불공정 특약으로부터 임차인을
+              완벽하게 보호합니다.
             </p>
             <div className={styles.heroActions}>
               <Link to="/analyze" className={styles.btnPrimary}>
@@ -120,8 +117,8 @@ export function Home() {
               전문가 수준의 정밀함.
             </h3>
             <p className={styles.featureIntroText}>
-              독자적인 OCR 기술로 종이 계약서의 텍스트를 추출하고, RAG 기술을 통해
-              최신 주택 임대차 법령과 대조하여 분석합니다.
+              독자적인 OCR 기술로 종이 계약서의 텍스트를 추출하고, RAG 기술을 통해 최신 주택 임대차
+              법령과 대조하여 분석합니다.
             </p>
             <ul className={styles.checkList}>
               {BENEFITS.map((b) => (
@@ -153,8 +150,8 @@ export function Home() {
               </span>
               <h3 className={styles.featTitle}>OCR 계약서 진단</h3>
               <p className={styles.featDesc}>
-                종이 계약서 사진을 업로드하세요. AI가 몇 초 안에 텍스트를 스캔하고 추출하여
-                고위험 영역을 강조해 보여줍니다.
+                종이 계약서 사진을 업로드하세요. AI가 몇 초 안에 텍스트를 스캔하고 추출하여 고위험
+                영역을 강조해 보여줍니다.
               </p>
               <div className={styles.ocrScene} aria-hidden>
                 <div className={styles.ocrPaper}>
@@ -219,8 +216,7 @@ export function Home() {
                 </span>
                 <h3 className={styles.featTitle}>전세가율 정밀 분석</h3>
                 <p className={styles.featDesc}>
-                  매매가 대비 보증금 비율을 자동으로 계산하여 ‘깡통전세’ 위험을 사전에
-                  방지합니다.
+                  매매가 대비 보증금 비율을 자동으로 계산하여 ‘깡통전세’ 위험을 사전에 방지합니다.
                 </p>
                 <Link to="/analyze" className={styles.inlineLink}>
                   위험 지표 알아보기 →
@@ -253,7 +249,7 @@ export function Home() {
         <div className={styles.finalInner}>
           <h2 className={styles.finalTitle}>안전장치 없이 서명하지 마세요.</h2>
           <p className={styles.finalSub}>
-            이번 달에만 수천 명의 현명한 임차인들이 홈실드와 함께 안전하게 계약했습니다.
+            이번 달에만 수천 명의 현명한 임차인들이 {BRAND.nameKo}와 함께 안전하게 계약했습니다.
           </p>
           <div className={styles.finalActions}>
             <Link to="/analyze" className={styles.btnPrimary}>
@@ -265,8 +261,6 @@ export function Home() {
           </div>
         </div>
       </section>
-
-      <SiteFooter />
     </div>
   )
 }
