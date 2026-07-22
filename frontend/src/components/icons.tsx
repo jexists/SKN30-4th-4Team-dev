@@ -36,13 +36,23 @@ export const Bell = ({ className }: IconProps) => (
 export const Doc = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
     <path d="M6 3h8l4 4v14H6V3Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-    <path d="M14 3v4h4M9 13h6M9 17h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path
+      d="M14 3v4h4M9 13h6M9 17h6"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
   </svg>
 )
 
 export const Chat = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-    <path d="M4 5h16v11H9l-4 3v-3H4V5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <path
+      d="M4 5h16v11H9l-4 3v-3H4V5Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
     <path d="M8 10h8M8 13h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
   </svg>
 )
@@ -84,12 +94,7 @@ export const Refresh = ({ className }: IconProps) => (
 
 export const Upload = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-    <path
-      d="M6 4h8l4 4v12H6V4Z"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
+    <path d="M6 4h8l4 4v12H6V4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
     <path
       d="M11 17v-6m0 0L8.5 13.5M11 11l2.5 2.5"
       stroke="currentColor"
@@ -171,6 +176,18 @@ export const Send = ({ className }: IconProps) => (
       strokeWidth="1.6"
       strokeLinejoin="round"
       fill="none"
+    />
+  </svg>
+)
+
+export const Lock = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <rect x="4.5" y="10" width="15" height="10" rx="2.4" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M8.5 10V7.5a3.5 3.5 0 1 1 7 0V10"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
     />
   </svg>
 )

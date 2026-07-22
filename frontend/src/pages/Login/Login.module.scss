@@ -1,0 +1,319 @@
+@use '../../styles/variables' as v;
+
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  // 본문 그라디언트 끝색과 같은 톤이라 compact 푸터까지 매끄럽게 이어진다.
+  background: v.$bg-soft;
+  color: v.$ink;
+  font-family:
+    'Pretendard Variable',
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Malgun Gothic',
+    'Apple SD Gothic Neo',
+    system-ui,
+    sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 56px 16px 72px;
+  background: linear-gradient(180deg, #f8f9ff, v.$bg-soft);
+}
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  padding: 40px;
+  background: #fff;
+  border: 1px solid #e6e9f2;
+  border-radius: v.$radius;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+}
+
+/* ══════════════ 브랜드 ══════════════ */
+.brandAnchor {
+  margin-bottom: 32px;
+  text-align: center;
+}
+.brandBadge {
+  display: inline-grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  border-radius: 18px;
+  background: v.$lavender;
+}
+.brandMark {
+  width: 32px;
+  height: 32px;
+  color: v.$navy-800;
+}
+.title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: v.$navy-800;
+}
+.subtitle {
+  margin: 0;
+  font-size: 15px;
+  color: v.$slate;
+}
+
+.redirectNote {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border-radius: v.$radius-sm;
+  background: v.$blue-soft;
+  font-size: 13px;
+  line-height: 1.5;
+  color: v.$navy-800;
+
+  strong {
+    font-weight: 700;
+  }
+}
+
+/* ══════════════ 폼 ══════════════ */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.label {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: v.$slate;
+}
+.input {
+  width: 100%;
+  padding: 13px 16px;
+  border: 1px solid #dfe3ec;
+  border-radius: v.$radius-sm;
+  background: #fcfdff;
+  font: inherit;
+  font-size: 15px;
+  color: v.$ink;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &::placeholder {
+    color: #a7aec0;
+  }
+  &:focus {
+    border-color: v.$navy-800;
+    box-shadow: 0 0 0 4px rgba(23, 34, 74, 0.1);
+  }
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0 4px;
+}
+.keep {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: v.$slate;
+  cursor: pointer;
+
+  input {
+    width: 16px;
+    height: 16px;
+    accent-color: v.$navy-800;
+    cursor: pointer;
+  }
+  &:hover {
+    color: v.$navy-800;
+  }
+}
+.textLink {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: v.$navy-800;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.submit {
+  margin-top: 4px;
+  padding: 14px;
+  border: none;
+  border-radius: v.$radius-sm;
+  background: v.$navy-800;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+
+  &:hover {
+    background: #101a3c;
+  }
+  &:active {
+    transform: scale(0.985);
+  }
+}
+
+/* ══════════════ 구분선 · 소셜 ══════════════ */
+.divider {
+  position: relative;
+  margin: 32px 0;
+  text-align: center;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    border-top: 1px solid #e6e9f2;
+  }
+  span {
+    position: relative;
+    padding: 0 14px;
+    background: #fff;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    color: #8b93a7;
+  }
+}
+
+.socials {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.social {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border: none;
+  border-radius: v.$radius-sm;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    transform 0.12s ease;
+
+  &:hover {
+    filter: brightness(0.96);
+  }
+  &:active {
+    transform: scale(0.985);
+  }
+}
+.socialMark {
+  width: 20px;
+  height: 20px;
+}
+.kakao {
+  background: #fee500;
+  color: #191919;
+}
+.naver {
+  background: #03c75a;
+  color: #fff;
+}
+.naverMark {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.notice {
+  margin: 16px 0 0;
+  padding: 10px 14px;
+  border-radius: v.$radius-sm;
+  background: v.$bg-soft;
+  font-size: 13px;
+  text-align: center;
+  color: v.$slate;
+}
+
+.signup {
+  margin: 32px 0 0;
+  font-size: 15px;
+  text-align: center;
+  color: v.$slate;
+
+  a {
+    margin-left: 6px;
+    font-weight: 700;
+    color: v.$navy-800;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+/* ══════════════ 신뢰 배지 ══════════════ */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  opacity: 0.65;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: v.$slate;
+}
+.badgeMark {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 28px 20px;
+  }
+  .badges {
+    gap: 16px;
+  }
+}
