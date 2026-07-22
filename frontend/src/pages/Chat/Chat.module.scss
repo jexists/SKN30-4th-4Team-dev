@@ -1,13 +1,21 @@
 @use '../../styles/variables' as v;
 
 .page {
+  // 공통 헤더(App.tsx)를 제외한 남은 높이를 그대로 채운다.
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
   color: v.$ink;
   font-family:
-    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Malgun Gothic',
-    'Apple SD Gothic Neo', system-ui, sans-serif;
+    'Pretendard Variable',
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Malgun Gothic',
+    'Apple SD Gothic Neo',
+    system-ui,
+    sans-serif;
   letter-spacing: -0.01em;
 }
 
