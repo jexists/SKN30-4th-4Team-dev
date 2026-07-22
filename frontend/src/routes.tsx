@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom'
 
 import App from './App'
+import { RequireAuth } from './components/RequireAuth/RequireAuth'
 import { Analyze } from './pages/Analyze/Analyze'
 import { AnalyzeResult } from './pages/AnalyzeResult/AnalyzeResult'
 import { Chat } from './pages/Chat/Chat'
@@ -23,7 +24,11 @@ export const router = createBrowserRouter([
       { path: 'chat/:id', element: <Chat /> },
       { path: 'login', element: <Login /> },
       { path: 'onboarding', element: <Onboarding /> },
-      { path: 'mypage', element: <MyPage /> },
+      // 로그인이 필요한 화면 — 비로그인이면 /login 으로 이동
+      {
+        element: <RequireAuth />,
+        children: [{ path: 'mypage', element: <MyPage /> }],
+      },
       { path: 'terms', element: <Terms /> },
       { path: 'privacy', element: <Privacy /> },
     ],
