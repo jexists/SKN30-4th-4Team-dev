@@ -1,6 +1,7 @@
+import { ENV } from '../config/env'
 import type { ApiResponse } from '../types/api'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const BASE_URL = ENV.apiBaseUrl
 
 export class ApiError extends Error {
   title: string
