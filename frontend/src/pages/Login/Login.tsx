@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { Chat, Shield } from '../../components/icons'
+import { showToast } from '../../components/Toast/toastStore'
 import { BRAND } from '../../config/env'
 import { supabase } from '../../config/supabase'
 import { useAuth } from '../../hooks/useAuth'
@@ -18,26 +19,24 @@ export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [keepSignedIn, setKeepSignedIn] = useState(true)
-  const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setNotice(null)
 
     if (!supabase) {
-      setNotice('로그인 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)')
+      showToast('로그인 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)', 'error')
       return
     }
     if (!email || !password) {
-      setNotice('이메일과 비밀번호를 입력해주세요.')
+      showToast('이메일과 비밀번호를 입력해주세요.', 'error')
       return
     }
 
     setSubmitting(true)
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.session) {
-      setNotice('이메일 또는 비밀번호가 올바르지 않습니다.')
+      showToast('이메일 또는 비밀번호가 올바르지 않습니다.', 'error')
       setSubmitting(false)
       return
     }
@@ -109,7 +108,7 @@ export function Login() {
               <button
                 type="button"
                 className={styles.textLink}
-                onClick={() => setNotice(`비밀번호 찾기는 ${SOON}`)}
+                onClick={() => showToast(`비밀번호 찾기는 ${SOON}`, 'info')}
               >
                 비밀번호 찾기
               </button>
@@ -128,7 +127,7 @@ export function Login() {
             <button
               type="button"
               className={`${styles.social} ${styles.kakao}`}
-              onClick={() => setNotice(`카카오 로그인은 ${SOON}`)}
+              onClick={() => showToast(`카카오 로그인은 ${SOON}`, 'info')}
             >
               <Chat className={styles.socialMark} />
               카카오로 로그인
@@ -136,18 +135,12 @@ export function Login() {
             <button
               type="button"
               className={`${styles.social} ${styles.naver}`}
-              onClick={() => setNotice(`네이버 로그인은 ${SOON}`)}
+              onClick={() => showToast(`네이버 로그인은 ${SOON}`, 'info')}
             >
               <span className={styles.naverMark}>N</span>
               네이버로 로그인
             </button>
           </div>
-
-          {notice && (
-            <p className={styles.notice} role="status">
-              {notice}
-            </p>
-          )}
 
           <p className={styles.signup}>
             아직 회원이 아니신가요?

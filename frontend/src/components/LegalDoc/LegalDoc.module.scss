@@ -1,0 +1,71 @@
+@use '../../styles/variables' as v;
+
+.page {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 56px 16px 72px;
+  background: v.$bg-soft;
+}
+.pageCard {
+  width: 100%;
+  max-width: 760px;
+  padding: 40px;
+  background: #fff;
+  border: 1px solid #e6e9f2;
+  border-radius: v.$radius;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+}
+.pageTitle {
+  margin: 0 0 24px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: v.$navy-800;
+}
+
+@media (max-width: 480px) {
+  .pageCard {
+    padding: 28px 20px;
+  }
+}
+
+.doc {
+  color: v.$slate;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.effective {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  color: #8b93a7;
+}
+
+.intro {
+  margin: 0 0 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #eef0f6;
+  color: v.$ink;
+}
+
+.section {
+  & + & {
+    margin-top: 20px;
+  }
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: v.$navy-800;
+}
+
+.para {
+  margin: 0;
+
+  & + & {
+    margin-top: 6px;
+  }
+}

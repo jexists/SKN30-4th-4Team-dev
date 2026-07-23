@@ -191,3 +191,26 @@ export const Lock = ({ className }: IconProps) => (
     />
   </svg>
 )
+
+export const Close = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="m6 6 12 12M18 6 6 18"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+export const Check = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="m5 12.5 4.5 4.5L19 7"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)

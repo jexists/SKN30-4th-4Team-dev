@@ -1,0 +1,110 @@
+@use '../../styles/variables' as v;
+
+.viewport {
+  position: fixed;
+  top: 82px; // 66px 스티키 헤더 아래로 살짝 띄운다
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  pointer-events: none; // 빈 영역은 클릭이 통과하도록
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 280px;
+  max-width: 420px;
+  padding: 12px 12px 12px 14px;
+  border-radius: v.$radius-sm;
+  background: #fff;
+  border: 1px solid #e6e9f2;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.16);
+  font-size: 14px;
+  line-height: 1.5;
+  color: v.$ink;
+  pointer-events: auto;
+  animation: slideIn 0.2s ease;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.message {
+  flex: 1;
+}
+.close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: v.$slate;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: v.$bg-soft;
+  }
+}
+.closeMark {
+  width: 16px;
+  height: 16px;
+}
+
+/* 유형별 강조 — 아이콘 색과 테두리로 구분한다. */
+.error {
+  border-color: #f6cccc;
+  .icon {
+    color: v.$red;
+  }
+}
+.success {
+  border-color: #bfe6cd;
+  .icon {
+    color: v.$green;
+  }
+}
+.info {
+  border-color: #cdd7ec;
+  .icon {
+    color: v.$navy-800;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .viewport {
+    left: 16px;
+    right: 16px;
+    transform: none;
+    width: auto;
+    max-width: none;
+  }
+  .toast {
+    min-width: 0;
+    max-width: none;
+  }
+}
