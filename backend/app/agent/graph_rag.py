@@ -220,31 +220,44 @@ app = build_app()
 
 
 # ──────────────────────────────────────────────
-# 한 턴 실행 헬퍼 (멀티턴 = 같은 thread_id 로 재호출)
+# 한 턴 실행 헬퍼
 # ──────────────────────────────────────────────
-def run_turn(thread_id: str, question: str) -> str:
-    cfg = {"configurable": {"thread_id": thread_id}}
+# 대화 맥락은 호출자가 넘긴 history 로 주입한다(DB 가 기록의 원본).
+# MemorySaver 는 그래프 컴파일 요건이라 남겨두되, 매 호출 새 thread_id 로 격리한다.
+def run_turn(question: str, history: list[dict] | None = None) -> str:
+    import uuid
+
+    msgs = []
+    for h in history or []:
+        content = (h.get("content") or "").strip()
+        if not content:
+            continue
+        msgs.append(
+            AIMessage(content=content)
+            if h.get("role") == "assistant"
+            else HumanMessage(content=content)
+        )
+    msgs.append(HumanMessage(content=question))  # 이번 턴 질문
+
     out = app.invoke(
         {
             "question": question,
             "query": question,  # 이번 턴 검색어 (재작성 전 초기값)
             "retrieval_attempts": 0,  # 턴마다 재작성 예산 초기화
-            "messages": [HumanMessage(content=question)],  # 사용자 발화를 히스토리에 적재
+            "messages": msgs,
         },
-        config=cfg,
+        config={"configurable": {"thread_id": uuid.uuid4().hex}},
     )
     return out["answer"]
 
 
 if __name__ == "__main__":
-    import uuid
-
-    thread_id = str(uuid.uuid4())[:8]
     print("\n" + "=" * 50)
-    print(f"🏠 전·월세 분쟁 RAG 챗봇 실행 (세션 ID: {thread_id})")
+    print("🏠 전·월세 분쟁 RAG 챗봇 실행")
     print("=" * 50)
     print("※ 종료하려면 '종료' 또는 'exit'를 입력하세요.\n")
 
+    history: list[dict] = []
     while True:
         question = input("\n👤 질문 입력: ").strip()
         if question.lower() in ["종료", "exit", "quit"]:
@@ -255,8 +268,10 @@ if __name__ == "__main__":
             continue
         print("\n🔍 관련 법령 및 판례 검색 중...")
         try:
-            answer = run_turn(thread_id=thread_id, question=question)
+            answer = run_turn(question, history)
             print(f"\n🤖 [답변]:\n{answer}")
             print("\n" + "─" * 50)
+            history.append({"role": "user", "content": question})
+            history.append({"role": "assistant", "content": answer})
         except Exception as e:
             print(f"\n❌ 에러가 발생했습니다: {e}")

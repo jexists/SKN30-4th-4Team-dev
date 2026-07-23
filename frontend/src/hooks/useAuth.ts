@@ -1,11 +1,13 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
+import { supabase } from '../config/supabase'
+
 /**
  * 로그인 세션 훅.
  *
- * Supabase Auth 연동 전까지는 localStorage 토큰 유무로만 로그인 여부를 판정하는 임시 구현이다.
- * 실제 인증을 붙일 때 이 파일(readToken·signIn·signOut)만 교체하면
- * RequireAuth 등 사용하는 쪽 코드는 그대로 둘 수 있다.
+ * 로그인 판정은 localStorage 의 access_token 유무로 한다(테스트·가드가 이 키에 의존).
+ * 실제 인증은 Supabase Auth 가 담당 — 로그인/회원가입 성공 시 `signIn(session.access_token)`
+ * 으로 이 키에 실제 토큰을 저장하고, 로그아웃 시 Supabase 세션도 함께 종료한다.
  */
 export const AUTH_TOKEN_KEY = 'homeshield.accessToken'
 
@@ -41,6 +43,7 @@ export function useAuth() {
 
   const signOut = useCallback(() => {
     localStorage.removeItem(AUTH_TOKEN_KEY)
+    void supabase?.auth.signOut() // Supabase 세션도 종료(미설정이면 no-op)
     notify()
   }, [])
 

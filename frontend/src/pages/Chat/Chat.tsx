@@ -1,19 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ApiError } from '../../api/client'
-import { sendChat } from '../../api/chat'
+import { sendChat, type ChatTurn } from '../../api/chat'
+import {
+  addMessage,
+  createRoom,
+  listMessages,
+  listRooms,
+  touchRoom,
+  type ChatRoom,
+} from '../../api/chatHistory'
 import { Info, Paperclip, Send, Shield, User } from '../../components/icons'
 import { BRAND } from '../../config/env'
+import { isAuthConfigured } from '../../config/supabase'
+import { useAuth } from '../../hooks/useAuth'
 import styles from './Chat.module.scss'
 
-const HISTORY = [
-  { title: '전세보증금 미반환 문제', time: '2시간 전', active: true },
-  { title: '계약 갱신 관련 Q&A', time: '어제', active: false },
-  { title: '수리비 부담 책임 소재', time: '2024년 3월 12일', active: false },
-]
-
 const TOPICS = ['보증금 반환', '수리비 분쟁', '계약 갱신 청구권', '해지 통보 시점']
-
 const MAX_LEN = 2000
 
 const GREETING = `안녕하세요! ${BRAND.name} AI 법률 어시스턴트입니다. 주택임대차보호법에 따른 귀하의 권리를 이해하실 수 있도록 도와드리겠습니다. 오늘 임대차 계약과 관련하여 어떤 도움이 필요하신가요?`
@@ -28,32 +31,102 @@ interface Message {
 
 let _id = 0
 const newId = () => `m${Date.now()}-${_id++}`
+const greetingMsg = (): Message => ({ id: 'seed', role: 'assistant', content: GREETING })
+
+function relTime(iso: string): string {
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (min < 1) return '방금 전'
+  if (min < 60) return `${min}분 전`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}시간 전`
+  const day = Math.floor(hr / 24)
+  if (day === 1) return '어제'
+  if (day < 7) return `${day}일 전`
+  return new Date(iso).toLocaleDateString('ko-KR')
+}
 
 export function Chat() {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: 'seed', role: 'assistant', content: GREETING },
-  ])
-  const [threadId, setThreadId] = useState<string>()
+  const { isAuthed } = useAuth()
+  const persistent = isAuthed && isAuthConfigured // 로그인 + Supabase 설정 시 DB 저장
+
+  const [rooms, setRooms] = useState<ChatRoom[]>([])
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([greetingMsg()])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
 
-  // 새 메시지·타이핑 상태 변화 시 맨 아래로 스크롤
+  const refreshRooms = useCallback(() => {
+    if (!persistent) return
+    listRooms()
+      .then(setRooms)
+      .catch(() => {})
+  }, [persistent])
+
+  // 로그인 시 채팅방 목록 로드
+  useEffect(() => {
+    refreshRooms()
+  }, [refreshRooms])
+
+  // 새 메시지·타이핑 시 맨 아래로 스크롤
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, sending])
+
+  function newChat() {
+    setActiveRoomId(null)
+    setMessages([greetingMsg()])
+    setInput('')
+  }
+
+  async function openRoom(roomId: string) {
+    if (roomId === activeRoomId) return
+    setActiveRoomId(roomId)
+    try {
+      const rows = await listMessages(roomId)
+      setMessages(
+        rows.map((r) => ({
+          id: r.id,
+          role: r.role === 'ASSISTANT' ? 'assistant' : 'user',
+          content: r.content,
+        })),
+      )
+    } catch {
+      setMessages([{ id: newId(), role: 'assistant', content: '대화를 불러오지 못했어요.', error: true }])
+    }
+  }
 
   async function send() {
     const text = input.trim()
     if (!text || sending) return
 
+    // 이번 턴 이전까지의 맥락(인사말·에러 제외, 최근 10개)을 RAG 에 전달
+    const history: ChatTurn[] = messages
+      .filter((m) => m.id !== 'seed' && !m.error)
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content }))
+
     setMessages((m) => [...m, { id: newId(), role: 'user', content: text }])
     setInput('')
     setSending(true)
+
+    let roomId = activeRoomId
     try {
-      const res = await sendChat(text, threadId)
-      setThreadId(res.thread_id)
+      if (persistent && !roomId) {
+        const room = await createRoom(text.slice(0, 40)) // 첫 질문을 방 제목으로
+        roomId = room.id
+        setActiveRoomId(roomId)
+      }
+      if (persistent && roomId) await addMessage(roomId, 'USER', text)
+
+      const res = await sendChat(text, history)
       setMessages((m) => [...m, { id: newId(), role: 'assistant', content: res.answer }])
+
+      if (persistent && roomId) {
+        await addMessage(roomId, 'ASSISTANT', res.answer, res.response_time_ms)
+        await touchRoom(roomId)
+        refreshRooms()
+      }
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -78,19 +151,36 @@ export function Chat() {
         {/* ── 사이드바 ── */}
         <aside className={styles.sidebar}>
           <div className={styles.sidebarTop}>
-            <h2 className={styles.sideTitle}>대화 기록</h2>
-            <ul className={styles.historyList}>
-              {HISTORY.map((h) => (
-                <li key={h.title}>
-                  <button
-                    className={`${styles.historyItem} ${h.active ? styles.historyActive : ''}`}
-                  >
-                    <span className={styles.historyTitle}>{h.title}</span>
-                    <span className={styles.historyTime}>{h.time}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className={styles.sideHead}>
+              <h2 className={styles.sideTitle}>대화 기록</h2>
+              {persistent && (
+                <button className={styles.newChat} onClick={newChat}>
+                  + 새 대화
+                </button>
+              )}
+            </div>
+
+            {!persistent ? (
+              <p className={styles.sideEmpty}>로그인하면 대화가 저장되어 언제든 다시 볼 수 있어요.</p>
+            ) : rooms.length === 0 ? (
+              <p className={styles.sideEmpty}>아직 대화가 없어요. 아래에 질문을 입력해 시작해보세요.</p>
+            ) : (
+              <ul className={styles.historyList}>
+                {rooms.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      className={`${styles.historyItem} ${
+                        activeRoomId === r.id ? styles.historyActive : ''
+                      }`}
+                      onClick={() => void openRoom(r.id)}
+                    >
+                      <span className={styles.historyTitle}>{r.title || '새 대화'}</span>
+                      <span className={styles.historyTime}>{relTime(r.updated_at)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className={styles.suggest}>

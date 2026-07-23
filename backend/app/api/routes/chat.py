@@ -1,10 +1,10 @@
 """AI 챗봇 엔드포인트 — LangGraph RAG 에이전트(app.agent.graph_rag) 래퍼.
 
-멀티턴은 그래프 내부 루프가 아니라 MemorySaver + thread_id 로 유지한다.
-같은 thread_id 로 재호출하면 이전 대화 맥락이 이어진다(현재는 프로세스 메모리에 저장).
+멀티턴 맥락은 요청의 history 로 주입한다(대화 기록의 원본은 DB = chat_room/chat_message,
+프론트가 최근 N개를 함께 보낸다). 저장·조회는 프론트가 Supabase 로 직접 한다.
 """
 
-import uuid
+import time
 
 from fastapi import APIRouter
 
@@ -37,16 +37,18 @@ def _get_run_turn():
 
 @router.post("/chat", response_model=ApiResponse[ChatResponse])
 def chat(req: ChatRequest) -> ApiResponse[ChatResponse]:
-    """한 턴을 처리하고 답변 + thread_id 를 돌려준다.
+    """한 턴을 처리하고 답변 + 응답시간(ms)을 돌려준다.
 
     동기 함수라 FastAPI 가 스레드풀에서 실행 → OpenAI 블로킹 호출이 이벤트 루프를 막지 않는다.
     """
-    thread_id = req.thread_id or uuid.uuid4().hex[:12]
     run_turn = _get_run_turn()
+    history = [t.model_dump() for t in req.history]
+    started = time.perf_counter()
     try:
-        answer = run_turn(thread_id, req.message)
+        answer = run_turn(req.message, history)
     except AppError:
         raise
     except Exception as e:
         raise AppError("CHAT_ERROR", f"답변 생성 중 오류가 발생했습니다: {e}", 500) from e
-    return success_response(ChatResponse(answer=answer, thread_id=thread_id))
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    return success_response(ChatResponse(answer=answer, response_time_ms=elapsed_ms))

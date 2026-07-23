@@ -8,6 +8,9 @@
 export const ENV = {
   /** 비우면 vite 프록시(/api → :8000)를 탄다. */
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? '',
+  /** Supabase Auth 연결값 (대시보드 → Settings → API). 비면 인증 비활성. */
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
   /**
    * 로컬 개발 서버 여부. DEV 는 테스트 환경에서도 true 라서 MODE 로 비교한다.
    * (dev 전용 UI 가 테스트에서 렌더되면 불필요한 요청이 나간다.)

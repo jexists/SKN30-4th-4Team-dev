@@ -1,13 +1,22 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
+class ChatTurn(BaseModel):
+    """대화 맥락 한 줄 (프론트가 DB 기록에서 최근 N개를 보냄)."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
-    """멀티턴 채팅 요청. thread_id 를 유지해 재호출하면 대화 맥락이 이어진다."""
+    """RAG 챗봇 요청. history 로 이전 대화 맥락을 함께 전달한다(멀티턴)."""
 
     message: str = Field(min_length=1, max_length=2000, description="사용자 발화")
-    thread_id: str | None = Field(default=None, description="대화 세션 id (없으면 새로 발급)")
+    history: list[ChatTurn] = Field(default_factory=list, description="최근 대화 맥락")
 
 
 class ChatResponse(BaseModel):
     answer: str
-    thread_id: str
+    response_time_ms: int

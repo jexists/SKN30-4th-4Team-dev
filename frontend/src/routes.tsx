@@ -10,6 +10,7 @@ import { Login } from './pages/Login/Login'
 import { MyPage } from './pages/MyPage/MyPage'
 import { Onboarding } from './pages/Onboarding/Onboarding'
 import { Privacy } from './pages/Privacy/Privacy'
+import { SignUp } from './pages/SignUp/SignUp'
 import { Terms } from './pages/Terms/Terms'
 
 export const router = createBrowserRouter([
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
       { path: 'chat', element: <Chat /> },
       { path: 'chat/:id', element: <Chat /> },
       { path: 'login', element: <Login /> },
+      { path: 'signup', element: <SignUp /> },
       { path: 'onboarding', element: <Onboarding /> },
       // 로그인이 필요한 화면 — 비로그인이면 /login 으로 이동
       {

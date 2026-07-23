@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { Chat, Shield } from '../../components/icons'
 import { BRAND } from '../../config/env'
+import { supabase } from '../../config/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import styles from './Login.module.scss'
 
@@ -18,11 +19,29 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [keepSignedIn, setKeepSignedIn] = useState(true)
   const [notice, setNotice] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    // TODO: Supabase Auth 연동 — 지금은 입력값을 검증하지 않고 누르면 바로 로그인된다.
-    signIn('dev-token')
+    setNotice(null)
+
+    if (!supabase) {
+      setNotice('로그인 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)')
+      return
+    }
+    if (!email || !password) {
+      setNotice('이메일과 비밀번호를 입력해주세요.')
+      return
+    }
+
+    setSubmitting(true)
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error || !data.session) {
+      setNotice('이메일 또는 비밀번호가 올바르지 않습니다.')
+      setSubmitting(false)
+      return
+    }
+    signIn(data.session.access_token)
     void navigate(from, { replace: true })
   }
 
@@ -96,8 +115,8 @@ export function Login() {
               </button>
             </div>
 
-            <button type="submit" className={styles.submit}>
-              로그인
+            <button type="submit" className={styles.submit} disabled={submitting}>
+              {submitting ? '로그인 중…' : '로그인'}
             </button>
           </form>
 
@@ -132,7 +151,7 @@ export function Login() {
 
           <p className={styles.signup}>
             아직 회원이 아니신가요?
-            <Link to="/onboarding">회원가입</Link>
+            <Link to="/signup">회원가입</Link>
           </p>
         </div>
 
