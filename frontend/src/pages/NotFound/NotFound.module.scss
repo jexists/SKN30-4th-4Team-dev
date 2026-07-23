@@ -1,0 +1,243 @@
+@use '../../styles/variables' as v;
+
+.page {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 64px 24px;
+  overflow: hidden;
+  background: v.$bg-soft;
+}
+
+/* 배경 장식 링 */
+.rings {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 800px;
+  height: 800px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0.08;
+
+  i {
+    position: absolute;
+    border-radius: 50%;
+    border-style: solid;
+  }
+  i:nth-child(1) {
+    inset: 0;
+    border-width: 48px;
+    border-color: v.$navy-700;
+  }
+  i:nth-child(2) {
+    inset: 130px;
+    border-width: 32px;
+    border-color: v.$navy-800;
+  }
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 640px;
+  width: 100%;
+}
+
+/* ══════════════ 일러스트 카드 ══════════════ */
+.illustration {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1 / 1;
+  margin-bottom: 44px;
+}
+.illustrationGlow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: v.$blue-soft;
+  filter: blur(48px);
+  opacity: 0.7;
+  transform: scale(1.2);
+}
+.illustrationCard {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 28px;
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  box-shadow:
+    0 30px 60px -24px rgba(15, 26, 53, 0.22),
+    0 8px 20px -12px rgba(15, 26, 53, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  animation: fadeIn 0.7s ease-out;
+}
+.iconBadge {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: v.$pill;
+  display: grid;
+  place-items: center;
+  margin-bottom: 8px;
+}
+.iconBadgeMark {
+  width: 60px;
+  height: 60px;
+  color: v.$navy-800;
+}
+.iconBadgeAlert {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: v.$orange;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 14px rgba(234, 88, 12, 0.35);
+
+  svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+.loadingBar {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 24px;
+  height: 4px;
+  border-radius: 999px;
+  background: v.$blue-soft;
+  overflow: hidden;
+}
+.loadingBarFill {
+  width: 33%;
+  height: 100%;
+  border-radius: 999px;
+  background: v.$navy-800;
+  animation: loadingSlide 2.6s infinite linear;
+}
+
+/* ══════════════ 본문 ══════════════ */
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.title {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: v.$navy-900;
+}
+.errorCode {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: v.$bg-soft;
+  color: v.$slate;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.desc {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.7;
+  color: v.$slate;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.btnPrimary,
+.btnOutline {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 15px 26px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
+
+  svg {
+    width: 19px;
+    height: 19px;
+  }
+  &:active {
+    transform: translateY(1px);
+  }
+}
+.btnPrimary {
+  background: v.$navy-800;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(15, 26, 53, 0.18);
+
+  &:hover {
+    background: #101a3c;
+  }
+}
+.btnOutline {
+  background: #fff;
+  color: v.$navy-800;
+  border: 2px solid v.$pill;
+
+  &:hover {
+    background: v.$bg-soft;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes loadingSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingBarFill,
+  .illustrationCard {
+    animation: none;
+  }
+}
