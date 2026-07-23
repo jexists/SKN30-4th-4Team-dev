@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { HealthStatus } from './components/HealthStatus/HealthStatus'
 import { SiteFooter } from './components/SiteFooter/SiteFooter'
 import { SiteHeader } from './components/SiteHeader/SiteHeader'
+import { Toaster } from './components/Toast/Toaster'
 import { ENV } from './config/env'
 import styles from './App.module.scss'
 
@@ -22,6 +23,7 @@ export default function App() {
         <Outlet />
       </main>
       {!isChat && <SiteFooter variant={isLanding ? 'full' : 'compact'} />}
+      <Toaster />
       {/* 백엔드 연결 표시는 로컬 개발 서버에서만 좌하단에 띄운다. 빌드 결과물에는 포함되지 않는다. */}
       {ENV.isDev && (
         <div className={styles.devStatus}>

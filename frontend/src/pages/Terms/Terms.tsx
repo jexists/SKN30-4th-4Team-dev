@@ -1,3 +1,6 @@
+import { LegalPage } from '../../components/LegalDoc/LegalDoc'
+import { TERMS } from '../../content/legal'
+
 export function Terms() {
-  return <h1>이용약관 화면</h1>
+  return <LegalPage doc={TERMS} />
 }

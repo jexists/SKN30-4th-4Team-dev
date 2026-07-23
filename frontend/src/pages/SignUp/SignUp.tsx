@@ -2,8 +2,12 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 
 import { Chat, Shield } from '../../components/icons'
+import { LegalDocView } from '../../components/LegalDoc/LegalDoc'
+import { Modal } from '../../components/Modal/Modal'
+import { showToast } from '../../components/Toast/toastStore'
 import { BRAND } from '../../config/env'
 import { supabase } from '../../config/supabase'
+import { PRIVACY, TERMS } from '../../content/legal'
 import { useAuth } from '../../hooks/useAuth'
 import styles from './SignUp.module.scss'
 
@@ -19,8 +23,7 @@ export function SignUp() {
   const [nickname, setNickname] = useState('')
   const [agreeRequired, setAgreeRequired] = useState(false)
   const [agreeMarketing, setAgreeMarketing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [openDoc, setOpenDoc] = useState<'terms' | 'privacy' | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -29,27 +32,25 @@ export function SignUp() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setError(null)
-    setNotice(null)
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('올바른 이메일 주소를 입력해주세요.')
+      showToast('올바른 이메일 주소를 입력해주세요.', 'error')
       return
     }
     if (!pwValid) {
-      setError('비밀번호는 8자 이상이어야 합니다.')
+      showToast('비밀번호는 8자 이상이어야 합니다.', 'error')
       return
     }
     if (!pwMatch) {
-      setError('비밀번호가 일치하지 않습니다.')
+      showToast('비밀번호가 일치하지 않습니다.', 'error')
       return
     }
     if (!agreeRequired) {
-      setError('필수 약관에 동의해주세요.')
+      showToast('필수 약관에 동의해주세요.', 'error')
       return
     }
     if (!supabase) {
-      setError('회원가입 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)')
+      showToast('회원가입 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)', 'error')
       return
     }
 
@@ -63,7 +64,7 @@ export function SignUp() {
     })
 
     if (signUpError) {
-      setError(signUpError.message)
+      showToast(signUpError.message, 'error')
       setSubmitting(false)
       return
     }
@@ -72,10 +73,11 @@ export function SignUp() {
     if (data.session) signIn(data.session.access_token)
 
     setDone(true)
-    setNotice(
+    showToast(
       data.session
         ? '가입이 완료되었습니다. 잠시 후 홈 화면으로 이동합니다.'
         : '가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요. 잠시 후 홈 화면으로 이동합니다.',
+      'success',
     )
     // 안내를 잠시 보여준 뒤 홈으로 이동.
     setTimeout(() => void navigate('/', { replace: true }), 1800)
@@ -167,17 +169,36 @@ export function SignUp() {
             </div>
 
             <div className={styles.agreements}>
-              <label className={styles.agree}>
+              {/* 약관 링크는 버튼이라 label 안에 두지 않고 형제로 배치한다. 체크박스는 htmlFor 로 연결. */}
+              <div className={styles.agree}>
                 <input
                   type="checkbox"
+                  id="agree-required"
                   checked={agreeRequired}
                   onChange={(e) => setAgreeRequired(e.target.checked)}
                 />
                 <span>
-                  <b className={styles.req}>[필수]</b> <Link to="/terms">이용약관</Link> 및{' '}
-                  <Link to="/privacy">개인정보처리방침</Link>에 동의합니다.
+                  <label htmlFor="agree-required">
+                    <b className={styles.req}>[필수]</b>
+                  </label>{' '}
+                  <button
+                    type="button"
+                    className={styles.legalLink}
+                    onClick={() => setOpenDoc('terms')}
+                  >
+                    이용약관
+                  </button>{' '}
+                  및{' '}
+                  <button
+                    type="button"
+                    className={styles.legalLink}
+                    onClick={() => setOpenDoc('privacy')}
+                  >
+                    개인정보처리방침
+                  </button>
+                  <label htmlFor="agree-required">에 동의합니다.</label>
                 </span>
-              </label>
+              </div>
               <label className={styles.agree}>
                 <input
                   type="checkbox"
@@ -189,12 +210,6 @@ export function SignUp() {
                 </span>
               </label>
             </div>
-
-            {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            )}
 
             <button type="submit" className={styles.submit} disabled={submitting || done}>
               {done ? '가입 완료 ✓' : submitting ? '가입 중…' : '회원가입'}
@@ -209,7 +224,7 @@ export function SignUp() {
             <button
               type="button"
               className={`${styles.social} ${styles.kakao}`}
-              onClick={() => setNotice(`카카오 회원가입은 ${SOON}`)}
+              onClick={() => showToast(`카카오 회원가입은 ${SOON}`, 'info')}
             >
               <Chat className={styles.socialMark} />
               카카오로 시작하기
@@ -217,18 +232,12 @@ export function SignUp() {
             <button
               type="button"
               className={`${styles.social} ${styles.naver}`}
-              onClick={() => setNotice(`네이버 회원가입은 ${SOON}`)}
+              onClick={() => showToast(`네이버 회원가입은 ${SOON}`, 'info')}
             >
               <span className={styles.naverMark}>N</span>
               네이버로 시작하기
             </button>
           </div>
-
-          {notice && (
-            <p className={done ? styles.success : styles.notice} role="status">
-              {notice}
-            </p>
-          )}
 
           <p className={styles.signin}>
             이미 회원이신가요?
@@ -236,6 +245,14 @@ export function SignUp() {
           </p>
         </div>
       </div>
+
+      <Modal
+        open={openDoc !== null}
+        onClose={() => setOpenDoc(null)}
+        title={openDoc === 'privacy' ? PRIVACY.title : TERMS.title}
+      >
+        <LegalDocView doc={openDoc === 'privacy' ? PRIVACY : TERMS} />
+      </Modal>
     </div>
   )
 }
