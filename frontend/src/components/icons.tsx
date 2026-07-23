@@ -214,3 +214,56 @@ export const Check = ({ className }: IconProps) => (
     />
   </svg>
 )
+
+export const Download = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+export const Share = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <circle cx="18" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="6" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="18" cy="18" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="m8.3 10.7 7.4-3.4m-7.4 6 7.4 3.4"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+export const ClipboardCheck = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <rect x="5.5" y="5" width="13" height="15" rx="2" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M9 5V3.6h6V5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <path
+      d="m9 13 2.2 2.2L15.5 11"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+export const Building = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <rect x="5" y="3.5" width="10" height="17" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M15 9.5h4v11h-4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <path
+      d="M8 7.5h1M11 7.5h1M8 11h1M11 11h1M8 14.5h1M11 14.5h1"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+)
