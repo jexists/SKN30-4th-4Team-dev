@@ -22,12 +22,47 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  // 열려 있는 동안 ESC 로 닫고, 배경 스크롤을 잠근다.
+  // 열려 있는 동안 ESC 로 닫고, 포커스를 모달 안에 가두며, 배경 스크롤을 잠근다.
   useEffect(() => {
     if (!open) return
 
+    // 모달을 연 직후의 포커스를 기억해 두고, 닫힐 때 되돌려준다.
+    const restoreFocusTo = document.activeElement as HTMLElement | null
+
+    function focusable(): HTMLElement[] {
+      const root = dialogRef.current
+      if (!root) return []
+      return Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+    }
+
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab') return
+
+      // Tab / Shift+Tab 이 모달을 벗어나지 않도록 양 끝에서 순환시킨다.
+      const items = focusable()
+      if (items.length === 0) {
+        e.preventDefault()
+        dialogRef.current?.focus()
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (e.shiftKey && (active === first || active === dialogRef.current)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', handleKey)
 
@@ -38,6 +73,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
     return () => {
       document.removeEventListener('keydown', handleKey)
       document.body.style.overflow = prevOverflow
+      restoreFocusTo?.focus?.()
     }
   }, [open, onClose])
 

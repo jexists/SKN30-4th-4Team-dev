@@ -1,10 +1,11 @@
+import type { ComponentType } from 'react'
 import { createPortal } from 'react-dom'
 
 import { Check, Close, Info, Warn } from '../icons'
 import styles from './Toaster.module.scss'
 import { dismissToast, useToasts, type ToastType } from './toastStore'
 
-const ICONS: Record<ToastType, (props: { className?: string }) => React.ReactElement> = {
+const ICONS: Record<ToastType, ComponentType<{ className?: string }>> = {
   error: Warn,
   success: Check,
   info: Info,

@@ -29,7 +29,7 @@
   line-height: 1.5;
   color: v.$ink;
   pointer-events: auto;
-  animation: slideIn 0.2s ease;
+  animation: slide-in 0.2s ease;
 }
 
 .icon {
@@ -82,7 +82,7 @@
   }
 }
 
-@keyframes slideIn {
+@keyframes slide-in {
   from {
     opacity: 0;
     transform: translateY(-8px);

@@ -169,21 +169,22 @@ export function SignUp() {
             </div>
 
             <div className={styles.agreements}>
-              <label className={styles.agree}>
+              {/* 약관 링크는 버튼이라 label 안에 두지 않고 형제로 배치한다. 체크박스는 htmlFor 로 연결. */}
+              <div className={styles.agree}>
                 <input
                   type="checkbox"
+                  id="agree-required"
                   checked={agreeRequired}
                   onChange={(e) => setAgreeRequired(e.target.checked)}
                 />
                 <span>
-                  <b className={styles.req}>[필수]</b>{' '}
+                  <label htmlFor="agree-required">
+                    <b className={styles.req}>[필수]</b>
+                  </label>{' '}
                   <button
                     type="button"
                     className={styles.legalLink}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setOpenDoc('terms')
-                    }}
+                    onClick={() => setOpenDoc('terms')}
                   >
                     이용약관
                   </button>{' '}
@@ -191,16 +192,13 @@ export function SignUp() {
                   <button
                     type="button"
                     className={styles.legalLink}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setOpenDoc('privacy')
-                    }}
+                    onClick={() => setOpenDoc('privacy')}
                   >
                     개인정보처리방침
                   </button>
-                  에 동의합니다.
+                  <label htmlFor="agree-required">에 동의합니다.</label>
                 </span>
-              </label>
+              </div>
               <label className={styles.agree}>
                 <input
                   type="checkbox"
