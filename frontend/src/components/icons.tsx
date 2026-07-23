@@ -255,6 +255,46 @@ export const ClipboardCheck = ({ className }: IconProps) => (
   </svg>
 )
 
+export const SearchOff = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.7" />
+    <path d="m15.3 15.3 5.2 5.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="m7.5 7.5 6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+)
+
+export const Exclaim = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M12 8v5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    <circle cx="12" cy="16" r="1" fill="currentColor" />
+  </svg>
+)
+
+export const Home = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="M4 11.5 12 4l8 7.5M6 10v9h5v-5h2v5h5v-9"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+export const ArrowLeft = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="M19 12H5m0 0 6-6m-6 6 6 6"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const Building = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
     <rect x="5" y="3.5" width="10" height="17" rx="1.2" stroke="currentColor" strokeWidth="1.6" />

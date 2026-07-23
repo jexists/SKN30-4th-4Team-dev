@@ -1,0 +1,83 @@
+@use '../../styles/variables' as v;
+
+.page {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 64px 24px;
+  background: #fff;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 20px;
+  max-width: 640px;
+  width: 100%;
+}
+.title {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: v.$navy-900;
+}
+.desc {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.7;
+  color: v.$slate;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.btnPrimary,
+.btnOutline {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 15px 26px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
+
+  svg {
+    width: 19px;
+    height: 19px;
+  }
+  &:active {
+    transform: translateY(1px);
+  }
+}
+.btnPrimary {
+  background: v.$navy-800;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(15, 26, 53, 0.18);
+
+  &:hover {
+    background: #101a3c;
+  }
+}
+.btnOutline {
+  background: #fff;
+  color: v.$navy-800;
+  border: 2px solid v.$pill;
+
+  &:hover {
+    background: v.$bg-soft;
+  }
+}
