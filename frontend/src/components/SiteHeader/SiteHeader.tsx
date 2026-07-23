@@ -9,7 +9,7 @@ import styles from './SiteHeader.module.scss'
 const NAV = [
   { to: '/analyze', label: '계약 진단' },
   { to: '/chat', label: 'AI 챗봇' },
-  { to: '/mypage', label: '위험 보고서' },
+  { to: '/risk-report', label: '위험 보고서' },
 ]
 
 export function SiteHeader() {

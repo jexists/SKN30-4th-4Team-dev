@@ -1,0 +1,578 @@
+@use '../../styles/variables' as v;
+
+.page {
+  background: v.$bg-soft;
+  padding: 40px 0 80px;
+  min-height: 100%;
+}
+.container {
+  width: 100%;
+  max-width: v.$content-max;
+  margin: 0 auto;
+  padding-inline: 24px;
+}
+
+/* ══════════════ 헤더 ══════════════ */
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.title {
+  margin: 0 0 8px;
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: v.$navy-900;
+}
+.subtitle {
+  margin: 0;
+  font-size: 15px;
+  color: v.$slate;
+}
+.headerActions {
+  display: flex;
+  gap: 10px;
+}
+.btnOutline,
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+
+  svg {
+    width: 17px;
+    height: 17px;
+  }
+  &:active {
+    transform: translateY(1px);
+  }
+}
+.btnOutline {
+  background: #fff;
+  color: v.$navy-800;
+  border: 1px solid #dfe3ec;
+
+  &:hover {
+    background: v.$bg-soft;
+  }
+}
+.btnPrimary {
+  background: v.$navy-800;
+  color: #fff;
+  border: 1px solid v.$navy-800;
+
+  &:hover {
+    background: #101a3c;
+  }
+}
+
+/* ══════════════ 벤토 그리드 ══════════════ */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 20px;
+}
+.cardTitle {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: v.$navy-900;
+}
+
+/* 종합 안전 점수 */
+.scoreCard {
+  grid-column: span 12;
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  border-radius: 20px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.gauge {
+  position: relative;
+  width: 190px;
+  height: 190px;
+  margin: 26px 0 20px;
+}
+.gaugeSvg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.gaugeTrack {
+  fill: none;
+  stroke: v.$blue-soft;
+  stroke-width: 8;
+}
+.gaugeFill {
+  fill: none;
+  stroke: v.$orange;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1.2s ease-out;
+}
+.gaugeText {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+.gaugeNum {
+  display: block;
+  font-size: 48px;
+  font-weight: 800;
+  color: v.$orange;
+  font-variant-numeric: tabular-nums;
+}
+.gaugeLabel {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: v.$slate;
+}
+.scoreDesc {
+  margin: 0;
+  max-width: 26rem;
+  font-size: 15px;
+  line-height: 1.65;
+  color: v.$slate;
+
+  b {
+    color: v.$orange;
+    font-weight: 700;
+  }
+}
+
+/* 재무 건전성 분석 */
+.financeCard {
+  grid-column: span 12;
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  border-radius: 20px;
+  padding: 32px;
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 26px;
+}
+.warnPill {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: v.$red-soft;
+  color: v.$red;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.financeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.financeStat {
+  padding: 16px;
+  border-radius: 12px;
+  background: v.$bg-soft;
+}
+.financeStatWarn {
+  background: v.$orange-soft;
+  border: 2px solid v.$orange;
+}
+.financeLabel {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: v.$slate;
+}
+.financeValue {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: v.$navy-900;
+  font-variant-numeric: tabular-nums;
+}
+.financeValueWarn {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: v.$orange;
+  font-variant-numeric: tabular-nums;
+}
+.ltvBar {
+  margin-top: 28px;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: v.$blue-soft;
+  overflow: hidden;
+}
+.ltvBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: v.$orange;
+}
+.ltvScale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  color: v.$slate;
+}
+.ltvScaleWarn {
+  color: v.$orange;
+  font-weight: 700;
+}
+.infoNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.08);
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: v.$ink;
+  }
+}
+.infoNoteIcon {
+  flex-shrink: 0;
+  width: 19px;
+  height: 19px;
+  margin-top: 2px;
+  color: v.$amber;
+}
+
+/* 계약 특약 사항 분석 */
+.clauseCol {
+  grid-column: span 7;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.clauseHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.legendSafe,
+.legendRisk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+}
+.legendSafe {
+  color: v.$green;
+  i {
+    background: v.$green;
+  }
+}
+.legendRisk {
+  color: v.$orange;
+  i {
+    background: v.$orange;
+  }
+}
+.clauseCard {
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  border-left-width: 6px;
+  border-radius: 16px;
+  padding: 22px 24px;
+}
+.clause_risk {
+  border-left-color: v.$orange;
+}
+.clause_safe {
+  border-left-color: v.$green;
+}
+.clause_neutral {
+  border-left-color: #c4c6cf;
+}
+.clauseTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+
+  h4 {
+    margin: 0;
+    font-size: 16.5px;
+    font-weight: 700;
+    color: v.$navy-900;
+  }
+}
+.clauseToneIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: v.$slate;
+}
+.clause_risk .clauseToneIcon {
+  color: v.$orange;
+}
+.clause_safe .clauseToneIcon {
+  color: v.$green;
+}
+.clauseQuote {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: v.$bg-soft;
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.6;
+  color: v.$ink;
+}
+.clauseDetail {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: v.$slate;
+
+  strong {
+    color: v.$ink;
+  }
+}
+.clause_risk .clauseDetail strong {
+  color: v.$orange;
+}
+.clause_safe .clauseDetail strong {
+  color: v.$green;
+}
+
+/* 권장 조치 사항 */
+.actionCard {
+  grid-column: span 5;
+  align-self: start;
+  position: sticky;
+  top: 88px;
+  background: v.$navy-800;
+  color: #fff;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 20px 44px -20px rgba(15, 26, 53, 0.4);
+}
+.actionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 24px;
+  font-size: 19px;
+  font-weight: 700;
+
+  svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+.actionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.actionList li {
+  display: flex;
+  gap: 14px;
+}
+.actionNum {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  font-weight: 700;
+  font-size: 14px;
+}
+.actionItemTitle {
+  margin: 0 0 4px;
+  font-size: 15.5px;
+  font-weight: 700;
+}
+.actionItemDesc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c3cbe2;
+}
+.actionCta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 32px;
+  padding: 14px;
+  border-radius: 12px;
+  background: v.$green;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  text-align: center;
+  transition: opacity 0.15s ease;
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+/* ══════════════ 시각적 컨텍스트 ══════════════ */
+.visualGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+.visualCard {
+  position: relative;
+  height: 300px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid #e8ebf1;
+}
+.visualArt {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.visualArtBuilding {
+  background: linear-gradient(155deg, #2d3f66, #17224a);
+}
+.visualArtMap {
+  background: linear-gradient(155deg, v.$blue-soft, #cdd9ef);
+}
+.visualArtIcon {
+  width: 64px;
+  height: 64px;
+  opacity: 0.5;
+}
+.visualArtBuilding .visualArtIcon {
+  color: #aab6d6;
+}
+.visualArtMap .visualArtIcon {
+  color: v.$navy-800;
+  opacity: 0.35;
+}
+.visualOverlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 22px;
+  background: linear-gradient(to top, rgba(15, 26, 53, 0.85), transparent);
+}
+.visualOverlayTitle {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+.visualOverlayDesc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #d7deee;
+}
+.visualBadge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: v.$navy-800;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.visualNote {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  max-width: 260px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 26px rgba(15, 26, 53, 0.14);
+}
+.visualNoteTitle {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: v.$navy-900;
+}
+.visualNoteDesc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: v.$slate;
+}
+
+/* ══════════════ 반응형 ══════════════ */
+@media (max-width: 960px) {
+  .scoreCard,
+  .financeCard,
+  .clauseCol,
+  .actionCard {
+    grid-column: span 12;
+  }
+  .actionCard {
+    position: static;
+  }
+  .visualGrid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .financeGrid {
+    grid-template-columns: 1fr;
+  }
+  .headerActions {
+    width: 100%;
+  }
+  .btnOutline,
+  .btnPrimary {
+    flex: 1;
+    justify-content: center;
+  }
+}
