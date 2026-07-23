@@ -8,6 +8,7 @@ import { Chat } from './pages/Chat/Chat'
 import { Home } from './pages/Home/Home'
 import { Login } from './pages/Login/Login'
 import { MyPage } from './pages/MyPage/MyPage'
+import { NotFound } from './pages/NotFound/NotFound'
 import { Onboarding } from './pages/Onboarding/Onboarding'
 import { Privacy } from './pages/Privacy/Privacy'
 import { RiskReport } from './pages/RiskReport/RiskReport'
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       },
       { path: 'terms', element: <Terms /> },
       { path: 'privacy', element: <Privacy /> },
+      { path: '*', element: <NotFound /> },
     ],
   },
 ])
