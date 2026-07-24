@@ -14,7 +14,12 @@ export default function App() {
   // 랜딩만 다크 밴드로 닫고, 나머지 화면은 한 줄 고지 스트립으로 마무리한다.
   const isLanding = pathname === '/'
   // 자체 디자인으로 화면을 꽉 채우는 화면 — 공통 여백을 주지 않는다.
-  const isFullBleed = isLanding || isChat || pathname === '/analyze' || pathname === '/login'
+  const isFullBleed =
+    isLanding ||
+    isChat ||
+    pathname === '/analyze' ||
+    pathname === '/login' ||
+    pathname === '/support'
 
   return (
     <div className={styles.layout}>
