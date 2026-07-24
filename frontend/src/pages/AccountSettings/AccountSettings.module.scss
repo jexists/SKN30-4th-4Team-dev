@@ -1,0 +1,503 @@
+@use '../../styles/variables' as v;
+
+.page {
+  background: v.$bg-soft;
+  min-height: 100%;
+  padding: 48px 0 96px;
+}
+.container {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding-inline: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.pageHeader {
+  margin-bottom: 4px;
+}
+.title {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: v.$navy-900;
+}
+.subtitle {
+  margin: 0;
+  font-size: 15px;
+  color: v.$slate;
+}
+
+/* ══════════════ 공통 카드 ══════════════ */
+.card {
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  & + & {
+    padding-top: 20px;
+    border-top: 1px solid #eef0f4;
+  }
+}
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cardTitle {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  color: v.$navy-900;
+}
+.linkBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: v.$navy-800;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+/* ══════════════ 프로필 ══════════════ */
+.profileRow {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.avatarWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #b6c1de, #7f8fb8);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.avatarIcon {
+  width: 38px;
+  height: 38px;
+  color: #fff;
+}
+.avatarEdit {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: none;
+  background: v.$navy-800;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(15, 26, 53, 0.25);
+  transition: transform 0.15s ease;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+  &:hover {
+    transform: scale(1.08);
+  }
+}
+.name {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  color: v.$navy-900;
+}
+.memberTier {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: v.$slate;
+}
+
+.infoList {
+  padding-top: 20px;
+  border-top: 1px solid #eef0f4;
+  display: flex;
+  flex-direction: column;
+}
+.infoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+
+  & + & {
+    border-top: 1px solid #f2f3f7;
+  }
+}
+.infoLabel {
+  margin: 0 0 3px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: v.$slate;
+}
+.infoValue {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: v.$ink;
+}
+
+/* ══════════════ 구독 플랜 ══════════════ */
+.planGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.planCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  border-radius: 16px;
+}
+.planCurrent {
+  background: v.$navy-800;
+  border: 2px solid v.$navy-900;
+  color: #fff;
+}
+.planBadge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: v.$orange;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.planHead {
+  margin-bottom: 20px;
+}
+.planName {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: v.$slate;
+}
+.planCurrent .planName {
+  color: #c3cbe2;
+}
+.planPrice {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+
+  span:first-child {
+    font-size: 26px;
+    font-weight: 800;
+    color: v.$navy-900;
+  }
+}
+.planCurrent .planPrice span:first-child {
+  color: #fff;
+}
+.planPriceUnit {
+  font-size: 13px;
+  color: v.$slate;
+}
+.planCurrent .planPriceUnit {
+  color: #c3cbe2;
+}
+.planFeatures {
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: v.$ink;
+  }
+}
+.planCurrent .planFeatures li {
+  color: #fff;
+}
+.planFeatureIcon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: v.$slate;
+}
+.planCurrent .planFeatureIcon {
+  color: #4ade80;
+}
+.planBtnSelect,
+.planBtnCurrent {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.planBtnSelect {
+  background: v.$bg-soft;
+  color: v.$slate;
+
+  &:hover {
+    background: v.$pill;
+    color: v.$navy-800;
+  }
+}
+.planBtnCurrent {
+  background: #fff;
+  color: v.$navy-800;
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ══════════════ 결제 수단 ══════════════ */
+.paymentRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e8ebf1;
+  border-radius: 12px;
+}
+.paymentInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.cardBrand {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 28px;
+  border-radius: 6px;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.paymentName {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: v.$ink;
+}
+.paymentSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: v.$slate;
+}
+.dangerBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: v.$red;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+.addCardBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  border: 2px dashed #dfe3ec;
+  border-radius: 12px;
+  background: none;
+  color: v.$slate;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+
+  svg {
+    width: 20px;
+    height: 20px;
+  }
+  &:hover {
+    background: v.$bg-soft;
+    border-color: #c9d0e0;
+  }
+}
+
+/* ══════════════ 보안·알림 설정 ══════════════ */
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+
+  & + & {
+    border-top: 1px solid #f2f3f7;
+  }
+}
+.settingLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settingIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: v.$slate;
+}
+.settingLabel {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: v.$ink;
+}
+.settingSub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: v.$slate;
+}
+
+.toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  background: #c4c6cf;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.toggleOn {
+  background: v.$navy-800;
+}
+.toggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 26, 53, 0.3);
+  transition: transform 0.15s ease;
+}
+.toggleOn .toggleThumb {
+  transform: translateX(18px);
+}
+
+/* ══════════════ 결제 내역 ══════════════ */
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid #e8ebf1;
+  border-radius: 12px;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+
+  th,
+  td {
+    padding: 12px 16px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  th {
+    background: v.$bg-soft;
+    color: v.$slate;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  tbody tr + tr td {
+    border-top: 1px solid #eef0f4;
+  }
+}
+.amountCol {
+  text-align: right;
+}
+
+/* ══════════════ 로그아웃 ══════════════ */
+.signOutRow {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+.signOutBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: v.$slate;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+  &:hover {
+    color: v.$ink;
+    text-decoration: underline;
+  }
+}
+
+/* ══════════════ 반응형 ══════════════ */
+@media (max-width: 640px) {
+  .planGrid {
+    grid-template-columns: 1fr;
+  }
+  .profileRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

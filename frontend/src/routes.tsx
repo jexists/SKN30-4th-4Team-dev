@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom'
 
 import App from './App'
 import { RequireAuth } from './components/RequireAuth/RequireAuth'
+import { AccountSettings } from './pages/AccountSettings/AccountSettings'
 import { Analyze } from './pages/Analyze/Analyze'
 import { AnalyzeResult } from './pages/AnalyzeResult/AnalyzeResult'
 import { Chat } from './pages/Chat/Chat'
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
         element: <RequireAuth />,
         children: [
           { path: 'mypage', element: <MyPage /> },
+          { path: 'account', element: <AccountSettings /> },
           { path: 'risk-report', element: <RiskReport /> },
         ],
       },
