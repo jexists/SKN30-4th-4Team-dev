@@ -38,5 +38,10 @@
     "typescript-eslint": "^8.18.1",
     "vite": "^6.0.5",
     "vitest": "^2.1.8"
-  }
+  },
+  "description": "전·월세 분쟁 팩트체커 프론트엔드. 상세 규칙은 [`CLAUDE.md`](./CLAUDE.md), 첫 설정·실행은 [`../docs/setup.md`](../docs/setup.md) 참고.",
+  "main": "eslint.config.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

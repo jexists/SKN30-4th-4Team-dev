@@ -1,0 +1,339 @@
+@use '../../styles/variables' as v;
+
+.page {
+  position: relative;
+  background: v.$bg-soft;
+  min-height: 100%;
+  padding: 48px 0 96px;
+}
+.container {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding-inline: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+/* ══════════════ 프로필 ══════════════ */
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.avatarWrap {
+  position: relative;
+}
+.avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #b6c1de, #7f8fb8);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.avatarIcon {
+  width: 44px;
+  height: 44px;
+  color: #fff;
+}
+.avatarEdit {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: none;
+  background: v.$navy-800;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(15, 26, 53, 0.25);
+  transition: transform 0.15s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+  &:hover {
+    transform: scale(1.08);
+  }
+}
+.name {
+  margin: 20px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: v.$navy-900;
+}
+.nameSuffix {
+  font-size: 16px;
+  font-weight: 400;
+  color: v.$slate;
+}
+.tierBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: v.$pill;
+  color: v.$navy-800;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.tierBadgeIcon {
+  width: 13px;
+  height: 13px;
+}
+.tagline {
+  margin: 16px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: v.$slate;
+}
+
+/* ══════════════ 섹션 공통 ══════════════ */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: v.$navy-900;
+}
+.sectionTitleIcon {
+  width: 20px;
+  height: 20px;
+  color: v.$navy-800;
+}
+.linkBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: v.$navy-800;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+/* ══════════════ 진단 내역 ══════════════ */
+.historyList {
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.historyItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px;
+  transition: background 0.15s ease;
+
+  & + & {
+    border-top: 1px solid #eef0f4;
+  }
+  &:hover {
+    background: v.$bg-soft;
+  }
+}
+.historyAddress {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: v.$ink;
+}
+.historyDate {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: v.$slate;
+}
+.historyRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.levelPill {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.level_safe {
+  background: v.$green-soft;
+  color: v.$green;
+}
+.level_caution {
+  background: v.$amber-soft;
+  color: v.$amber;
+}
+.level_risk {
+  background: v.$red-soft;
+  color: v.$red;
+}
+.historyDetail {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid #dfe3ec;
+  color: v.$navy-800;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+  &:hover {
+    background: v.$navy-800;
+    color: #fff;
+  }
+}
+
+/* ══════════════ AI 상담 ══════════════ */
+.consultGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.consultCard {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid #e8ebf1;
+  border-radius: 16px;
+}
+.consultTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.consultId {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: v.$navy-800;
+}
+.consultTime {
+  font-size: 11px;
+  color: v.$slate;
+}
+.consultTitle {
+  margin: 10px 0 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: v.$ink;
+}
+.consultExcerpt {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: v.$slate;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.consultCta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 10px;
+  background: v.$pill;
+  color: v.$navy-800;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.15s ease;
+  }
+  &:hover {
+    background: v.$navy-800;
+    color: #fff;
+  }
+  &:hover svg {
+    transform: translateX(3px);
+  }
+}
+
+/* ══════════════ FAB ══════════════ */
+.fab {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: v.$navy-800;
+  color: #fff;
+  box-shadow: 0 14px 30px rgba(15, 26, 53, 0.35);
+  transition: transform 0.15s ease;
+  z-index: 40;
+
+  svg {
+    width: 26px;
+    height: 26px;
+  }
+  &:hover {
+    transform: scale(1.08);
+  }
+  &:active {
+    transform: scale(0.96);
+  }
+}
+
+/* ══════════════ 반응형 ══════════════ */
+@media (max-width: 640px) {
+  .consultGrid {
+    grid-template-columns: 1fr;
+  }
+  .historyItem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .historyRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
