@@ -8,7 +8,7 @@ const LINKS = [
   { to: '/terms', label: '이용약관' },
   { to: '/privacy', label: '개인정보처리방침' },
   { to: '/terms', label: '법적 고지' },
-  { to: '/mypage', label: '고객지원' },
+  { to: '/support', label: '고객지원' },
 ]
 
 const DISCLAIMER = '본 서비스는 자동화된 분석 결과를 제공하며, 법적 자문을 대신하지 않습니다.'

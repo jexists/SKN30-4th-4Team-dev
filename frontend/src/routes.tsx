@@ -13,6 +13,7 @@ import { Onboarding } from './pages/Onboarding/Onboarding'
 import { Privacy } from './pages/Privacy/Privacy'
 import { RiskReport } from './pages/RiskReport/RiskReport'
 import { SignUp } from './pages/SignUp/SignUp'
+import { Support } from './pages/Support/Support'
 import { Terms } from './pages/Terms/Terms'
 
 export const router = createBrowserRouter([
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
       },
       { path: 'terms', element: <Terms /> },
       { path: 'privacy', element: <Privacy /> },
+      { path: 'support', element: <Support /> },
       { path: '*', element: <NotFound /> },
     ],
   },
