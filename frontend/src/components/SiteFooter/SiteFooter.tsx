@@ -7,7 +7,7 @@ import styles from './SiteFooter.module.scss'
 const LINKS = [
   { to: '/terms', label: '이용약관' },
   { to: '/privacy', label: '개인정보처리방침' },
-  { to: '/terms', label: '법적 고지' },
+  { to: '/legal-basis', label: '법적 고지' },
   { to: '/support', label: '고객지원' },
 ]
 

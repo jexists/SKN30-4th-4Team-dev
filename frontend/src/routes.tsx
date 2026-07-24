@@ -6,6 +6,7 @@ import { Analyze } from './pages/Analyze/Analyze'
 import { AnalyzeResult } from './pages/AnalyzeResult/AnalyzeResult'
 import { Chat } from './pages/Chat/Chat'
 import { Home } from './pages/Home/Home'
+import { LegalBasis } from './pages/LegalBasis/LegalBasis'
 import { Login } from './pages/Login/Login'
 import { MyPage } from './pages/MyPage/MyPage'
 import { NotFound } from './pages/NotFound/NotFound'
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       },
       { path: 'terms', element: <Terms /> },
       { path: 'privacy', element: <Privacy /> },
+      { path: 'legal-basis', element: <LegalBasis /> },
       { path: 'support', element: <Support /> },
       { path: '*', element: <NotFound /> },
     ],

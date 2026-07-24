@@ -7,71 +7,71 @@
   padding: 56px 16px 72px;
   background: v.$bg-soft;
 }
-.pageCard {
+.card {
   width: 100%;
-  max-width: 760px;
+  max-width: 920px;
   padding: 40px;
   background: #fff;
   border: 1px solid #e6e9f2;
   border-radius: v.$radius;
   box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+  color: v.$slate;
+  font-size: 14px;
+  line-height: 1.7;
 }
-.pageTitle {
-  margin: 0 0 24px;
+.title {
+  margin: 0 0 20px;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.03em;
   color: v.$navy-800;
 }
-
-@media (max-width: 480px) {
-  .pageCard {
-    padding: 28px 20px;
-  }
-}
-
-.doc {
-  color: v.$slate;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.effective {
-  margin: 0 0 16px;
-  font-size: 12.5px;
-  color: #8b93a7;
-}
-
 .intro {
-  margin: 0 0 20px;
-  padding-bottom: 20px;
+  margin: 0 0 8px;
+  padding-bottom: 24px;
   border-bottom: 1px solid #eef0f6;
   color: v.$ink;
 }
 
-.section {
-  & + & {
-    margin-top: 20px;
+.chapter {
+  margin-top: 40px;
+
+  &:first-of-type {
+    margin-top: 8px;
   }
 }
-
-.chapter {
-  margin: 32px 0 16px;
-  padding-bottom: 10px;
-  font-size: 17px;
+.chapterTitle {
+  margin: 0 0 20px;
+  font-size: 18px;
   font-weight: 700;
   color: v.$navy-900;
+  padding-bottom: 10px;
   border-bottom: 2px solid v.$pill;
-
-  // 문서 맨 앞의 첫 장은 intro 와의 간격만으로 충분하다.
-  .section:first-child & {
-    margin-top: 4px;
-  }
 }
 
-.heading {
-  margin: 0 0 8px;
+.article {
+  & + & {
+    margin-top: 28px;
+  }
+}
+.articleHeading {
+  margin: 0 0 10px;
   font-size: 15px;
   font-weight: 700;
   color: v.$navy-800;
+}
+
+.appendixList {
+  margin: 8px 0 0;
+  padding-left: 20px;
+
+  li + li {
+    margin-top: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 28px 20px;
+  }
 }
