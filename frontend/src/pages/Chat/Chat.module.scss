@@ -297,7 +297,7 @@
   font-size: 15.5px;
   line-height: 1.7;
   white-space: pre-wrap; // LLM 답변의 줄바꿈 보존
-  word-break: break-word;
+  overflow-wrap: anywhere; // 긴 URL·법령명이 말풍선 폭을 밀어내지 않게
 }
 .bubbleBot {
   background: v.$blue-soft;
@@ -627,25 +627,28 @@
 /* 스트리밍(타이핑) 텍스트 + 커서 */
 .streamText {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
+/* 글자 뒤를 따라다니는 얇은 막대. 딱딱한 on/off 대신 부드럽게 옅어졌다 돌아온다 —
+   완전히 사라지는 깜빡임은 타이핑이 멈춘 것처럼 보인다. */
 .caret {
   display: inline-block;
-  width: 7px;
+  width: 2px;
   height: 1.05em;
   margin-left: 2px;
+  border-radius: 1px;
   vertical-align: text-bottom;
   background: v.$navy-800;
-  animation: caretBlink 1s steps(1) infinite;
+  animation: caretBlink 1.05s ease-in-out infinite;
 }
 @keyframes caretBlink {
   0%,
-  50% {
+  45% {
     opacity: 1;
   }
-  50.01%,
+  70%,
   100% {
-    opacity: 0;
+    opacity: 0.15;
   }
 }
 

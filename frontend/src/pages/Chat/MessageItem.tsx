@@ -30,7 +30,7 @@ export const MessageItem = memo(function MessageItem({
   onRegenerate,
 }: Props) {
   const streaming = Boolean(message.streaming) && message.role === 'assistant' && !message.error
-  const { displayed } = useTypewriter(message.content, streaming, {
+  const { displayed, done } = useTypewriter(message.content, streaming, {
     onDone: () => onStreamingDone(message.id),
   })
 
@@ -71,7 +71,9 @@ export const MessageItem = memo(function MessageItem({
           ) : streaming ? (
             <span className={styles.streamText}>
               {displayed}
-              <span className={styles.caret} aria-hidden="true" />
+              {/* 커서는 '생성 중'에만. 마지막 글자가 찍히는 순간 사라진다 —
+                  부모가 streaming 을 내리는 것(onStreamingDone)까지 기다리지 않는다. */}
+              {!done && <span className={styles.caret} aria-hidden="true" />}
             </span>
           ) : (
             <MarkdownMessage content={message.content} />
