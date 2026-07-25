@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
+import { BRAND } from '../../config/env'
 import { Shield } from '../../components/icons'
 import { useStickToBottom } from '../../hooks/useStickToBottom'
 import { MessageItem } from './MessageItem'
@@ -16,6 +17,8 @@ interface Props {
   isLoadingOlder: boolean
   /** 더 과거가 있는지(=cursor≠null). */
   hasMoreOlder: boolean
+  /** 사용자가 전송할 때마다 증가. 과거를 보고 있어도 최신 메시지 추적을 강제로 시작한다. */
+  followLatestRequest: number
   onLoadOlder: () => void
   onStreamingDone: (id: string) => void
   onRegenerate: () => void
@@ -42,6 +45,7 @@ export function MessageList({
   isLoading,
   isLoadingOlder,
   hasMoreOlder,
+  followLatestRequest,
   onLoadOlder,
   onStreamingDone,
   onRegenerate,
@@ -55,12 +59,20 @@ export function MessageList({
   const pendingPrepend = useRef<{ height: number; top: number } | null>(null)
   const prevLen = useRef(messages.length)
   const prevFirstId = useRef(messages[0]?.id)
+  const prevSending = useRef(sending)
+  const prevFollowLatestRequest = useRef(followLatestRequest)
+  // 사용자가 보낸 직후부터 AI 타이핑이 끝날 때까지는 수동으로 위로 올려도 새 내용과 함께 하단 추적.
+  const forceFollow = useRef(false)
+  const hasStreaming = messages.some((message) => message.streaming)
 
   const followGrow = useCallback(() => {
-    if (atBottomRef.current) scrollToBottom(false)
+    if (forceFollow.current || atBottomRef.current) scrollToBottom(false)
   }, [atBottomRef, scrollToBottom])
 
-  // 메시지 변화: prepend 면 위치 유지, append 면 (맨 아래일 때만) 따라가고 아니면 '새 메시지' 노출.
+  // 메시지·대기 상태 변화:
+  // - 직접 전송 요청은 현재 위치와 무관하게 smooth 하단 이동 + 응답 완료까지 강제 추적
+  // - 과거 prepend 는 평소 위치 보존
+  // - 그 외 append 는 기존처럼 맨 아래를 보던 사용자만 따라감
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -72,21 +84,39 @@ export function MessageList({
     const prepended = grew && firstId !== undefined && firstId !== prevFirstId.current
     const pending = pendingPrepend.current
     pendingPrepend.current = null
+    const followRequested = followLatestRequest !== prevFollowLatestRequest.current
+    const sendingChanged = sending !== prevSending.current
 
-    if (pending && prepended) {
+    if (followRequested) {
+      forceFollow.current = true
+      setHasNew(false)
+      scrollToBottom(true)
+    } else if (pending && prepended && !forceFollow.current) {
       el.scrollTop = el.scrollHeight - pending.height + pending.top
-    } else {
-      if (atBottomRef.current) scrollToBottom(false)
-      else if (grew) setHasNew(true)
+    } else if (forceFollow.current || atBottomRef.current) {
+      if (grew || sendingChanged) scrollToBottom(false)
+    } else if (grew) {
+      setHasNew(true)
     }
+
+    // 마지막 타이핑 렌더까지 하단에 맞춘 뒤 평상시(사용자 스크롤 존중) 모드로 돌아간다.
+    if (forceFollow.current && !sending && !hasStreaming) {
+      scrollToBottom(false)
+      forceFollow.current = false
+    }
+
     prevLen.current = messages.length
     prevFirstId.current = firstId
-  }, [messages, atBottomRef, scrollToBottom])
-
-  // 응답 대기 인디케이터가 뜰 때도 맨 아래면 따라감.
-  useLayoutEffect(() => {
-    if (sending && atBottomRef.current) scrollToBottom(false)
-  }, [sending, atBottomRef, scrollToBottom])
+    prevSending.current = sending
+    prevFollowLatestRequest.current = followLatestRequest
+  }, [
+    messages,
+    sending,
+    hasStreaming,
+    followLatestRequest,
+    atBottomRef,
+    scrollToBottom,
+  ])
 
   // 맨 아래로 내려오면 '새 메시지' 해제.
   useEffect(() => {
@@ -119,7 +149,7 @@ export function MessageList({
 
   return (
     <div className={styles.listWrap}>
-      <div className={styles.thread} ref={scrollRef}>
+      <div className={styles.thread} ref={scrollRef} data-testid="message-scroll">
         <div ref={topSentinelRef} className={styles.topSentinel} />
         {isLoadingOlder && (
           <div className={styles.topLoader} aria-label="이전 메시지 불러오는 중">
@@ -145,10 +175,12 @@ export function MessageList({
 
         {sending && (
           <div className={styles.msgRow}>
-            <div className={styles.botAvatar}>
-              <Shield />
-            </div>
-            <div className={styles.msgCol}>
+            <div className={styles.botCol}>
+              {/* 답변이 도착할 때 라벨이 새로 끼어들어 줄이 밀리지 않도록 대기 중에도 같이 둔다. */}
+              <span className={styles.botLabel}>
+                <Shield className={styles.botLabelIcon} />
+                {BRAND.name} 봇
+              </span>
               <div className={`${styles.bubbleBot} ${styles.typing}`} aria-label="답변 생성 중">
                 <span />
                 <span />

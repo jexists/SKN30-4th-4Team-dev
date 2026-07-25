@@ -11,6 +11,8 @@ type ModalProps = {
   onClose: () => void
   /** 헤더에 표시할 제목. 접근성 라벨로도 쓰인다. */
   title: string
+  /** 열릴 때 우선 포커스할 요소. 없으면 다이얼로그 컨테이너에 포커스한다. */
+  initialFocusRef?: React.RefObject<HTMLElement | null>
   children: React.ReactNode
 }
 
@@ -18,7 +20,7 @@ type ModalProps = {
  * 화면 이동 없이 내용을 겹쳐 보여주는 공통 모달.
  * 포털로 body 에 렌더하고, ESC·백드롭 클릭·닫기 버튼으로 닫힌다.
  */
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, initialFocusRef, children }: ModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -68,14 +70,14 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
 
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    dialogRef.current?.focus()
+    ;(initialFocusRef?.current ?? dialogRef.current)?.focus()
 
     return () => {
       document.removeEventListener('keydown', handleKey)
       document.body.style.overflow = prevOverflow
       restoreFocusTo?.focus?.()
     }
-  }, [open, onClose])
+  }, [initialFocusRef, open, onClose])
 
   if (!open) return null
 

@@ -1,4 +1,5 @@
-@use '../../styles/variables' as v;
+@use "../../styles/variables" as v;
+@use "../../styles/typography" as t;
 
 .page {
   // 공통 헤더(App.tsx)를 제외한 남은 높이를 그대로 채운다.
@@ -99,69 +100,277 @@
   line-height: 1.6;
   color: v.$slate;
 }
+
+/* 목록·대화를 못 불러왔을 때는 공통 <ErrorState /> 를 쓴다(components/ErrorState). */
+.historyGroup {
+  margin-bottom: v.$space-3;
+}
+.historyGroupLabel {
+  @include t.overline;
+  margin: 0 0 v.$space-1;
+  padding-inline: v.$space-4;
+  color: v.$slate-light;
+}
 .historyList {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: v.$space-1;
+}
+.historyRow {
+  position: relative;
 }
 .historyItem {
   width: 100%;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 14px 16px;
+  align-items: center;
+  padding: v.$space-3 v.$space-10 v.$space-3 v.$space-4;
   border: none;
-  border-radius: 12px;
+  border-radius: v.$radius;
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background v.$transition-base;
 
   &:hover {
     background: v.$page-bg;
   }
 }
 .historyActive {
-  background: #e9eef9;
-  box-shadow: inset 3px 0 0 v.$navy-800;
+  background: v.$lavender;
+  box-shadow: v.$shadow-xs;
 
   &:hover {
-    background: #e3e9f7;
+    background: v.$blue-soft;
   }
   .historyTitle {
     color: v.$navy-800;
   }
 }
 .historyTitle {
-  font-size: 15px;
-  font-weight: 700;
+  @include t.button-text;
+  min-width: 0;
   color: v.$ink;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.historyTime {
-  font-size: 12.5px;
-  color: v.$slate;
+.roomMenuTrigger {
+  position: absolute;
+  // 한 줄짜리 항목이라 고정 top 대신 중앙에 맞춘다(제목 글꼴이 바뀌어도 따라간다).
+  top: 50%;
+  right: v.$space-2;
+  transform: translateY(-50%);
+  width: v.$space-8;
+  height: v.$space-8;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: v.$radius-sm;
+  background: transparent;
+  color: v.$ink;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity v.$transition-fast,
+    background v.$transition-fast;
+
+  svg {
+    width: v.$space-5;
+    height: v.$space-5;
+  }
+
+  &:hover {
+    background: v.$surface;
+    color: v.$navy-800;
+  }
+
+  &:focus-visible,
+  &.roomMenuTriggerOpen,
+  .historyRow:hover &,
+  .historyRow:focus-within & {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.menu {
+  position: absolute;
+  top: calc(100% + v.$space-1);
+  right: 0;
+  z-index: v.$z-menu;
+  padding: v.$space-1;
+  display: flex;
+  flex-direction: column;
+  background: v.$surface;
+  border: 1px solid v.$border-card;
+  border-radius: v.$radius;
+  box-shadow: v.$shadow-elevated;
+}
+.menuItem {
+  @include t.body-sm;
+  padding: v.$space-2 v.$space-3;
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  border: 0;
+  border-radius: v.$radius-sm;
+  background: transparent;
+  color: v.$ink;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background v.$transition-fast;
+
+  svg {
+    width: v.$space-4;
+    height: v.$space-4;
+  }
+
+  &:hover {
+    background: v.$page-bg;
+  }
+}
+.menuItemDanger {
+  color: v.$red;
+
+  &:hover {
+    background: v.$red-soft;
+  }
+}
+
+/* 방 수정·삭제 모달은 같은 폼 리듬을 공유해 버튼 위치가 작업마다 움직이지 않게 한다. */
+.roomForm {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+
+  label {
+    @include t.label;
+    color: v.$ink;
+  }
+}
+.roomFormInput {
+  @include t.body;
+  width: 100%;
+  padding: v.$space-3 v.$space-4;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-sm;
+  background: v.$surface-raised;
+  color: v.$ink;
+  outline: none;
+
+  &:focus {
+    border-color: v.$navy-800;
+    box-shadow: v.$shadow-xs;
+  }
+}
+.roomFormActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: v.$space-2;
+  margin-top: v.$space-2;
+}
+.roomFormCancel,
+.roomFormSubmit,
+.roomFormDanger {
+  @include t.button-text-sm;
+  padding: v.$space-2 v.$space-4;
+  border-radius: v.$radius-md;
+  cursor: pointer;
+  transition:
+    background v.$transition-fast,
+    box-shadow v.$transition-fast;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+.roomFormCancel {
+  border: 1px solid v.$border-strong;
+  background: v.$surface;
+  color: v.$navy-800;
+
+  &:hover:not(:disabled) {
+    background: v.$page-bg;
+  }
+}
+.roomFormSubmit {
+  border: 1px solid v.$navy-800;
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+
+  &:hover:not(:disabled) {
+    background: v.$navy-hover;
+  }
+}
+.roomFormDanger {
+  border: 1px solid v.$red;
+  background: v.$red;
+  color: v.$text-on-dark;
+
+  &:hover:not(:disabled) {
+    box-shadow: v.$shadow-xs;
+  }
+}
+.confirmText {
+  @include t.body;
+  margin: 0;
+  color: v.$ink;
+
+  span {
+    @include t.body-sm;
+    display: block;
+    margin-top: v.$space-1;
+    color: v.$slate;
+  }
 }
 
 .suggest {
   flex: 0 0 auto;
   margin-top: 0;
-  padding: 16px 20px 28px;
+  padding: v.$space-3 v.$space-5 v.$space-4;
   border-top: 1px solid #eceef3;
   background: v.$surface;
 }
+/* 제목 줄 전체가 토글이다 — 접으면 대화 목록이 그만큼 더 길게 보인다. */
+.suggestToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$space-2;
+  padding: v.$space-1 0;
+  border: 0;
+  background: transparent;
+  color: v.$ink;
+  cursor: pointer;
+}
 .suggestTitle {
-  margin: 0 0 14px;
+  margin: 0;
   font-size: 16px;
   font-weight: 700;
   color: v.$ink;
+}
+.suggestChevron {
+  flex-shrink: 0;
+  width: v.$space-4;
+  height: v.$space-4;
+  color: v.$slate;
+  transition: transform v.$transition-fast;
+}
+.suggestChevronOpen {
+  transform: rotate(180deg);
 }
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: v.$space-3;
 }
 .chip {
   padding: 7px 13px;
@@ -233,61 +442,53 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 32px;
+  padding: v.$space-6 v.$space-8;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  // 이름표가 사라진 만큼 좁혀 한 화면에 더 많은 대화가 들어오게 한다.
+  gap: v.$space-4;
 }
 
-/* 메시지 행 */
+/* 메시지 행 — 봇은 라벨 + 말풍선, 사용자는 말풍선만(우측 정렬로 구분). */
 .msgRow {
   display: flex;
-  gap: 14px;
   align-items: flex-start;
   max-width: 860px;
   width: 100%;
 }
 .msgUser {
-  flex-direction: row-reverse;
+  justify-content: flex-end;
   align-self: flex-end;
 }
-.msgCol {
+
+/* 라벨과 말풍선을 한 덩어리로 묶는다. 폭 제한도 여기서 건다. */
+.botCol {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-width: 78%;
+  align-items: flex-start;
+  // 라벨과 답변이 하나의 메시지로 읽히도록 바짝 붙인다.
+  gap: v.$space-1;
+  // 한 줄이 너무 길면 다음 줄 첫 글자를 찾기 어려워진다 — 읽기 좋은 길이로 자른다.
+  max-width: 65%;
+  min-width: 0;
 }
-.msgUser .msgCol {
-  align-items: flex-end;
+/* 답변의 출처 라벨. 본문보다 먼저 읽히면 안 되므로 보조 정보 톤으로 둔다. */
+.botLabel {
+  @include t.label; // 12px · 500 · $slate — 눈에 띄지 않는 메타 정보 스케일
+  display: inline-flex;
+  align-items: center;
+  gap: v.$space-1;
+  padding-inline: v.$space-1;
+  margin-bottom: 4px;
 }
-.meta {
-  font-size: 12.5px;
-  color: v.$slate;
-  padding-inline: 4px;
-}
-
-.botAvatar,
-.userAvatar {
+.botLabelIcon {
   flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-
-  svg {
-    width: 22px;
-    height: 22px;
-  }
-}
-.botAvatar {
-  background: v.$navy-900;
-  color: v.$text-on-dark;
-}
-.userAvatar {
-  background: v.$pill;
-  color: v.$navy-800;
-  border-radius: 50%;
+  width: v.$space-3;
+  height: v.$space-3;
+  // 색을 따로 주지 않아 라벨 텍스트와 같은 톤으로 묻힌다. 채워진 도형이라
+  // 같은 색이어도 글자보다 진해 보여서, 입력창 고지 아이콘과 같은 값으로 한 번 더 낮춘다.
+  // opacity: 0.72;
+  color: v.$navy-700;
 }
 
 /* 말풍선 */
@@ -300,6 +501,7 @@
   overflow-wrap: anywhere; // 긴 URL·법령명이 말풍선 폭을 밀어내지 않게
 }
 .bubbleBot {
+  max-width: 100%; // 폭 제한은 .botCol 이 이미 걸었다.
   background: v.$blue-soft;
   color: v.$ink;
   border-radius: 4px 16px 16px 16px;
@@ -309,6 +511,9 @@
   }
 }
 .bubbleUser {
+  max-width: 65%;
+  // 보낸 말은 대개 짧다. 좌우 여백을 한 단계 줄여 짧은 문장이 버튼처럼 부풀지 않게 한다.
+  padding: v.$space-3 v.$space-4;
   background: v.$navy-900;
   color: v.$text-on-dark;
   border-radius: 16px 4px 16px 16px;
@@ -574,7 +779,6 @@
 }
 .roomsSentinel {
   height: 1px;
-  list-style: none;
 }
 
 /* 과거 메시지 로딩(상단) */
@@ -711,46 +915,6 @@
   }
 }
 
-/* URL 로 연 대화가 없거나 접근 권한이 없을 때의 본문 상태. */
-.conversationError {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px 24px;
-  text-align: center;
-}
-.conversationErrorTitle {
-  margin: 0;
-  color: v.$ink;
-  font-size: 22px;
-  font-weight: 800;
-}
-.conversationErrorMessage {
-  margin: 0;
-  color: v.$slate;
-  font-size: 14px;
-  line-height: 1.6;
-}
-.conversationErrorAction {
-  margin-top: 8px;
-  padding: 10px 16px;
-  border: 0;
-  border-radius: 10px;
-  background: v.$navy-900;
-  color: v.$text-on-dark;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-
-  &:hover {
-    background: v.$navy-hover;
-  }
-}
-
 /* ══════════════ 엠티스테이트(첫 진입) ══════════════ */
 .empty {
   flex: 1;
@@ -835,6 +999,13 @@
   .thread,
   .composer {
     padding-inline: 20px;
+  }
+}
+@media (max-width: v.$bp-md) {
+  // 좁은 화면에선 65% 가 오히려 답답하다 — 화면 폭 자체가 이미 읽기 좋은 길이다.
+  .botCol,
+  .bubbleUser {
+    max-width: 88%;
   }
 }
 @media (prefers-reduced-motion: reduce) {
