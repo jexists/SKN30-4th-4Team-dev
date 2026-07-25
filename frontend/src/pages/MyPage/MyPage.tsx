@@ -72,9 +72,9 @@ export function MyPage() {
             <div className={styles.avatar}>
               <User className={styles.avatarIcon} />
             </div>
-            <button type="button" className={styles.avatarEdit} aria-label="프로필 사진 변경">
+            <Link to="/account" className={styles.avatarEdit} aria-label="계정 관리로 이동">
               <Edit />
-            </button>
+            </Link>
           </div>
           <h1 className={styles.name}>
             김철수 <span className={styles.nameSuffix}>님</span>
