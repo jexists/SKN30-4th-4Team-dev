@@ -37,9 +37,9 @@ AppSessionLocal = (
 
 
 def get_app_db() -> Generator[Session, None, None]:
-    """앱 데이터용 DB 세션(필수). 저장소 미설정이면 503(HISTORY_UNAVAILABLE)."""
+    """앱 데이터용 DB 세션(필수). 저장소(APP_DB_URL) 미설정이면 503."""
     if AppSessionLocal is None:
-        raise AppError("HISTORY_UNAVAILABLE", "대화 기록 저장소가 설정되지 않았습니다.", 503)
+        raise AppError("대화 기록 사용 불가", "대화 기록 저장소가 설정되지 않았습니다.", 503)
     db = AppSessionLocal()
     try:
         yield db

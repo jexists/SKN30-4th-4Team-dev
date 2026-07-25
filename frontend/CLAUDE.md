@@ -26,6 +26,17 @@
 
 - **API 호출은 `api/client.ts` 를 통해서**. client 가 표준 응답 봉투(`ApiResponse<T>`)를 벗겨 `data` 반환, 실패는 `ApiError` throw → 화면 코드는 봉투를 몰라도 됨.
 - 백엔드 경로는 **`/api/v1`** (dev 는 vite 프록시가 `/api` → :8000 전달).
+
+### API 에러 처리 (화면에서 직접 하지 않는다)
+
+`client.ts` 가 **모든 호출의 공통 통로**다. 봉투를 해석해 토스트·오류 모달까지 여기서 띄우므로, 새 화면·새 API 를 추가해도 같은 동작을 그냥 얻는다.
+
+- 봉투 `message` → **토스트**(`components/Toast`), `error.title`/`error.message` → **공통 오류 모달**(`components/ErrorModal`). 판정은 `api/apiErrorHandler.ts` 한 곳에서 한다.
+- **화면은 상태 코드별 문구를 갖지 않는다.** `catch` 에서는 로딩을 끄고 "실패했다"만 기록한 뒤, 그 자리에 **공통 `<ErrorState />`**(`components/ErrorState`)를 그린다. 재시도 버튼을 보일지는 `isRetryable(error)` 이 정한다(404·403 은 안 보임).
+- **API 실패를 Empty State 로 그리지 않는다.** "대화가 없습니다" 는 `success: true` 인데 데이터가 0건일 때만 쓴다. 실패했는데 빈 목록을 그리면 서버 장애가 "데이터 없음"으로 보인다.
+- **화면에서 `showError(...)` 를 직접 부르지 않는다.** 성공 토스트 문구도 서버 `message` 가 소유하므로 `showToast(...)` 를 중복해서 심지 않는다(로그인 폼 검증처럼 API 와 무관한 클라이언트 알림은 예외).
+- **401 은 아무것도 띄우지 않는다.** `client.ts` 가 토큰 갱신 1회 → 실패 시 로그아웃·로그인 화면 이동까지 처리한다.
+- 화면이 실패를 직접 표현해야 하는 소수 예외(`sendChat` 의 오류 말풍선, health 폴링)만 `{ silent: true }` 로 공통 처리를 끈다.
 - 디자인 토큰은 `styles/_variables.scss` 에서, 타이포 믹스인은 `styles/_typography.scss` 에서 관리하고 `@use` 로 참조.
 
 ## 디자인 시스템 (필수)

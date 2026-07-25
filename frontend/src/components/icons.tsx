@@ -307,6 +307,33 @@ export const Edit = ({ className }: IconProps) => (
   </svg>
 )
 
+/**
+ * 케밥(⋮) 메뉴 — 목록 항목의 더보기 버튼.
+ *
+ * 점은 원으로 그린다 — 길이 0 인 선분(`h.01`)을 둥근 캡으로 찍으면 지름이 stroke 굵기에
+ * 묶여, 20px 로 렌더하면 1.3px 짜리 점이 되어 거의 보이지 않는다.
+ */
+export const MoreVertical = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <circle cx="12" cy="5" r="1.75" />
+    <circle cx="12" cy="12" r="1.75" />
+    <circle cx="12" cy="19" r="1.75" />
+  </svg>
+)
+
+export const Trash = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M10 11v5M14 11v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+)
+
 export const ArrowRight = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
     <path

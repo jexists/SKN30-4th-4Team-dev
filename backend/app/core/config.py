@@ -68,7 +68,7 @@ class Settings(BaseSettings):
         """앱 데이터용 SQLAlchemy URL(psycopg3 드라이버로 정규화).
 
         chat_room/chat_message 등 실데이터가 있는 Supabase Postgres. Postgres 가 아니면 빈 문자열
-        → get_app_db 가 503(HISTORY_UNAVAILABLE). RAG(RAG_DB_URL) 와 무관하게 APP_DB_URL 만 본다."""
+        → get_app_db 가 503 을 던진다. RAG(RAG_DB_URL) 와 무관하게 APP_DB_URL 만 본다."""
         url = self._app_pg_url
         if not url:
             return ""

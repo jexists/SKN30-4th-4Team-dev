@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/client'
 import { sendChat, type ChatTurn } from '../../api/chat'
 import { addMessage, createRoom, listMessages, listRooms, type ChatRoom } from '../../api/chatHistory'
-import { Close, Info } from '../../components/icons'
+import { isRetryable } from '../../api/apiErrorHandler'
+import { ErrorState } from '../../components/ErrorState/ErrorState'
+import { ChevronDown, Close, Info } from '../../components/icons'
 import { isAuthConfigured } from '../../config/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { ChatComposer } from './ChatComposer'
+import { ChatRoomItem } from './ChatRoomItem'
+import { DeleteRoomModal } from './DeleteRoomModal'
 import { EmptyState } from './EmptyState'
 import { MessageList } from './MessageList'
+import { RenameRoomModal } from './RenameRoomModal'
+import { groupRoomsByDate } from './roomGroups'
 import type { Message } from './types'
 import styles from './Chat.module.scss'
 
@@ -21,23 +27,19 @@ const LEGAL_NOTICE_DISMISSED_KEY = 'homeshield:legal-notice-dismissed'
 let _id = 0
 const newId = () => `m${Date.now()}-${_id++}`
 
-function relTime(iso: string): string {
-  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-  if (min < 1) return '방금 전'
-  if (min < 60) return `${min}분 전`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}시간 전`
-  const day = Math.floor(hr / 24)
-  if (day === 1) return '어제'
-  if (day < 7) return `${day}일 전`
-  return new Date(iso).toLocaleDateString('ko-KR')
-}
-
 const toMessage = (r: { id: string; role: string; content: string }): Message => ({
   id: r.id,
   role: r.role === 'ASSISTANT' ? 'assistant' : 'user',
   content: r.content,
 })
+
+/**
+ * 대화 영역을 막는 이유.
+ * - `unavailable` — API 실패가 아니라 로그인/저장소 미설정. 다시 시도해도 결과가 같다.
+ * - `failed` — 조회 실패. 원인 안내는 공통 오류 모달이 이미 했고, 여기선 재시도만 준다
+ *   (재시도를 보일지는 공통 isRetryable 이 정한다).
+ */
+type ConversationBlock = { reason: 'unavailable' } | { reason: 'failed'; error: unknown } | null
 
 export function Chat() {
   const { isAuthed } = useAuth()
@@ -51,19 +53,25 @@ export function Chat() {
   const [roomsCursor, setRoomsCursor] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(persistent)
   const [loadingRooms, setLoadingRooms] = useState(false)
+  // 실패 "여부"만 들고 있는다. 무슨 오류인지 해석하는 일은 공통 레이어 몫이다.
+  const [roomsError, setRoomsError] = useState<unknown>(null)
+  const [roomsReloadKey, setRoomsReloadKey] = useState(0)
+  const [renameTarget, setRenameTarget] = useState<ChatRoom | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ChatRoom | null>(null)
 
   // 활성 대화 — URL 의 chatId 가 단일 기준이며, 메시지만 로컬 렌더링 상태로 둔다.
   const [messages, setMessages] = useState<Message[]>([])
   const [messagesCursor, setMessagesCursor] = useState<string | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [openingRoom, setOpeningRoom] = useState(false)
-  const [conversationError, setConversationError] = useState<{
-    title: string
-    message: string
-  } | null>(null)
+  const [conversationBlock, setConversationBlock] = useState<ConversationBlock>(null)
+  const [messagesReloadKey, setMessagesReloadKey] = useState(0)
+  const [followLatestRequest, setFollowLatestRequest] = useState(0)
 
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  // 추천 주제는 기본 펼침. 접으면 그만큼 대화 목록이 길어진다.
+  const [suggestOpen, setSuggestOpen] = useState(true)
   const [showLegalNotice, setShowLegalNotice] = useState(() => {
     try {
       return window.sessionStorage.getItem(LEGAL_NOTICE_DISMISSED_KEY) !== 'true'
@@ -75,25 +83,28 @@ export function Chat() {
   const activeRoomIdRef = useRef<string | null>(activeRoomId)
   const createdRoomIdRef = useRef<string | null>(null)
   const sidebarRef = useRef<HTMLElement>(null)
-  const roomsSentinel = useRef<HTMLLIElement>(null)
+  const roomsSentinel = useRef<HTMLDivElement>(null)
   activeRoomIdRef.current = activeRoomId
 
   /**
-   * 답변 저장 후 그 방을 목록 맨 앞으로 올린다(백엔드가 updated_at 을 갱신한 것과 같은 결과).
+   * 답변 저장 후 그 방을 목록 맨 앞으로 올린다(백엔드가 last_chat_at 을 갱신한 것과 같은 결과).
    *
    * 예전엔 첫 페이지를 다시 불러왔는데, 그러면 스크롤로 이미 불러온 2페이지 이후가 통째로
-   * 사라졌다. 서버에서 실제로 바뀌는 값은 updated_at 하나뿐이라 목록에서 직접 반영한다.
+   * 사라졌다. 정렬에 쓰는 last_chat_at 만 목록에서 직접 반영하면 같은 결과를 얻는다.
    */
   const touchRoom = useCallback((roomId: string) => {
     setRooms((prev) => {
       const hit = prev.find((r) => r.id === roomId)
       if (!hit) return prev // 아직 불러오지 않은 페이지의 방 — 다음 조회 때 제자리를 찾는다.
       return [
-        { ...hit, updated_at: new Date().toISOString() },
+        { ...hit, last_chat_at: new Date().toISOString() },
         ...prev.filter((r) => r.id !== roomId),
       ]
     })
   }, [])
+
+  /** 목록을 처음부터 다시 불러온다(키를 바꿔 아래 effect 를 다시 태운다). */
+  const retryLoadRooms = useCallback(() => setRoomsReloadKey((key) => key + 1), [])
 
   useEffect(() => {
     let cancelled = false
@@ -104,13 +115,21 @@ export function Chat() {
     }
 
     setInitializing(true)
+    setRoomsError(null)
     void listRooms()
       .then((page) => {
         if (cancelled) return
         setRooms(page.items)
         setRoomsCursor(page.next_cursor)
       })
-      .catch(() => {})
+      .catch((error: unknown) => {
+        // 원인 안내는 client.ts 의 공통 처리가 이미 했다. 여기선 "실패했다"만 기록한다.
+        // 이걸 빼먹으면 빈 목록이 "아직 대화가 없어요" 로 보여 원인을 오해하게 만든다.
+        if (cancelled) return
+        setRooms([])
+        setRoomsCursor(null)
+        setRoomsError(error)
+      })
       .finally(() => {
         if (!cancelled) setInitializing(false)
       })
@@ -118,7 +137,10 @@ export function Chat() {
     return () => {
       cancelled = true
     }
-  }, [persistent])
+  }, [persistent, roomsReloadKey])
+
+  /** 현재 대화의 메시지를 다시 불러온다. */
+  const retryLoadMessages = useCallback(() => setMessagesReloadKey((key) => key + 1), [])
 
   // URL 의 chatId 가 현재 대화의 단일 기준이다. 직접 접근·새로고침·브라우저
   // 뒤로가기/앞으로가기로 값이 바뀔 때마다 해당 방을 다시 조회한다.
@@ -127,7 +149,7 @@ export function Chat() {
     setInput('')
     setMessagesCursor(null)
     setLoadingOlder(false)
-    setConversationError(null)
+    setConversationBlock(null)
 
     // 첫 메시지로 방을 만든 직후에는 이미 화면과 DB에 사용자 메시지가 있으므로
     // URL 전환 때문에 다시 비우거나 중복 조회하지 않는다.
@@ -147,10 +169,7 @@ export function Chat() {
 
     if (!persistent) {
       setOpeningRoom(false)
-      setConversationError({
-        title: '대화에 접근할 수 없습니다.',
-        message: '로그인 상태와 채팅 저장소 설정을 확인해 주세요.',
-      })
+      setConversationBlock({ reason: 'unavailable' })
       return
     }
 
@@ -163,20 +182,7 @@ export function Chat() {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        // 401 이면 client.ts 가 이미 로그아웃 처리했고 곧 로그인 화면으로 넘어간다.
-        // 여기서 "잠시 후 다시" 같은 안내를 띄우면 원인을 오해하게 만든다.
-        if (error instanceof ApiError && error.code === 401) return
-        if (error instanceof ApiError && (error.code === 403 || error.code === 404)) {
-          setConversationError({
-            title: '대화에 접근할 수 없습니다.',
-            message: '존재하지 않거나 접근 권한이 없는 채팅입니다.',
-          })
-          return
-        }
-        setConversationError({
-          title: '대화를 불러오지 못했습니다.',
-          message: '잠시 후 다시 시도해 주세요.',
-        })
+        setConversationBlock({ reason: 'failed', error }) // 문구·모달은 공통 처리가 맡는다.
       })
       .finally(() => {
         if (!cancelled) setOpeningRoom(false)
@@ -185,13 +191,15 @@ export function Chat() {
     return () => {
       cancelled = true
     }
-  }, [activeRoomId, persistent])
+  }, [activeRoomId, persistent, messagesReloadKey])
 
   // 방 목록 무한스크롤 — 사이드바 목록 끝 sentinel.
+  // 실패했으면 관찰을 멈춘다. sentinel 이 계속 보이는 상태라 그냥 두면 실패한 요청을
+  // 무한히 다시 쏜다(오류 모달도 그만큼 다시 뜬다) — "다시 시도" 를 누를 때 재개한다.
   useEffect(() => {
     const sentinel = roomsSentinel.current
     const root = sidebarRef.current
-    if (!sentinel || !root || !roomsCursor) return
+    if (!sentinel || !root || !roomsCursor || roomsError !== null) return
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && roomsCursor && !loadingRooms) {
@@ -201,7 +209,8 @@ export function Chat() {
               setRooms((prev) => [...prev, ...page.items])
               setRoomsCursor(page.next_cursor)
             })
-            .catch(() => {})
+            // 이미 불러온 목록은 그대로 두고 아래에 안내만 붙인다.
+            .catch((error: unknown) => setRoomsError(error))
             .finally(() => setLoadingRooms(false))
         }
       },
@@ -209,7 +218,7 @@ export function Chat() {
     )
     io.observe(sentinel)
     return () => io.disconnect()
-  }, [roomsCursor, loadingRooms])
+  }, [roomsCursor, loadingRooms, roomsError])
 
   function newChat() {
     if (activeRoomId) {
@@ -218,7 +227,7 @@ export function Chat() {
     }
     setMessages([])
     setMessagesCursor(null)
-    setConversationError(null)
+    setConversationBlock(null)
     lastQuestion.current = ''
   }
 
@@ -231,10 +240,42 @@ export function Chat() {
     }
   }
 
-  function openRoom(roomId: string) {
-    if (roomId === activeRoomId) return
-    navigate(`/chat/${encodeURIComponent(roomId)}`)
-  }
+  const openRoom = useCallback(
+    (roomId: string) => {
+      if (roomId === activeRoomIdRef.current) return
+      void navigate(`/chat/${encodeURIComponent(roomId)}`)
+    },
+    [navigate],
+  )
+
+  const handleRename = useCallback((room: ChatRoom) => {
+    setRenameTarget(room)
+  }, [])
+
+  const handleDelete = useCallback((room: ChatRoom) => {
+    setDeleteTarget(room)
+  }, [])
+
+  // 성공 토스트는 서버 응답의 message 를 client.ts 가 띄운다 — 여기서 또 띄우면 두 번 뜬다.
+
+  // 제목 수정은 last_chat_at 을 바꾸지 않으므로 현재 자리의 항목만 교체한다.
+  const handleRenamed = useCallback((updated: ChatRoom) => {
+    setRooms((prev) => prev.map((room) => (room.id === updated.id ? updated : room)))
+    setRenameTarget(null)
+  }, [])
+
+  const handleDeleted = useCallback(
+    (roomId: string) => {
+      setRooms((prev) => prev.filter((room) => room.id !== roomId))
+      setDeleteTarget(null)
+      // 보고 있던 대화를 지웠으면 URL 이 활성 대화의 단일 기준이므로 새 대화 화면으로 간다.
+      if (activeRoomIdRef.current === roomId) void navigate('/chat')
+    },
+    [navigate],
+  )
+
+  const closeRenameModal = useCallback(() => setRenameTarget(null), [])
+  const closeDeleteModal = useCallback(() => setDeleteTarget(null), [])
 
   // 위로 스크롤 시 과거 메시지 prepend (스크롤 위치 보정은 MessageList 가 처리).
   const loadOlder = useCallback(() => {
@@ -247,6 +288,8 @@ export function Chat() {
         setMessages((prev) => [...page.items.map(toMessage), ...prev])
         setMessagesCursor(page.next_cursor)
       })
+      // 실패는 공통 오류 모달이 알린다. 이미 보고 있는 메시지는 그대로 두고,
+      // 커서도 유지해 다시 위로 스크롤하면 같은 페이지를 재시도한다.
       .catch(() => {})
       .finally(() => setLoadingOlder(false))
   }, [activeRoomId, messagesCursor, loadingOlder])
@@ -258,6 +301,9 @@ export function Chat() {
   async function submitQuestion(text: string, regenerate = false) {
     const q = text.trim()
     if (!q || sending) return
+
+    // 직접 전송(재생성 포함)은 과거를 읽던 중이어도 최신 메시지 추적을 강제로 시작한다.
+    setFollowLatestRequest((request) => request + 1)
 
     const history: ChatTurn[] = messages
       .filter((m) => !m.error)
@@ -330,6 +376,19 @@ export function Chat() {
     void submitRef.current(lastQuestion.current, true)
   }, [])
 
+  /**
+   * 목록 오류에서 "다시 시도".
+   *
+   * 이미 불러온 목록이 있으면 오류만 지워 무한스크롤을 재개한다 — 1페이지부터 다시 받으면
+   * 스크롤로 쌓아둔 뒷 페이지가 통째로 사라지기 때문이다.
+   */
+  const retryRooms = useCallback(() => {
+    if (rooms.length > 0) setRoomsError(null)
+    else retryLoadRooms()
+  }, [rooms.length, retryLoadRooms])
+
+  const groups = useMemo(() => groupRoomsByDate(rooms), [rooms])
+
   if (initializing) {
     return (
       <div className={styles.page}>
@@ -361,45 +420,73 @@ export function Chat() {
 
             {!persistent ? (
               <p className={styles.sideEmpty}>로그인하면 대화가 저장되어 언제든 다시 볼 수 있어요.</p>
-            ) : rooms.length === 0 ? (
-              <p className={styles.sideEmpty}>아직 대화가 없어요. 아래에 질문을 입력해 시작해보세요.</p>
             ) : (
-              <ul className={styles.historyList}>
-                {rooms.map((r) => (
-                  <li key={r.id}>
-                    <button
-                      className={`${styles.historyItem} ${
-                        activeRoomId === r.id ? styles.historyActive : ''
-                      }`}
-                      aria-current={activeRoomId === r.id ? 'true' : undefined}
-                      onClick={() => openRoom(r.id)}
-                    >
-                      <span className={styles.historyTitle}>{r.title || '새 대화'}</span>
-                      <span className={styles.historyTime}>{relTime(r.updated_at)}</span>
-                    </button>
-                  </li>
+              <>
+                {groups.map((group) => (
+                  <div key={group.label} className={styles.historyGroup}>
+                    <h3 className={styles.historyGroupLabel}>{group.label}</h3>
+                    <ul className={styles.historyList}>
+                      {group.rooms.map((room) => (
+                        <ChatRoomItem
+                          key={room.id}
+                          room={room}
+                          active={activeRoomId === room.id}
+                          onOpen={openRoom}
+                          onRename={handleRename}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-                {/* 무한스크롤 감시 지점 */}
-                {roomsCursor && <li ref={roomsSentinel} className={styles.roomsSentinel} />}
-              </ul>
+                {/* 무한스크롤 감시 지점은 날짜 그룹 목록과 분리해 유효한 마크업을 유지한다. */}
+                {roomsCursor && <div ref={roomsSentinel} className={styles.roomsSentinel} />}
+
+                {/* 실패가 Empty State 를 이긴다 — 서버 장애를 "대화가 없다" 로 보여주면 안 된다. */}
+                {roomsError !== null ? (
+                  <ErrorState
+                    message="대화 기록을 불러오지 못했습니다."
+                    onRetry={isRetryable(roomsError) ? retryRooms : undefined}
+                  />
+                ) : rooms.length === 0 ? (
+                  <p className={styles.sideEmpty}>
+                    아직 대화가 없어요. 아래에 질문을 입력해 시작해보세요.
+                  </p>
+                ) : null}
+              </>
             )}
           </div>
 
           <div className={styles.suggest}>
-            <h3 className={styles.suggestTitle}>추천 주제</h3>
-            <div className={styles.chips}>
-              {TOPICS.map((t) => (
-                <button key={t} className={styles.chip} onClick={() => setInput(t)}>
-                  {t}
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              className={styles.suggestToggle}
+              aria-expanded={suggestOpen}
+              aria-controls="chat-suggest-chips"
+              onClick={() => setSuggestOpen((open) => !open)}
+            >
+              <h3 className={styles.suggestTitle}>추천 주제</h3>
+              <ChevronDown
+                className={`${styles.suggestChevron} ${
+                  suggestOpen ? styles.suggestChevronOpen : ''
+                }`}
+              />
+            </button>
+            {suggestOpen && (
+              <div id="chat-suggest-chips" className={styles.chips}>
+                {TOPICS.map((t) => (
+                  <button key={t} className={styles.chip} onClick={() => setInput(t)}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </aside>
 
         {/* ── 채팅 영역 ── */}
         <section className={styles.chat}>
-          {showLegalNotice && !showEmpty && !conversationError && (
+          {showLegalNotice && !showEmpty && !conversationBlock && (
             <div className={styles.notice} role="note">
               <Info className={styles.noticeIcon} />
               <span className={styles.noticeText}>
@@ -417,14 +504,14 @@ export function Chat() {
             </div>
           )}
 
-          {conversationError ? (
-            <div className={styles.conversationError} role="alert">
-              <h2 className={styles.conversationErrorTitle}>{conversationError.title}</h2>
-              <p className={styles.conversationErrorMessage}>{conversationError.message}</p>
-              <button type="button" className={styles.conversationErrorAction} onClick={newChat}>
-                새 대화 시작하기
-              </button>
-            </div>
+          {conversationBlock?.reason === 'unavailable' ? (
+            // API 실패가 아니라 로그인·저장소 설정 문제다 — 다시 시도해도 결과가 같다.
+            <ErrorState message="로그인 상태와 채팅 저장소 설정을 확인해 주세요." />
+          ) : conversationBlock ? (
+            <ErrorState
+              message="대화를 불러오지 못했습니다."
+              onRetry={isRetryable(conversationBlock.error) ? retryLoadMessages : undefined}
+            />
           ) : showEmpty ? (
             <EmptyState onExample={(q) => void submitQuestion(q)} />
           ) : (
@@ -435,13 +522,14 @@ export function Chat() {
               isLoading={openingRoom}
               isLoadingOlder={loadingOlder}
               hasMoreOlder={messagesCursor !== null}
+              followLatestRequest={followLatestRequest}
               onLoadOlder={loadOlder}
               onStreamingDone={onStreamingDone}
               onRegenerate={regenerate}
             />
           )}
 
-          {!conversationError && (
+          {!conversationBlock && (
             <ChatComposer
               value={input}
               onChange={setInput}
@@ -452,6 +540,21 @@ export function Chat() {
           )}
         </section>
       </div>
+
+      {renameTarget && (
+        <RenameRoomModal
+          room={renameTarget}
+          onClose={closeRenameModal}
+          onSaved={handleRenamed}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteRoomModal
+          room={deleteTarget}
+          onClose={closeDeleteModal}
+          onDeleted={handleDeleted}
+        />
+      )}
     </div>
   )
 }

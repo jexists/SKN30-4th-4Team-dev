@@ -1,4 +1,4 @@
-@use '../../styles/variables' as v;
+@use "../../styles/variables" as v;
 
 .siteFooter {
   background: v.$navy-900;
@@ -30,7 +30,7 @@
   color: v.$text-on-dark;
 }
 .footerBrand {
-  max-width: 30rem;
+  // max-width: 30rem;
 
   p {
     margin: 14px 0 0;

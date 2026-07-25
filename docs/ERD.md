@@ -60,7 +60,9 @@ erDiagram
         uuid user_id FK "app_user"
         text title "nullable"
         timestamptz created_at
-        timestamptz updated_at "마지막 대화"
+        timestamptz last_chat_at "마지막 대화"
+        timestamptz updated_at "레코드 수정"
+        timestamptz title_updated_at "nullable"
         timestamptz deleted_at "nullable"
     }
     chat_message {
@@ -216,9 +218,11 @@ Supabase `auth.users` 의 확장 테이블. 로그인·이메일·소셜 정보�
 | user_id | UUID | FK→`app_user` | 생성 사용자 |
 | title | TEXT | NULL | 채팅방 제목 |
 | created_at | TIMESTAMPTZ | | 생성 일시 |
-| updated_at | TIMESTAMPTZ | | 마지막 대화 일시 |
+| last_chat_at | TIMESTAMPTZ | | 마지막 대화 일시 (없으면 생성 일시) |
+| updated_at | TIMESTAMPTZ | | 레코드 수정 일시 |
+| title_updated_at | TIMESTAMPTZ | NULL | 제목 수정 일시 |
 | deleted_at | TIMESTAMPTZ | NULL | 삭제 일시 |
-| — | | INDEX(user_id, updated_at DESC) | 최신순 목록 |
+| — | | INDEX(user_id, last_chat_at DESC) | 최신순 목록 |
 
 ### 6. chat_message — 대화 메시지
 

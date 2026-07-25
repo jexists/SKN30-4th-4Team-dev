@@ -1,0 +1,35 @@
+@use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
+
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: v.$space-3;
+  padding: v.$space-5 v.$space-4;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-md;
+  background: v.$surface-sunken;
+  text-align: center;
+}
+
+.message {
+  @include t.body-sm;
+  margin: 0;
+  color: v.$slate;
+}
+
+.action {
+  @include t.button-text-sm;
+  padding: v.$space-2 v.$space-4;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-sm;
+  background: v.$surface;
+  color: v.$navy-800;
+  cursor: pointer;
+  transition: background v.$transition-fast;
+
+  &:hover {
+    background: v.$page-bg;
+  }
+}

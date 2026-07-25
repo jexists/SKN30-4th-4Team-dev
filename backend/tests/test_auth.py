@@ -254,7 +254,7 @@ def test_me_requires_auth(client):
     assert resp.status_code == 401
     body = resp.json()
     assert body["success"] is False
-    assert body["error"]["title"] == "UNAUTHORIZED"
+    assert body["error"]["title"] == "로그인 필요"
 
 
 def test_me_rejects_bad_token(client, auth_secret):
@@ -286,17 +286,21 @@ def test_me_uses_email_name_when_signup_nickname_is_empty(client, auth_secret):
 
 
 def test_me_expired_token_says_expired(client, auth_secret):
-    """만료는 별도 코드로 알린다 — 프론트가 '갱신 후 재시도'를 판단할 수 있어야 한다."""
+    """만료는 문구로 구분한다 — 프론트는 401 로 '갱신 후 재시도'를 판단한다."""
     token = _make_token(exp_delta=-3600)
     resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 401
-    assert resp.json()["error"]["title"] == "TOKEN_EXPIRED"
+    error = resp.json()["error"]
+    assert error["title"] == "로그인 필요"
+    assert error["message"] == "세션이 만료되었습니다. 다시 로그인해 주세요."
 
 
 def test_me_malformed_header_is_unauthorized(client, auth_secret):
     resp = client.get("/api/v1/me", headers={"Authorization": "Basic abc"})
     assert resp.status_code == 401
-    assert resp.json()["error"]["title"] == "UNAUTHORIZED"
+    error = resp.json()["error"]
+    assert error["title"] == "로그인 필요"
+    assert error["message"] == "로그인이 필요합니다."
 
 
 def test_me_returns_503_when_auth_backend_unreachable(client, monkeypatch):
@@ -312,7 +316,7 @@ def test_me_returns_503_when_auth_backend_unreachable(client, monkeypatch):
     token = _es256_token(private_key)
     resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 503
-    assert resp.json()["error"]["title"] == "AUTH_UNAVAILABLE"
+    assert resp.json()["error"]["title"] == "인증 서버 오류"
 
 
 def test_chat_rooms_expired_token_says_expired(client, auth_secret):
@@ -324,4 +328,6 @@ def test_chat_rooms_expired_token_says_expired(client, auth_secret):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 401
-    assert resp.json()["error"]["title"] == "TOKEN_EXPIRED"
+    error = resp.json()["error"]
+    assert error["title"] == "로그인 필요"
+    assert error["message"] == "세션이 만료되었습니다. 다시 로그인해 주세요."

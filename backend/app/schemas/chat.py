@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChatTurn(BaseModel):
@@ -33,11 +33,20 @@ class CreateRoomIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
 
 
+class UpdateRoomTitleIn(BaseModel):
+    """채팅방 제목 수정 요청. 앞뒤 공백은 제거하고, 공백만 있으면 min_length 에서 422."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str = Field(min_length=1, max_length=200)
+
+
 class ChatRoomOut(BaseModel):
     """채팅방 목록 항목. id 는 문자열로 내보낸다(프론트 문자열 id)."""
 
     id: str
     title: str | None
+    last_chat_at: datetime
     updated_at: datetime
 
 
