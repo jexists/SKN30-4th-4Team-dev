@@ -78,15 +78,22 @@ export function Chat() {
   const roomsSentinel = useRef<HTMLLIElement>(null)
   activeRoomIdRef.current = activeRoomId
 
-  const refreshRooms = useCallback(() => {
-    if (!persistent) return
-    listRooms()
-      .then((page) => {
-        setRooms(page.items)
-        setRoomsCursor(page.next_cursor)
-      })
-      .catch(() => {})
-  }, [persistent])
+  /**
+   * 답변 저장 후 그 방을 목록 맨 앞으로 올린다(백엔드가 updated_at 을 갱신한 것과 같은 결과).
+   *
+   * 예전엔 첫 페이지를 다시 불러왔는데, 그러면 스크롤로 이미 불러온 2페이지 이후가 통째로
+   * 사라졌다. 서버에서 실제로 바뀌는 값은 updated_at 하나뿐이라 목록에서 직접 반영한다.
+   */
+  const touchRoom = useCallback((roomId: string) => {
+    setRooms((prev) => {
+      const hit = prev.find((r) => r.id === roomId)
+      if (!hit) return prev // 아직 불러오지 않은 페이지의 방 — 다음 조회 때 제자리를 찾는다.
+      return [
+        { ...hit, updated_at: new Date().toISOString() },
+        ...prev.filter((r) => r.id !== roomId),
+      ]
+    })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -292,7 +299,7 @@ export function Chat() {
 
       if (persistent && roomId) {
         await addMessage(roomId, 'ASSISTANT', res.answer, res.response_time_ms)
-        refreshRooms()
+        touchRoom(roomId)
       }
     } catch (e) {
       // 401 이면 세션이 끊긴 것이다 — client.ts 가 로그아웃시키고 로그인 화면으로 넘긴다.
@@ -313,10 +320,15 @@ export function Chat() {
     }
   }
 
+  // memo 된 MessageItem 에 내려가는 콜백이라 identity 는 고정하고, 대신 최신 렌더의
+  // submitQuestion 을 ref 로 붙잡는다. 그래야 재생성 시점의 messages(맥락)·sending 을 본다
+  // (중복 전송 방지는 submitQuestion 첫 줄의 sending 가드가 담당).
+  const submitRef = useRef(submitQuestion)
+  submitRef.current = submitQuestion
+
   const regenerate = useCallback(() => {
-    if (lastQuestion.current && !sending) void submitQuestion(lastQuestion.current, true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sending])
+    void submitRef.current(lastQuestion.current, true)
+  }, [])
 
   if (initializing) {
     return (

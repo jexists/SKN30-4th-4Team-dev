@@ -139,7 +139,12 @@ describe('Chat URL routing', () => {
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-new')
     })
-    expect(await screen.findByText('첫 질문')).toBeInTheDocument()
+    // 새로 만든 방은 사이드바 맨 앞에 그대로 남고(목록을 다시 불러 덮어쓰지 않는다),
+    // 본문에는 방금 보낸 사용자 말풍선이 보인다.
+    const newRoom = await screen.findByRole('button', { name: /첫 질문/ })
+    expect(newRoom).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByText('첫 질문', { selector: 'div' })).toBeInTheDocument()
+    expect(api.listRooms).toHaveBeenCalledTimes(1) // 최초 1회뿐 — 답변 저장 후 재조회 없음
     expect(api.createRoom).toHaveBeenCalledWith('첫 질문')
     expect(api.addMessage).toHaveBeenCalledWith('room-new', 'USER', '첫 질문')
     expect(api.listMessages).not.toHaveBeenCalled()

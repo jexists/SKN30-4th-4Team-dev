@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authStorage, keepSignedIn } from './authStorage'
 
@@ -65,5 +65,30 @@ describe('authStorage', () => {
 
     expect(window.localStorage.getItem(KEY)).toBeNull()
     expect(window.sessionStorage.getItem(KEY)).toBeNull()
+  })
+
+  // 사파리 프라이빗 모드·쿠키 차단에서는 저장소 접근 자체가 던진다. 그 예외가 새어 나가면
+  // Supabase 세션 처리(=로그인)가 통째로 실패하므로 어댑터 안에서 삼켜야 한다.
+  it('저장소가 예외를 던져도 밖으로 새지 않는다', () => {
+    const broken = {
+      getItem: () => {
+        throw new DOMException('denied', 'SecurityError')
+      },
+      setItem: () => {
+        throw new DOMException('quota', 'QuotaExceededError')
+      },
+      removeItem: () => {
+        throw new DOMException('denied', 'SecurityError')
+      },
+    }
+    vi.spyOn(window, 'localStorage', 'get').mockReturnValue(broken as unknown as Storage)
+
+    expect(() => authStorage.setItem(KEY, 'x')).not.toThrow()
+    expect(() => authStorage.removeItem(KEY)).not.toThrow()
+    // localStorage 가 죽어도 sessionStorage 쪽은 그대로 읽는다.
+    window.sessionStorage.setItem(KEY, 'alive')
+    expect(authStorage.getItem(KEY)).toBe('alive')
+
+    vi.restoreAllMocks()
   })
 })

@@ -54,6 +54,7 @@ export function MessageList({
   // 과거 prepend 위치 보정용(로딩 직전 스크롤 상태 저장).
   const pendingPrepend = useRef<{ height: number; top: number } | null>(null)
   const prevLen = useRef(messages.length)
+  const prevFirstId = useRef(messages[0]?.id)
 
   const followGrow = useCallback(() => {
     if (atBottomRef.current) scrollToBottom(false)
@@ -63,16 +64,23 @@ export function MessageList({
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
+    // 저장해 둔 보정값은 '실제로 앞에 붙었을 때'만 쓴다. 요청이 조기 반환되거나 실패하면
+    // prepend 는 오지 않는데, 그 값을 남겨 두면 다음 append(=새 답변) 가 과거 로딩으로
+    // 오인돼 스크롤이 엉뚱한 곳으로 튄다. 확인되지 않은 보정값은 그냥 버린다.
+    const firstId = messages[0]?.id
+    const grew = messages.length > prevLen.current
+    const prepended = grew && firstId !== undefined && firstId !== prevFirstId.current
     const pending = pendingPrepend.current
-    if (pending) {
-      pendingPrepend.current = null
+    pendingPrepend.current = null
+
+    if (pending && prepended) {
       el.scrollTop = el.scrollHeight - pending.height + pending.top
     } else {
-      const grew = messages.length > prevLen.current
       if (atBottomRef.current) scrollToBottom(false)
       else if (grew) setHasNew(true)
     }
     prevLen.current = messages.length
+    prevFirstId.current = firstId
   }, [messages, atBottomRef, scrollToBottom])
 
   // 응답 대기 인디케이터가 뜰 때도 맨 아래면 따라감.
