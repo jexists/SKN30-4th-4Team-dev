@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect } from 'react'
 
 import { BRAND } from '../../config/env'
-import { Refresh, Shield, User } from '../../components/icons'
+import { Refresh, Shield } from '../../components/icons'
 import { useTypewriter } from '../../hooks/useTypewriter'
 import { MarkdownMessage } from './MarkdownMessage'
 import type { Message } from './types'
@@ -38,26 +38,23 @@ export const MessageItem = memo(function MessageItem({
     if (streaming) onContentGrow()
   }, [displayed, streaming, onContentGrow])
 
+  // 발신자는 좌우 정렬과 말풍선 색으로 구분한다 — 아바타·이름표를 매 줄 반복하지 않는다.
   if (message.role === 'user') {
     return (
       <div className={`${styles.msgRow} ${styles.msgUser}`}>
-        <div className={styles.msgCol}>
-          <div className={styles.bubbleUser}>{message.content}</div>
-          <span className={styles.meta}>사용자</span>
-        </div>
-        <div className={styles.userAvatar}>
-          <User />
-        </div>
+        <div className={styles.bubbleUser}>{message.content}</div>
       </div>
     )
   }
 
   return (
     <div className={styles.msgRow}>
-      <div className={styles.botAvatar}>
-        <Shield />
-      </div>
-      <div className={styles.msgCol}>
+      <div className={styles.botCol}>
+        {/* 답변의 출처 라벨. 사용자 메시지는 우측 정렬만으로 구분되므로 붙이지 않는다. */}
+        <span className={styles.botLabel}>
+          <Shield className={styles.botLabelIcon} />
+          {BRAND.name} 봇
+        </span>
         <div className={`${styles.bubbleBot} ${message.error ? styles.bubbleError : ''}`}>
           {message.error ? (
             <div className={styles.errorBubble}>
@@ -79,7 +76,6 @@ export const MessageItem = memo(function MessageItem({
             <MarkdownMessage content={message.content} />
           )}
         </div>
-        <span className={styles.meta}>{BRAND.name} 봇</span>
       </div>
     </div>
   )
