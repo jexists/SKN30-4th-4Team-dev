@@ -1,20 +1,65 @@
 from typing import Annotated
 
-from fastapi import Header
+from fastapi import Depends, Header
 
-from app.core.security import verify_token
+from app.core.exceptions import AppError
+from app.core.security import AUTH_EXPIRED, AUTH_UNAVAILABLE, verify_token_with_reason
+
+# Authorization 헤더가 아예 없거나 Bearer 형식이 아닐 때의 사유.
+AUTH_MISSING = "missing"
+
+
+async def _authenticate(
+    authorization: Annotated[str | None, Header()] = None,
+) -> tuple[dict | None, str]:
+    """Authorization 헤더를 검증해 (클레임, 사유) 를 반환한다.
+
+    사유를 함께 들고 다니는 이유: '토큰 없음'·'만료'·'서명 오류'·'인증 서버 장애' 를
+    같은 401 로 뭉개면 프론트가 "재로그인시킬 것 vs 잠시 후 재시도할 것" 을 구분할 수 없다.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None, AUTH_MISSING
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        return None, AUTH_MISSING
+    return verify_token_with_reason(token)
 
 
 async def get_current_user(
-    authorization: Annotated[str | None, Header()] = None,
+    auth: Annotated[tuple[dict | None, str], Depends(_authenticate)],
 ) -> dict | None:
-    """Authorization 헤더의 Bearer 토큰을 검증해 현재 사용자(클레임)를 반환.
+    """현재 사용자(클레임). 미인증이면 None — 인증이 '선택'인 엔드포인트에서 쓴다.
 
-    지금은 스텁 — 검증기(verify_token)가 None 을 돌려줌.
-    Supabase Auth 연동 시 verify_token 을 채우고, 보호가 필요한 엔드포인트는
-    미인증(None)일 때 401 을 던지도록 확장한다.
+    인증이 '필수'인 곳은 아래 require_user 를 쓴다.
     """
-    if not authorization or not authorization.lower().startswith("bearer "):
-        return None
-    token = authorization.split(" ", 1)[1]
-    return verify_token(token)
+    return auth[0]
+
+
+async def require_user(
+    auth: Annotated[tuple[dict | None, str], Depends(_authenticate)],
+) -> dict:
+    """인증이 필수인 엔드포인트용. 실패 사유에 따라 401/503(표준 error 봉투)을 던진다.
+
+    - 503 AUTH_UNAVAILABLE: 우리 쪽 설정 누락이나 Supabase JWKS 장애다. 사용자 세션은
+      멀쩡하므로 프론트가 로그아웃시키면 안 된다.
+    - 401 TOKEN_EXPIRED: 토큰이 만료됐다. 프론트가 갱신을 시도하고, 실패하면 재로그인.
+    - 401 UNAUTHORIZED: 토큰이 없거나 유효하지 않다.
+    """
+    user, reason = auth
+    if user is not None:
+        return user
+
+    if reason == AUTH_UNAVAILABLE:
+        raise AppError(
+            "AUTH_UNAVAILABLE",
+            "인증 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+            503,
+        )
+    if reason == AUTH_EXPIRED:
+        raise AppError("TOKEN_EXPIRED", "세션이 만료되었습니다. 다시 로그인해 주세요.", 401)
+    raise AppError("UNAUTHORIZED", "로그인이 필요합니다.", 401)
+
+
+# 라우트 시그니처에서 바로 쓰는 별칭.
+CurrentUser = Annotated[dict | None, Depends(get_current_user)]  # 선택 인증
+RequireUser = Annotated[dict, Depends(require_user)]  # 필수 인증
