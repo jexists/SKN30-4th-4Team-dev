@@ -1,35 +1,189 @@
-// 디자인 토큰 — 색·간격 등. SCSS 변수로 관리하고 @use 로 참조합니다.
-$color-text: #1a1a1a;
-$color-muted: #888888;
-$color-ok: #2e7d32;
-$color-error: #c62828;
-$color-border: #e0e0e0;
+// ══════════════════════════════════════════════════════════════════
+// 디자인 토큰 — 프로젝트 전체가 참조하는 단일 소스.
+// design.md 와 이 파일은 항상 동기화되어야 한다.
+// SCSS 에서만 사용하고, 컴포넌트는 반드시 `@use 'variables' as v;` 로 참조한다.
+// 임의의 색·크기·간격을 추가하지 말고, 부족하면 이 파일에 먼저 추가한다.
+// ══════════════════════════════════════════════════════════════════
 
-$space-sm: 0.5rem;
-$space-md: 1rem;
-$space-lg: 2rem;
+// ── 타이포그래피 · 폰트 패밀리 ────────────────────────────────
+$font-sans:
+  'Pretendard Variable',
+  Pretendard,
+  -apple-system,
+  BlinkMacSystemFont,
+  'Malgun Gothic',
+  'Apple SD Gothic Neo',
+  system-ui,
+  sans-serif;
+$font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, 'JetBrains Mono', monospace;
 
-// ── 브랜드 (HomeShield 랜딩) ──
+// ── 타이포그래피 · 사이즈 스케일 ──────────────────────────────
+// 실제 사용 중인 값에서 파생. 새 값을 만들지 말고 아래에서 고른다.
+$font-size-xs: 12px; // 캡션, 라벨
+$font-size-sm: 13px; // 보조 텍스트
+$font-size-md: 14px; // 기본 본문 보조
+$font-size-base: 15px; // 기본 본문
+$font-size-lg: 16px; // 리드 본문
+$font-size-xl: 17px; // 소제목
+$font-size-2xl: 19px; // 카드 제목·섹션 소제목
+$font-size-3xl: 22px; // 페이지 소제목
+$font-size-4xl: 26px; // 페이지 제목
+$font-size-5xl: 32px; // 대형 제목
+$font-size-display: 44px; // 히어로 디스플레이 (clamp 기반)
+
+// ── 타이포그래피 · weight 스케일 ──────────────────────────────
+$font-weight-regular: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+$font-weight-extrabold: 800;
+
+// ── 타이포그래피 · line-height ────────────────────────────────
+$line-height-tight: 1.2; // 대형 헤딩
+$line-height-snug: 1.35; // 헤딩
+$line-height-normal: 1.5; // 짧은 본문
+$line-height-relaxed: 1.65; // 본문
+$line-height-loose: 1.75; // 긴 본문
+
+// ── 타이포그래피 · letter-spacing ─────────────────────────────
+$tracking-tight: -0.035em; // 디스플레이
+$tracking-snug: -0.03em; // H1
+$tracking-normal: -0.02em; // H2/H3
+$tracking-body: -0.01em; // 본문(body 기본)
+$tracking-wide: 0.02em; // 라벨(uppercase)
+$tracking-wider: 0.04em; // 오버라인
+
+// ══════════════ 색상 ══════════════════════════════════════════
+
+// 브랜드 · 뉴트럴
+$white: #fff;
 $navy-900: #0f1a35; // 다크 밴드·푸터 배경
 $navy-800: #17224a; // 기본 버튼·제목
 $navy-700: #263258; // 다크 위 카드 테두리
+$navy-hover: #101a3c; // 버튼 hover
 $ink: #1b2440; // 밝은 배경 위 제목
 $slate: #5b6478; // 본문
-$slate-light: #8b93a7; // 다크 밴드 위 보조 텍스트
-$bg-soft: #f6f7fa; // 섹션 옅은 배경
-$lavender: #e9edf9; // 하단 CTA 배경
+$slate-light: #8b93a7; // 다크 위 보조 텍스트
+$text-placeholder: #a7aec0;
+$text-on-dark: $white;
+$text-on-dark-muted: #c3cbe2;
+
+// 배경 (페이지 배경은 반드시 $page-bg 만 사용)
+$page-bg: #f2f4fb; // 모든 페이지 공통 배경
+$surface: $white; // 카드·모달 등 표면
+$surface-raised: #fcfdff; // 입력 필드 등 살짝 들뜬 표면
+$surface-sunken: #fbfcfe; // 드롭존 등 살짝 가라앉은 표면
+$backdrop: rgba(15, 23, 42, 0.48); // 모달 배경
+
+// 푸터 · 특수 배경
+$footer-compact-bg: #f6f7fa; // 작업 화면용 compact 푸터 스트립 (본문과 살짝 오프셋)
+
+// 보더 (약 → 강 순서)
+$border-subtle: #eef0f4; // 섹션 구분선
+$border-default: #e8ebf1; // 카드 기본 테두리
+$border-card: #e6e9f2; // 카드 대체 테두리
+$border-strong: #dfe3ec; // 강조 테두리·입력 필드
+
+// 색상 · 액센트 배경
+$lavender: #e9edf9; // CTA 배경
+$pill: #eef1f8; // pill·아이콘 배경
+$blue-soft: #eef3fb; // 정보 배경 (chat 등)
+
+// 시맨틱 (성공·경고·위험·안내)
 $green: #16a34a;
 $green-soft: #e8f5ec;
 $red: #dc2626;
 $red-soft: #fdecec;
 $amber: #f59e0b;
 $amber-soft: #fef3e0;
-$blue-soft: #eef3fb;
-$pill: #eef1f8;
-$orange: #ea580c; // 위험 리포트 경고 강조색
+$orange: #ea580c; // 위험 리포트 강조
 $orange-soft: #fdece1;
 
-$radius-sm: 10px;
-$radius: 16px;
-$radius-lg: 22px;
-$content-max: 1120px;
+// 색상 · 그라디언트 (아바타 등 반복 사용)
+$avatar-gradient: linear-gradient(135deg, #b6c1de, #7f8fb8);
+
+// 색상 · 브랜드 소셜
+$brand-kakao: #fee500;
+$brand-kakao-text: #191919;
+$brand-naver: #03c75a;
+
+// ── 상태 색상 (레거시 · 헬스스테이터스 등) ────────────────────
+// 신규 화면에서는 위의 시맨틱(green/red 등) 사용을 권장.
+$color-text: #1a1a1a;
+$color-muted: #888888;
+$color-ok: #2e7d32;
+$color-error: #c62828;
+$color-border: #e0e0e0;
+
+// ══════════════ Radius ═══════════════════════════════════════
+$radius-xs: 6px; // 태그·세그먼트
+$radius-sm: 8px; // 소형 버튼·인풋
+$radius-md: 10px; // 표준 버튼·카드 내부
+$radius: 12px; // 기본 (카드 내부 여러 곳)
+$radius-lg: 16px; // 카드·모달 (기본 카드)
+$radius-xl: 20px; // 대형 카드·벤토
+$radius-2xl: 22px; // 특수 (레거시)
+$radius-pill: 999px; // 필/토글
+
+// ══════════════ Shadow ═══════════════════════════════════════
+$shadow-xs: 0 1px 2px rgba(15, 26, 53, 0.04); // 미세 강조
+$shadow-sm: 0 1px 3px rgba(15, 26, 53, 0.06); // 인용 카드 등
+$shadow-md: 0 4px 20px rgba(15, 23, 42, 0.08); // 폼 카드
+$shadow-lg: 0 8px 20px rgba(15, 26, 53, 0.14); // 강조 드롭
+$shadow-elevated: 0 12px 28px rgba(23, 34, 74, 0.14); // 팝오버·메뉴
+$shadow-modal: 0 16px 48px rgba(15, 23, 42, 0.24); // 모달
+$shadow-btn-primary: 0 8px 20px rgba(15, 26, 53, 0.18); // primary 버튼
+$shadow-toast: 0 8px 28px rgba(15, 23, 42, 0.16);
+
+// ══════════════ Spacing (4pt scale) ══════════════════════════
+// 페이지·컴포넌트의 padding/margin/gap 은 반드시 이 값에서 고른다.
+$space-0: 0;
+$space-1: 4px;
+$space-2: 8px;
+$space-3: 12px;
+$space-4: 16px;
+$space-5: 20px;
+$space-6: 24px;
+$space-7: 28px;
+$space-8: 32px;
+$space-10: 40px;
+$space-12: 48px;
+$space-14: 56px;
+$space-16: 64px;
+$space-18: 72px;
+$space-20: 80px;
+$space-22: 88px;
+$space-24: 96px;
+
+// 레거시(호환) — 신규 코드는 $space-* 사용
+$space-sm: $space-2;
+$space-md: $space-4;
+$space-lg: $space-8;
+
+// ══════════════ Layout ═══════════════════════════════════════
+$content-max: 1120px; // 콘텐츠 컨테이너 최대 너비
+$form-max: 440px; // 로그인/회원가입 카드 최대 너비
+$header-height: 66px; // sticky 사이트 헤더
+$sidebar-width: 300px; // 챗 사이드바
+
+// ══════════════ Breakpoints ══════════════════════════════════
+// mobile-first 로 min-width 대신 max-width 를 주로 쓴다(이미 그렇게 쓰고 있음).
+$bp-sm: 480px; // 모바일
+$bp-md: 640px; // 작은 태블릿
+$bp-lg: 820px; // 태블릿
+$bp-xl: 960px; // 랩탑 이하
+$bp-2xl: 1120px; // 콘텐츠 최대폭
+
+// ══════════════ Z-index ══════════════════════════════════════
+$z-base: 0;
+$z-sticky: 30; // sticky 요소(예: sidebar-nav)
+$z-fab: 40; // 플로팅 액션 버튼
+$z-header: 50; // 사이트 헤더
+$z-menu: 60; // 팝오버 메뉴
+$z-modal: 100; // 모달·다이얼로그
+$z-toast: 200; // 토스트
+
+// ══════════════ Transition ═══════════════════════════════════
+$transition-fast: 0.12s ease; // 클릭 반응
+$transition-base: 0.15s ease; // 기본 hover
+$transition-slow: 0.2s ease; // 슬라이드·페이드

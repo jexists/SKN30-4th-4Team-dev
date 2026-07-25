@@ -1,7 +1,7 @@
 @use '../../styles/variables' as v;
 
 .page {
-  background: #fff;
+  background: v.$page-bg;
 }
 
 /* ══════════════ 히어로 ══════════════ */
@@ -20,14 +20,14 @@
   font-size: clamp(26px, 3.6vw, 34px);
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .heroDesc {
   margin: 0 auto 36px;
   max-width: 34rem;
   font-size: 16px;
   line-height: 1.65;
-  color: #c3cbe2;
+  color: v.$text-on-dark-muted;
 }
 .searchWrap {
   position: relative;
@@ -39,7 +39,7 @@
   transform: translateY(-50%);
   width: 20px;
   height: 20px;
-  color: #c3cbe2;
+  color: v.$text-on-dark-muted;
   pointer-events: none;
 }
 .searchInput {
@@ -48,7 +48,7 @@
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  color: v.$text-on-dark;
   font-size: 15px;
 
   &::placeholder {
@@ -124,8 +124,9 @@
   cursor: pointer;
   transition: background 0.15s ease;
 
+  // 페이지 배경($page-bg) 위에 바로 놓이는 항목이라 hover 는 흰 표면으로 들뜨게 한다.
   &:hover {
-    background: v.$bg-soft;
+    background: v.$surface;
   }
 }
 .navItemIcon {
@@ -154,7 +155,7 @@
   gap: 12px;
   padding-bottom: 16px;
   margin-bottom: 24px;
-  border-bottom: 1px solid #e8ebf1;
+  border-bottom: 1px solid v.$border-default;
 }
 .faqTitle {
   margin: 0;
@@ -173,8 +174,8 @@
   gap: 14px;
 }
 .faqItem {
-  background: #fff;
-  border: 1px solid #e8ebf1;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(15, 26, 53, 0.04);
@@ -193,7 +194,7 @@
   transition: background 0.15s ease;
 
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
   }
 }
 .faqQuestionLeft {
@@ -228,7 +229,7 @@
 }
 .faqAnswer {
   padding: 0 22px 22px;
-  border-top: 1px solid #eef0f4;
+  border-top: 1px solid v.$border-subtle;
 
   p {
     margin: 10px 0 0;
@@ -252,8 +253,8 @@
   margin-top: 48px;
   padding: 36px;
   border-radius: 20px;
-  background: v.$bg-soft;
-  border: 1px solid #e8ebf1;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
 }
 .contactTitle {
   margin: 0 0 8px;
@@ -293,7 +294,7 @@
 }
 .btnPrimary {
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   border: none;
 
   &:hover {
@@ -301,12 +302,12 @@
   }
 }
 .btnOutline {
-  background: #fff;
+  background: v.$surface;
   color: v.$navy-800;
-  border: 1px solid #dfe3ec;
+  border: 1px solid v.$border-strong;
 
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
   }
 }
 

@@ -22,8 +22,8 @@
   max-width: 420px;
   padding: 12px 12px 12px 14px;
   border-radius: v.$radius-sm;
-  background: #fff;
-  border: 1px solid #e6e9f2;
+  background: v.$surface;
+  border: 1px solid v.$border-card;
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.16);
   font-size: 14px;
   line-height: 1.5;
@@ -54,7 +54,7 @@
   transition: background 0.15s ease;
 
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
   }
 }
 .closeMark {

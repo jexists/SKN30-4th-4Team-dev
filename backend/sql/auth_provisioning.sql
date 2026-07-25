@@ -1,5 +1,5 @@
 -- 회원가입 provisioning: auth.users → app_user·profile·user_agreement + RLS
--- 멱등(재실행 안전). Supabase SQL editor 또는 DB_URL 로 적용.
+-- 멱등(재실행 안전). Supabase SQL editor 또는 APP_DB_URL 로 적용.
 
 create or replace function public.handle_new_user()
 returns trigger

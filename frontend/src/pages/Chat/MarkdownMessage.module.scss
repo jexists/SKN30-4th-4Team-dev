@@ -1,0 +1,100 @@
+@use '../../styles/variables' as v;
+
+.md {
+  // 마크다운은 블록 요소가 여백을 관리하므로 부모의 pre-wrap 을 끈다.
+  white-space: normal;
+
+  > :first-child {
+    margin-top: 0;
+  }
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  p {
+    margin: 0 0 10px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 16px 0 8px;
+    line-height: 1.35;
+    font-weight: 700;
+  }
+  h1 {
+    font-size: 20px;
+  }
+  h2 {
+    font-size: 18px;
+  }
+  h3 {
+    font-size: 16px;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 10px;
+    padding-left: 22px;
+  }
+  li {
+    margin: 3px 0;
+  }
+  li > p {
+    margin: 0;
+  }
+
+  blockquote {
+    margin: 10px 0;
+    padding: 4px 14px;
+    border-left: 3px solid #b9c4e0;
+    color: v.$slate;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 0 8px 8px 0;
+  }
+
+  a {
+    color: v.$navy-800;
+    text-decoration: underline;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid v.$color-border;
+    margin: 14px 0;
+  }
+
+  img {
+    max-width: 100%;
+    border-radius: 10px;
+  }
+
+  // 표는 넘칠 때 자체 가로 스크롤(페이지 body 는 안 밀리게).
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 14px;
+  }
+  th,
+  td {
+    border: 1px solid #d5dcec;
+    padding: 7px 10px;
+    text-align: left;
+  }
+  th {
+    background: #e3e9f7;
+    font-weight: 700;
+  }
+}
+
+.inlineCode {
+  padding: 1.5px 5px;
+  font-size: 0.9em;
+  background: rgba(15, 26, 53, 0.08);
+  border-radius: 5px;
+  font-family: v.$font-mono;
+}

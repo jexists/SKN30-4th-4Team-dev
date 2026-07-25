@@ -20,6 +20,13 @@ class ApiResponse[T](BaseModel):
     error: ErrorDetail | None = None
 
 
+class Page[T](BaseModel):
+    """커서 기반 페이지네이션 응답. next_cursor 가 None 이면 더 없음."""
+
+    items: list[T]
+    next_cursor: str | None = None
+
+
 def success_response(data: object = None, message: str = "OK", code: int = 200) -> ApiResponse:
     return ApiResponse(success=True, code=code, message=message, data=data, error=None)
 

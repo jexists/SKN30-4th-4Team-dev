@@ -1,37 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/client'
 import { sendChat, type ChatTurn } from '../../api/chat'
-import {
-  addMessage,
-  createRoom,
-  listMessages,
-  listRooms,
-  touchRoom,
-  type ChatRoom,
-} from '../../api/chatHistory'
-import { Info, Paperclip, Send, Shield, User } from '../../components/icons'
-import { BRAND } from '../../config/env'
+import { addMessage, createRoom, listMessages, listRooms, type ChatRoom } from '../../api/chatHistory'
+import { Close, Info } from '../../components/icons'
 import { isAuthConfigured } from '../../config/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { ChatComposer } from './ChatComposer'
+import { EmptyState } from './EmptyState'
+import { MessageList } from './MessageList'
+import type { Message } from './types'
 import styles from './Chat.module.scss'
 
 const TOPICS = ['보증금 반환', '수리비 분쟁', '계약 갱신 청구권', '해지 통보 시점']
 const MAX_LEN = 2000
-
-const GREETING = `안녕하세요! ${BRAND.name} AI 법률 어시스턴트입니다. 주택임대차보호법에 따른 귀하의 권리를 이해하실 수 있도록 도와드리겠습니다. 오늘 임대차 계약과 관련하여 어떤 도움이 필요하신가요?`
-
-type Role = 'user' | 'assistant'
-interface Message {
-  id: string
-  role: Role
-  content: string
-  error?: boolean
-}
+const HISTORY_TURNS = 10 // RAG 에 함께 보내는 최근 맥락 수
+const LEGAL_NOTICE_DISMISSED_KEY = 'homeshield:legal-notice-dismissed'
 
 let _id = 0
 const newId = () => `m${Date.now()}-${_id++}`
-const greetingMsg = (): Message => ({ id: 'seed', role: 'assistant', content: GREETING })
 
 function relTime(iso: string): string {
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
@@ -45,111 +33,322 @@ function relTime(iso: string): string {
   return new Date(iso).toLocaleDateString('ko-KR')
 }
 
+const toMessage = (r: { id: string; role: string; content: string }): Message => ({
+  id: r.id,
+  role: r.role === 'ASSISTANT' ? 'assistant' : 'user',
+  content: r.content,
+})
+
 export function Chat() {
   const { isAuthed } = useAuth()
+  const navigate = useNavigate()
+  const { chatId } = useParams<{ chatId: string }>()
   const persistent = isAuthed && isAuthConfigured // 로그인 + Supabase 설정 시 DB 저장
+  const activeRoomId = chatId ?? null
 
+  // 방 목록(커서 페이지네이션)
   const [rooms, setRooms] = useState<ChatRoom[]>([])
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Message[]>([greetingMsg()])
+  const [roomsCursor, setRoomsCursor] = useState<string | null>(null)
+  const [initializing, setInitializing] = useState(persistent)
+  const [loadingRooms, setLoadingRooms] = useState(false)
+
+  // 활성 대화 — URL 의 chatId 가 단일 기준이며, 메시지만 로컬 렌더링 상태로 둔다.
+  const [messages, setMessages] = useState<Message[]>([])
+  const [messagesCursor, setMessagesCursor] = useState<string | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [openingRoom, setOpeningRoom] = useState(false)
+  const [conversationError, setConversationError] = useState<{
+    title: string
+    message: string
+  } | null>(null)
+
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const threadRef = useRef<HTMLDivElement>(null)
+  const [showLegalNotice, setShowLegalNotice] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(LEGAL_NOTICE_DISMISSED_KEY) !== 'true'
+    } catch {
+      return true
+    }
+  })
+  const lastQuestion = useRef('')
+  const activeRoomIdRef = useRef<string | null>(activeRoomId)
+  const createdRoomIdRef = useRef<string | null>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
+  const roomsSentinel = useRef<HTMLLIElement>(null)
+  activeRoomIdRef.current = activeRoomId
 
-  const refreshRooms = useCallback(() => {
-    if (!persistent) return
-    listRooms()
-      .then(setRooms)
+  /**
+   * 답변 저장 후 그 방을 목록 맨 앞으로 올린다(백엔드가 updated_at 을 갱신한 것과 같은 결과).
+   *
+   * 예전엔 첫 페이지를 다시 불러왔는데, 그러면 스크롤로 이미 불러온 2페이지 이후가 통째로
+   * 사라졌다. 서버에서 실제로 바뀌는 값은 updated_at 하나뿐이라 목록에서 직접 반영한다.
+   */
+  const touchRoom = useCallback((roomId: string) => {
+    setRooms((prev) => {
+      const hit = prev.find((r) => r.id === roomId)
+      if (!hit) return prev // 아직 불러오지 않은 페이지의 방 — 다음 조회 때 제자리를 찾는다.
+      return [
+        { ...hit, updated_at: new Date().toISOString() },
+        ...prev.filter((r) => r.id !== roomId),
+      ]
+    })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!persistent) {
+      setInitializing(false)
+      return
+    }
+
+    setInitializing(true)
+    void listRooms()
+      .then((page) => {
+        if (cancelled) return
+        setRooms(page.items)
+        setRoomsCursor(page.next_cursor)
+      })
       .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setInitializing(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [persistent])
 
-  // 로그인 시 채팅방 목록 로드
+  // URL 의 chatId 가 현재 대화의 단일 기준이다. 직접 접근·새로고침·브라우저
+  // 뒤로가기/앞으로가기로 값이 바뀔 때마다 해당 방을 다시 조회한다.
   useEffect(() => {
-    refreshRooms()
-  }, [refreshRooms])
+    let cancelled = false
+    setInput('')
+    setMessagesCursor(null)
+    setLoadingOlder(false)
+    setConversationError(null)
 
-  // 새 메시지·타이핑 시 맨 아래로 스크롤
+    // 첫 메시지로 방을 만든 직후에는 이미 화면과 DB에 사용자 메시지가 있으므로
+    // URL 전환 때문에 다시 비우거나 중복 조회하지 않는다.
+    if (activeRoomId && createdRoomIdRef.current === activeRoomId) {
+      createdRoomIdRef.current = null
+      setOpeningRoom(false)
+      return
+    }
+
+    lastQuestion.current = ''
+    setMessages([])
+
+    if (!activeRoomId) {
+      setOpeningRoom(false)
+      return
+    }
+
+    if (!persistent) {
+      setOpeningRoom(false)
+      setConversationError({
+        title: '대화에 접근할 수 없습니다.',
+        message: '로그인 상태와 채팅 저장소 설정을 확인해 주세요.',
+      })
+      return
+    }
+
+    setOpeningRoom(true)
+    void listMessages(activeRoomId)
+      .then((page) => {
+        if (cancelled) return
+        setMessages(page.items.map(toMessage))
+        setMessagesCursor(page.next_cursor)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        // 401 이면 client.ts 가 이미 로그아웃 처리했고 곧 로그인 화면으로 넘어간다.
+        // 여기서 "잠시 후 다시" 같은 안내를 띄우면 원인을 오해하게 만든다.
+        if (error instanceof ApiError && error.code === 401) return
+        if (error instanceof ApiError && (error.code === 403 || error.code === 404)) {
+          setConversationError({
+            title: '대화에 접근할 수 없습니다.',
+            message: '존재하지 않거나 접근 권한이 없는 채팅입니다.',
+          })
+          return
+        }
+        setConversationError({
+          title: '대화를 불러오지 못했습니다.',
+          message: '잠시 후 다시 시도해 주세요.',
+        })
+      })
+      .finally(() => {
+        if (!cancelled) setOpeningRoom(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeRoomId, persistent])
+
+  // 방 목록 무한스크롤 — 사이드바 목록 끝 sentinel.
   useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, sending])
+    const sentinel = roomsSentinel.current
+    const root = sidebarRef.current
+    if (!sentinel || !root || !roomsCursor) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && roomsCursor && !loadingRooms) {
+          setLoadingRooms(true)
+          listRooms(roomsCursor)
+            .then((page) => {
+              setRooms((prev) => [...prev, ...page.items])
+              setRoomsCursor(page.next_cursor)
+            })
+            .catch(() => {})
+            .finally(() => setLoadingRooms(false))
+        }
+      },
+      { root, rootMargin: '120px' },
+    )
+    io.observe(sentinel)
+    return () => io.disconnect()
+  }, [roomsCursor, loadingRooms])
 
   function newChat() {
-    setActiveRoomId(null)
-    setMessages([greetingMsg()])
-    setInput('')
+    if (activeRoomId) {
+      navigate('/chat')
+      return
+    }
+    setMessages([])
+    setMessagesCursor(null)
+    setConversationError(null)
+    lastQuestion.current = ''
   }
 
-  async function openRoom(roomId: string) {
-    if (roomId === activeRoomId) return
-    setActiveRoomId(roomId)
+  function dismissLegalNotice() {
+    setShowLegalNotice(false)
     try {
-      const rows = await listMessages(roomId)
-      setMessages(
-        rows.map((r) => ({
-          id: r.id,
-          role: r.role === 'ASSISTANT' ? 'assistant' : 'user',
-          content: r.content,
-        })),
-      )
+      window.sessionStorage.setItem(LEGAL_NOTICE_DISMISSED_KEY, 'true')
     } catch {
-      setMessages([{ id: newId(), role: 'assistant', content: '대화를 불러오지 못했어요.', error: true }])
+      // 저장소를 사용할 수 없는 환경에서도 현재 화면에서는 고지를 닫는다.
     }
   }
 
-  async function send() {
-    const text = input.trim()
-    if (!text || sending) return
+  function openRoom(roomId: string) {
+    if (roomId === activeRoomId) return
+    navigate(`/chat/${encodeURIComponent(roomId)}`)
+  }
 
-    // 이번 턴 이전까지의 맥락(인사말·에러 제외, 최근 10개)을 RAG 에 전달
+  // 위로 스크롤 시 과거 메시지 prepend (스크롤 위치 보정은 MessageList 가 처리).
+  const loadOlder = useCallback(() => {
+    if (!activeRoomId || !messagesCursor || loadingOlder) return
+    setLoadingOlder(true)
+    const roomId = activeRoomId
+    listMessages(roomId, messagesCursor)
+      .then((page) => {
+        if (activeRoomIdRef.current !== roomId) return
+        setMessages((prev) => [...page.items.map(toMessage), ...prev])
+        setMessagesCursor(page.next_cursor)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingOlder(false))
+  }, [activeRoomId, messagesCursor, loadingOlder])
+
+  const onStreamingDone = useCallback((id: string) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, streaming: false } : m)))
+  }, [])
+
+  async function submitQuestion(text: string, regenerate = false) {
+    const q = text.trim()
+    if (!q || sending) return
+
     const history: ChatTurn[] = messages
-      .filter((m) => m.id !== 'seed' && !m.error)
-      .slice(-10)
+      .filter((m) => !m.error)
+      .slice(-HISTORY_TURNS)
       .map((m) => ({ role: m.role, content: m.content }))
 
-    setMessages((m) => [...m, { id: newId(), role: 'user', content: text }])
+    if (!regenerate) {
+      setMessages((m) => [...m, { id: newId(), role: 'user', content: q }])
+    }
+    lastQuestion.current = q
     setInput('')
     setSending(true)
+
+    // regenerate 면 끝에 붙어있던 에러 버블을 제거하고 다시 시도한다.
+    const dropTrailingError = (list: Message[]) =>
+      regenerate && list[list.length - 1]?.error ? list.slice(0, -1) : list
 
     let roomId = activeRoomId
     try {
       if (persistent && !roomId) {
-        const room = await createRoom(text.slice(0, 40)) // 첫 질문을 방 제목으로
+        const room = await createRoom(q.slice(0, 40)) // 첫 질문을 방 제목으로
         roomId = room.id
-        setActiveRoomId(roomId)
+        setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)])
       }
-      if (persistent && roomId) await addMessage(roomId, 'USER', text)
+      if (persistent && roomId && !regenerate) await addMessage(roomId, 'USER', q)
+      if (persistent && roomId && activeRoomId === null) {
+        createdRoomIdRef.current = roomId
+        activeRoomIdRef.current = roomId
+        navigate(`/chat/${encodeURIComponent(roomId)}`)
+      }
 
-      const res = await sendChat(text, history)
-      setMessages((m) => [...m, { id: newId(), role: 'assistant', content: res.answer }])
+      const res = await sendChat(q, history)
+      if (!persistent || activeRoomIdRef.current === roomId) {
+        setMessages((m) => [
+          ...dropTrailingError(m),
+          { id: newId(), role: 'assistant', content: res.answer, streaming: true },
+        ])
+      }
 
       if (persistent && roomId) {
         await addMessage(roomId, 'ASSISTANT', res.answer, res.response_time_ms)
-        await touchRoom(roomId)
-        refreshRooms()
+        touchRoom(roomId)
       }
     } catch (e) {
-      const msg =
+      // 401 이면 세션이 끊긴 것이다 — client.ts 가 로그아웃시키고 로그인 화면으로 넘긴다.
+      // 답변 생성 실패로 보이게 하면 사용자가 재시도만 반복하게 된다.
+      if (e instanceof ApiError && e.code === 401) return
+      const content =
         e instanceof ApiError
-          ? e.message
-          : '답변을 받지 못했어요. 백엔드 서버가 실행 중인지 확인하고 다시 시도해 주세요.'
-      setMessages((m) => [...m, { id: newId(), role: 'assistant', content: msg, error: true }])
+          ? '답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+          : '답변을 생성하지 못했습니다. 네트워크 연결을 확인해 주세요.'
+      if (!persistent || activeRoomIdRef.current === roomId) {
+        setMessages((m) => [
+          ...dropTrailingError(m),
+          { id: newId(), role: 'assistant', content, error: true },
+        ])
+      }
     } finally {
       setSending(false)
     }
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void send()
-    }
+  // memo 된 MessageItem 에 내려가는 콜백이라 identity 는 고정하고, 대신 최신 렌더의
+  // submitQuestion 을 ref 로 붙잡는다. 그래야 재생성 시점의 messages(맥락)·sending 을 본다
+  // (중복 전송 방지는 submitQuestion 첫 줄의 sending 가드가 담당).
+  const submitRef = useRef(submitQuestion)
+  submitRef.current = submitQuestion
+
+  const regenerate = useCallback(() => {
+    void submitRef.current(lastQuestion.current, true)
+  }, [])
+
+  if (initializing) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.initialLoading} role="status" aria-live="polite">
+          <span className={styles.initialSpinner} aria-hidden="true" />
+          <span>대화를 불러오는 중입니다.</span>
+        </div>
+      </div>
+    )
   }
+
+  const showEmpty =
+    activeRoomId === null && messages.length === 0 && !openingRoom && !sending
 
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
         {/* ── 사이드바 ── */}
-        <aside className={styles.sidebar}>
+        <aside className={styles.sidebar} ref={sidebarRef}>
           <div className={styles.sidebarTop}>
             <div className={styles.sideHead}>
               <h2 className={styles.sideTitle}>대화 기록</h2>
@@ -172,13 +371,16 @@ export function Chat() {
                       className={`${styles.historyItem} ${
                         activeRoomId === r.id ? styles.historyActive : ''
                       }`}
-                      onClick={() => void openRoom(r.id)}
+                      aria-current={activeRoomId === r.id ? 'true' : undefined}
+                      onClick={() => openRoom(r.id)}
                     >
                       <span className={styles.historyTitle}>{r.title || '새 대화'}</span>
                       <span className={styles.historyTime}>{relTime(r.updated_at)}</span>
                     </button>
                   </li>
                 ))}
+                {/* 무한스크롤 감시 지점 */}
+                {roomsCursor && <li ref={roomsSentinel} className={styles.roomsSentinel} />}
               </ul>
             )}
           </div>
@@ -197,94 +399,57 @@ export function Chat() {
 
         {/* ── 채팅 영역 ── */}
         <section className={styles.chat}>
-          <div className={styles.notice}>
-            <Info className={styles.noticeIcon} />
-            <span>
-              법적 고지: 본 서비스는 공공 기록을 바탕으로 한 자동 분석 정보를 제공하며, 정식 법률
-              대리나 자문을 대신하지 않습니다.
-            </span>
-          </div>
-
-          <div className={styles.thread} ref={threadRef}>
-            {messages.map((m) =>
-              m.role === 'assistant' ? (
-                <div className={styles.msgRow} key={m.id}>
-                  <div className={styles.botAvatar}>
-                    <Shield />
-                  </div>
-                  <div className={styles.msgCol}>
-                    <div className={`${styles.bubbleBot} ${m.error ? styles.bubbleError : ''}`}>
-                      {m.content}
-                    </div>
-                    <span className={styles.meta}>{BRAND.name} 봇</span>
-                  </div>
-                </div>
-              ) : (
-                <div className={`${styles.msgRow} ${styles.msgUser}`} key={m.id}>
-                  <div className={styles.msgCol}>
-                    <div className={styles.bubbleUser}>{m.content}</div>
-                    <span className={styles.meta}>사용자</span>
-                  </div>
-                  <div className={styles.userAvatar}>
-                    <User />
-                  </div>
-                </div>
-              ),
-            )}
-
-            {sending && (
-              <div className={styles.msgRow}>
-                <div className={styles.botAvatar}>
-                  <Shield />
-                </div>
-                <div className={styles.msgCol}>
-                  <div className={`${styles.bubbleBot} ${styles.typing}`} aria-label="답변 작성 중">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 입력 영역 */}
-          <div className={styles.composer}>
-            <form
-              className={styles.inputBar}
-              onSubmit={(e) => {
-                e.preventDefault()
-                void send()
-              }}
-            >
-              <button type="button" className={styles.attachBtn} aria-label="파일 첨부">
-                <Paperclip />
-              </button>
-              <textarea
-                className={styles.input}
-                placeholder="법률적인 상황을 설명해주세요..."
-                value={input}
-                maxLength={MAX_LEN}
-                rows={1}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
-              />
-              <button
-                type="submit"
-                className={styles.sendBtn}
-                aria-label="전송"
-                disabled={!input.trim() || sending}
-              >
-                <Send />
-              </button>
-            </form>
-            <div className={styles.composerNote}>
-              <span>AI는 실수를 할 수 있습니다. 중요한 법률 정보는 전문가와 확인하세요.</span>
-              <span className={styles.counter}>
-                {input.length}/{MAX_LEN}
+          {showLegalNotice && !showEmpty && !conversationError && (
+            <div className={styles.notice} role="note">
+              <Info className={styles.noticeIcon} />
+              <span className={styles.noticeText}>
+                법적 고지: 본 서비스는 공공 기록을 바탕으로 한 자동 분석 정보를 제공하며, 정식 법률
+                대리나 자문을 대신하지 않습니다.
               </span>
+              <button
+                type="button"
+                className={styles.noticeClose}
+                aria-label="법적 고지 닫기"
+                onClick={dismissLegalNotice}
+              >
+                <Close className={styles.noticeCloseIcon} />
+              </button>
             </div>
-          </div>
+          )}
+
+          {conversationError ? (
+            <div className={styles.conversationError} role="alert">
+              <h2 className={styles.conversationErrorTitle}>{conversationError.title}</h2>
+              <p className={styles.conversationErrorMessage}>{conversationError.message}</p>
+              <button type="button" className={styles.conversationErrorAction} onClick={newChat}>
+                새 대화 시작하기
+              </button>
+            </div>
+          ) : showEmpty ? (
+            <EmptyState onExample={(q) => void submitQuestion(q)} />
+          ) : (
+            <MessageList
+              key={activeRoomId ?? 'new'}
+              messages={messages}
+              sending={sending}
+              isLoading={openingRoom}
+              isLoadingOlder={loadingOlder}
+              hasMoreOlder={messagesCursor !== null}
+              onLoadOlder={loadOlder}
+              onStreamingDone={onStreamingDone}
+              onRegenerate={regenerate}
+            />
+          )}
+
+          {!conversationError && (
+            <ChatComposer
+              value={input}
+              onChange={setInput}
+              onSubmit={() => void submitQuestion(input)}
+              disabled={sending || openingRoom}
+              maxLength={MAX_LEN}
+            />
+          )}
         </section>
       </div>
     </div>

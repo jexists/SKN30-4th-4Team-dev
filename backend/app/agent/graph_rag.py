@@ -15,9 +15,9 @@ graph_rag.py
 - 검색은 app.services.retrieval.search_similar (KURE-v1 임베딩 + pgvector) 사용.
   ⚠️ 검색 결과는 {**metadata, content, similarity} 이며 metadata 키는 문서마다 다르다
      (법령: law_name/article, 판례: court/case_no …) → 모든 접근은 .get() 으로 방어.
-  검색 백엔드 미연결(DB_URL 미설정·데이터 미적재)이면 근거 없이 LLM 답변으로 우회한다.
+  검색 백엔드 미연결(RAG_DB_URL 미설정·데이터 미적재)이면 근거 없이 LLM 답변으로 우회한다.
 
-환경변수: OPENAI_API_KEY, DB_URL (services.retrieval 이 사용)
+환경변수: OPENAI_API_KEY, RAG_DB_URL (services.retrieval 이 사용)
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from typing_extensions import TypedDict
 load_dotenv()
 
 # pgvector 검색은 선택적. 모듈이 없거나 검색이 실패하면 빈 결과로 우회해
-# LLM 답변은 계속 동작한다(DB_URL 미설정·데이터 미적재 시 자동으로 근거 없이 진행).
+# LLM 답변은 계속 동작한다(RAG_DB_URL 미설정·데이터 미적재 시 자동으로 근거 없이 진행).
 try:
     from app.services.retrieval import search_similar as _search_similar
 except Exception:

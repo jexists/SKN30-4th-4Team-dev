@@ -6,16 +6,20 @@
   flex-direction: column;
 }
 
-.main {
-  flex: 1;
-  padding: v.$space-md;
+// 채팅 화면에서는 페이지 전체가 아니라 메시지 목록만 스크롤되도록 뷰포트 높이를 고정한다.
+.chatLayout {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
+.main,
 .fullMain {
   flex: 1;
   min-height: 0;
   padding: 0;
-  // 채팅처럼 남은 높이를 그대로 쓰는 화면을 위해 flex 컨테이너로 둔다.
+  // 각 페이지가 자체 내부 여백을 관리하도록 공통 바깥 패딩을 두지 않는다.
   display: flex;
   flex-direction: column;
 }

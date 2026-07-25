@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { BRAND } from '../../config/env'
 import { useAuth } from '../../hooks/useAuth'
@@ -66,8 +66,22 @@ export function SiteHeader() {
 /** 아바타 클릭 시 열리는 계정 메뉴 (마이페이지·로그아웃). */
 function UserMenu() {
   const { signOut } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [open, setOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+
+  // 로그아웃은 "홈으로 이동 → 그다음 세션 삭제" 순서로 처리한다.
+  // 세션을 먼저 지우면 보호 화면에선 RequireAuth 가 /login 으로 가로챈다
+  // (react-router v7 은 내비게이션을 startTransition 으로 지연시켜 홈 이동이 늦음).
+  // 이동 중에는 로그인 상태를 유지하다가, 공개 라우트(홈)에 도착하면 세션을 지운다.
+  useEffect(() => {
+    if (signingOut && location.pathname === '/') {
+      signOut()
+      setSigningOut(false)
+    }
+  }, [signingOut, location.pathname, signOut])
 
   useEffect(() => {
     if (!open) return
@@ -90,12 +104,9 @@ function UserMenu() {
 
   function handleSignOut() {
     setOpen(false)
-    signOut()
-    // 보호된 화면(RequireAuth)에서 로그아웃하면 SPA 내 navigate('/') 는 라우터가
-    // 위치를 갱신하기 전에 가드가 먼저 인증 해제를 감지해 /login 으로 보내버리는
-    // 경합이 생긴다. 전체 새로고침으로 이동하면 앱이 처음부터 다시 마운트되며
-    // 이미 지워진 토큰으로 시작하므로 이 경합 자체가 발생하지 않는다.
-    window.location.href = '/'
+    // 먼저 홈으로 이동만 요청한다. 실제 세션 삭제는 홈 도착 후 위 effect 에서 한다.
+    setSigningOut(true)
+    void navigate('/')
   }
 
   return (
