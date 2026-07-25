@@ -59,7 +59,7 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 걸리기 쉬운 것 셋:
 
 1. **`APP_DB_URL` 은 `postgresql+psycopg://` 접두사를 직접 써야 합니다.** 정규화 없이 `create_engine` 에 넘어가는데 의존성에 psycopg v3 만 있어서, `postgresql://` 로 두면 psycopg2 를 찾다가 기동에 실패합니다. (`RAG_DB_URL` 은 자동 정규화되니 아무 형식이나 OK.)
-2. **`APP_DB_URL` 이 SQLite 면 서버는 뜨지만 대화 기록 API 가 전부 503(`HISTORY_UNAVAILABLE`)** 입니다. 채팅 기록을 쓰려면 Postgres 로 지정하세요.
+2. **`APP_DB_URL` 이 SQLite 면 서버는 뜨지만 대화 기록 API 가 전부 503("대화 기록 사용 불가")** 입니다. 채팅 기록을 쓰려면 Postgres 로 지정하세요.
 3. **RAG DB 가 없으면 검색이 조용히 꺼집니다** — 에러 없이 빈 결과를 돌려주고 근거 없는 답변이 나가므로 알아채기 어렵습니다.
 
 JWT 검증은 비대칭키(ES256/RS256, 최근 Supabase 기본)면 `SUPABASE_URL` 만으로 충분하고, 대칭키(HS256)면 `SUPABASE_JWT_SECRET` 이 필요합니다. 둘 다 없으면 보호 엔드포인트가 전부 401 이 됩니다. 어느 쪽으로 동작 중인지는 기동 로그의 `JWT 검증 모드: ...` 한 줄로 확인하세요.

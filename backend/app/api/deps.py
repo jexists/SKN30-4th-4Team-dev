@@ -44,10 +44,12 @@ def require_user(
 ) -> dict:
     """인증이 필수인 엔드포인트용. 실패 사유에 따라 401/503(표준 error 봉투)을 던진다.
 
-    - 503 AUTH_UNAVAILABLE: 우리 쪽 설정 누락이나 Supabase JWKS 장애다. 사용자 세션은
+    - 503 인증 서버 오류: 우리 쪽 설정 누락이나 Supabase JWKS 장애다. 사용자 세션은
       멀쩡하므로 프론트가 로그아웃시키면 안 된다.
-    - 401 TOKEN_EXPIRED: 토큰이 만료됐다. 프론트가 갱신을 시도하고, 실패하면 재로그인.
-    - 401 UNAUTHORIZED: 토큰이 없거나 유효하지 않다.
+    - 401 (토큰 만료): 프론트가 갱신을 시도하고, 실패하면 재로그인.
+    - 401 (토큰 없음·무효)
+
+    401 두 경우는 프론트가 code 로만 구분하면 되므로 모달 제목은 "로그인 필요"로 같다.
     """
     user, reason = auth
     if user is not None:
@@ -55,13 +57,13 @@ def require_user(
 
     if reason == AUTH_UNAVAILABLE:
         raise AppError(
-            "AUTH_UNAVAILABLE",
+            "인증 서버 오류",
             "인증 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
             503,
         )
     if reason == AUTH_EXPIRED:
-        raise AppError("TOKEN_EXPIRED", "세션이 만료되었습니다. 다시 로그인해 주세요.", 401)
-    raise AppError("UNAUTHORIZED", "로그인이 필요합니다.", 401)
+        raise AppError("로그인 필요", "세션이 만료되었습니다. 다시 로그인해 주세요.", 401)
+    raise AppError("로그인 필요", "로그인이 필요합니다.", 401)
 
 
 # 라우트 시그니처에서 바로 쓰는 별칭.

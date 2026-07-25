@@ -51,14 +51,29 @@ CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history (user_id, log
 
 -- 5. chat_room — 채팅방
 CREATE TABLE IF NOT EXISTS chat_room (
-    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     uuid NOT NULL REFERENCES app_user (id) ON DELETE CASCADE,
-    title       text,
-    created_at  timestamptz NOT NULL DEFAULT now(),
-    updated_at  timestamptz NOT NULL DEFAULT now(),
-    deleted_at  timestamptz
+    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id           uuid NOT NULL REFERENCES app_user (id) ON DELETE CASCADE,
+    title             text,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    last_chat_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    title_updated_at  timestamptz,
+    deleted_at        timestamptz
 );
-CREATE INDEX IF NOT EXISTS idx_chat_room_user ON chat_room (user_id, updated_at DESC);
+ALTER TABLE chat_room ADD COLUMN IF NOT EXISTS last_chat_at     timestamptz;
+ALTER TABLE chat_room ADD COLUMN IF NOT EXISTS title_updated_at timestamptz;
+
+-- 기존 행 백필: 지금까지 updated_at 이 곧 '마지막 대화 시각' 이었으므로 그대로 옮긴다.
+-- 대화가 한 번도 없던 방은 updated_at 이 생성 시각이라 자연히 '등록일' 이 들어간다.
+UPDATE chat_room SET last_chat_at = COALESCE(updated_at, created_at) WHERE last_chat_at IS NULL;
+
+ALTER TABLE chat_room ALTER COLUMN last_chat_at SET DEFAULT now();
+ALTER TABLE chat_room ALTER COLUMN last_chat_at SET NOT NULL;
+
+-- 정렬 키가 바뀌었으므로 인덱스도 교체.
+CREATE INDEX IF NOT EXISTS idx_chat_room_user_last_chat
+    ON chat_room (user_id, last_chat_at DESC);
+DROP INDEX IF EXISTS idx_chat_room_user;
 
 -- 6. chat_message — 대화 메시지
 CREATE TABLE IF NOT EXISTS chat_message (

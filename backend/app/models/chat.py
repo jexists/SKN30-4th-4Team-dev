@@ -48,7 +48,15 @@ class ChatRoom(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=monotonic_utcnow)
+    # 마지막으로 채팅한 시각 = 목록 정렬·표시 기준.
+    # 아직 대화가 없으면 방을 만든 시각이 그대로 남는다.
+    last_chat_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=monotonic_utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=monotonic_utcnow)
+    title_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     messages: Mapped[list["ChatMessage"]] = relationship(

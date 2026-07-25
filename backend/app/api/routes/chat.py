@@ -7,6 +7,7 @@
 
 import base64
 import json
+import logging
 import time
 import uuid
 from datetime import datetime
@@ -27,8 +28,11 @@ from app.schemas.chat import (
     ChatResponse,
     ChatRoomOut,
     CreateRoomIn,
+    UpdateRoomTitleIn,
 )
 from app.schemas.common import ApiResponse, Page, success_response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
@@ -36,6 +40,9 @@ AppDb = Annotated[Session, Depends(get_app_db)]
 
 # 페이지네이션 파라미터: 기본 30개, 1~100 클램프.
 Limit = Annotated[int, Query(ge=1, le=100)]
+
+# 없는 방·남의 방·잘못된 UUID 를 한 문구로 묶는다(존재 여부를 알려주지 않는다).
+_ROOM_NOT_FOUND = "이미 삭제되었거나 존재하지 않는 대화입니다."
 
 # graph_rag 는 langgraph·langchain-openai 를 요구하므로 지연 로드한다.
 # (미설치·초기화 실패해도 서버 기동과 다른 엔드포인트는 영향받지 않는다.)
@@ -48,10 +55,11 @@ def _get_run_turn():
         try:
             from app.agent.graph_rag import run_turn
         except Exception as e:  # 의존성 미설치 / 초기화 실패
+            # 원인(미설치 패키지 등)은 로그로만 남긴다 — message 는 사용자에게 그대로 보인다.
+            logger.exception("챗봇 엔진 로드 실패")
             raise AppError(
-                "CHAT_UNAVAILABLE",
-                "챗봇 엔진을 불러오지 못했습니다. "
-                f"의존성(langgraph·langchain-openai) 설치가 필요합니다: {e}",
+                "챗봇 사용 불가",
+                "챗봇 엔진을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
                 503,
             ) from e
         _run_turn = run_turn
@@ -72,7 +80,10 @@ def chat(req: ChatRequest) -> ApiResponse[ChatResponse]:
     except AppError:
         raise
     except Exception as e:
-        raise AppError("CHAT_ERROR", f"답변 생성 중 오류가 발생했습니다: {e}", 500) from e
+        logger.exception("답변 생성 실패")
+        raise AppError(
+            "서버 오류", "답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.", 500
+        ) from e
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     return success_response(ChatResponse(answer=answer, response_time_ms=elapsed_ms))
 
@@ -85,7 +96,9 @@ def _uid(user: dict) -> uuid.UUID:
     try:
         return uuid.UUID(str(user.get("sub", "")))
     except ValueError as e:
-        raise AppError("UNAUTHORIZED", "사용자 식별에 실패했습니다.", 401) from e
+        raise AppError(
+            "로그인 필요", "사용자 식별에 실패했습니다. 다시 로그인해 주세요.", 401
+        ) from e
 
 
 def _get_owned_room(db: Session, room_id: str, uid: uuid.UUID) -> ChatRoom:
@@ -93,7 +106,7 @@ def _get_owned_room(db: Session, room_id: str, uid: uuid.UUID) -> ChatRoom:
     try:
         rid = uuid.UUID(room_id)
     except ValueError as e:
-        raise AppError("NOT_FOUND", "대화를 찾을 수 없습니다.", 404) from e
+        raise AppError("대화를 찾을 수 없습니다", _ROOM_NOT_FOUND, 404) from e
     room = db.execute(
         select(ChatRoom).where(
             ChatRoom.id == rid,
@@ -102,8 +115,18 @@ def _get_owned_room(db: Session, room_id: str, uid: uuid.UUID) -> ChatRoom:
         )
     ).scalar_one_or_none()
     if room is None:
-        raise AppError("NOT_FOUND", "대화를 찾을 수 없습니다.", 404)
+        raise AppError("대화를 찾을 수 없습니다", _ROOM_NOT_FOUND, 404)
     return room
+
+
+def _room_out(room: ChatRoom) -> ChatRoomOut:
+    """채팅방 응답 필드를 한곳에서 조립해 엔드포인트 사이 누락을 막는다."""
+    return ChatRoomOut(
+        id=str(room.id),
+        title=room.title,
+        last_chat_at=room.last_chat_at,
+        updated_at=room.updated_at,
+    )
 
 
 # ── 커서(keyset) 페이지네이션 ──────────────────────────────────────────
@@ -135,23 +158,24 @@ def list_rooms(
     stmt = (
         select(ChatRoom)
         .where(ChatRoom.user_id == uid, ChatRoom.deleted_at.is_(None))
-        .order_by(ChatRoom.updated_at.desc(), ChatRoom.id.desc())
+        .order_by(ChatRoom.last_chat_at.desc(), ChatRoom.id.desc())
         .limit(limit + 1)  # +1 로 다음 페이지 존재 여부 확인
     )
     ck = _decode_cursor(cursor)
     if ck is not None:
         c_ts, c_id = ck
         stmt = stmt.where(
-            (ChatRoom.updated_at < c_ts) | ((ChatRoom.updated_at == c_ts) & (ChatRoom.id < c_id))
+            (ChatRoom.last_chat_at < c_ts)
+            | ((ChatRoom.last_chat_at == c_ts) & (ChatRoom.id < c_id))
         )
     rows = db.execute(stmt).scalars().all()
 
     has_more = len(rows) > limit
     rows = rows[:limit]
-    next_cursor = _encode_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
+    next_cursor = _encode_cursor(rows[-1].last_chat_at, rows[-1].id) if has_more and rows else None
     return success_response(
         Page(
-            items=[ChatRoomOut(id=str(r.id), title=r.title, updated_at=r.updated_at) for r in rows],
+            items=[_room_out(r) for r in rows],
             next_cursor=next_cursor,
         )
     )
@@ -165,9 +189,7 @@ def create_room(body: CreateRoomIn, user: RequireUser, db: AppDb) -> ApiResponse
     db.add(room)
     db.commit()
     db.refresh(room)
-    return success_response(
-        ChatRoomOut(id=str(room.id), title=room.title, updated_at=room.updated_at)
-    )
+    return success_response(_room_out(room))
 
 
 @router.get("/chat/rooms/{room_id}/messages", response_model=ApiResponse[Page[ChatMessageOut]])
@@ -217,7 +239,7 @@ def list_messages(
 def add_message(
     room_id: str, body: AddMessageIn, user: RequireUser, db: AppDb
 ) -> ApiResponse[ChatMessageOut]:
-    """메시지 저장 + 방 updated_at 갱신(목록 최신순 정렬용). 소유권 확인 후 진행."""
+    """메시지 저장 + 방 last_chat_at/updated_at 갱신. 소유권 확인 후 진행."""
     uid = _uid(user)
     room = _get_owned_room(db, room_id, uid)
     msg = ChatMessage(
@@ -227,7 +249,9 @@ def add_message(
         response_time=body.response_time,
     )
     db.add(msg)
-    room.updated_at = monotonic_utcnow()  # 방을 목록 맨 위로(단조 증가 보장)
+    now = monotonic_utcnow()
+    room.last_chat_at = now  # 방을 목록 맨 위로(정렬 기준)
+    room.updated_at = now
     db.commit()
     db.refresh(msg)
     return success_response(
@@ -235,3 +259,37 @@ def add_message(
             id=str(msg.id), role=msg.role, content=msg.content, created_at=msg.created_at
         )
     )
+
+
+@router.put("/chat/rooms/{room_id}/title", response_model=ApiResponse[ChatRoomOut])
+def update_room_title(
+    room_id: str, body: UpdateRoomTitleIn, user: RequireUser, db: AppDb
+) -> ApiResponse[ChatRoomOut]:
+    """방 제목 수정. last_chat_at 은 건드리지 않으므로 목록 순서는 그대로 유지된다."""
+    uid = _uid(user)
+    room = _get_owned_room(db, room_id, uid)
+    now = monotonic_utcnow()
+    room.title = body.title
+    room.title_updated_at = now
+    room.updated_at = now
+    db.commit()
+    db.refresh(room)
+    # message 는 토스트 문구다 — 프론트가 화면마다 따로 심지 않도록 서버가 소유한다.
+    return success_response(_room_out(room), message="대화 제목을 수정했습니다.")
+
+
+@router.delete("/chat/rooms/{room_id}", response_model=ApiResponse[ChatRoomOut])
+def delete_room(room_id: str, user: RequireUser, db: AppDb) -> ApiResponse[ChatRoomOut]:
+    """방 soft delete — deleted_at 만 찍는다. 행도 메시지도 DB 에서 지우지 않는다.
+
+    목록·메시지 조회가 이미 deleted_at IS NULL 로 걸러내므로 이후 접근은 전부 404 가 된다.
+    (db.delete() 를 쓰면 chat_message 가 ON DELETE CASCADE 로 함께 날아간다 — 쓰지 않는다.)
+    """
+    uid = _uid(user)
+    room = _get_owned_room(db, room_id, uid)
+    now = monotonic_utcnow()
+    room.deleted_at = now
+    room.updated_at = now
+    db.commit()
+    db.refresh(room)
+    return success_response(_room_out(room), message="대화를 삭제했습니다.")
