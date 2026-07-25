@@ -362,13 +362,18 @@ hover·클릭 등 마이크로 인터랙션은 아래 세 개만 사용합니다
 |---|---|---|
 | `SiteHeader` | `components/SiteHeader/` | 상단 sticky 헤더 (로고·네비·유저 메뉴) |
 | `SiteFooter` | `components/SiteFooter/` | 하단 다크 푸터 / compact 스트립 |
-| `Modal` | `components/Modal/` | 다이얼로그 (헤더·바디·백드롭·ESC 닫힘) |
+| `Modal` | `components/Modal/` | 다이얼로그 (헤더·바디·백드롭·ESC 닫힘, 초기 포커스 지정 가능) |
 | `Toast` (`Toaster`) | `components/Toast/` | 알림 (success/error/info) |
 | `LegalDoc` | `components/LegalDoc/` | 약관·개인정보 문서 프레임 (blocks 포함) |
 | `HealthStatus` | `components/HealthStatus/` | 백엔드 헬스 체크 칩 (dev only) |
 | `RequireAuth` | `components/RequireAuth/` | 라우트 가드 |
-| `ErrorModal` | `components/ErrorModal/` | 글로벌 에러 모달 (store 기반) |
+| `ErrorModal` | `components/ErrorModal/` | 글로벌 에러 모달 (store 기반). 모든 API 실패가 여기로 모인다 |
+| `ErrorState` | `components/ErrorState/` | 데이터를 못 불러온 영역의 자리표시 + 다시 시도 |
 | `icons` | `components/icons.tsx` | stroke 아이콘 |
+
+> **API 실패는 Empty State 로 그리지 않는다.** "데이터가 없습니다" 는 성공 응답의 0건 전용이고,
+> 실패한 영역에는 `<ErrorState />` 를 놓는다(원인 안내는 `ErrorModal` 이 맡음). 자세한 규칙은
+> `frontend/CLAUDE.md` 의 「API 에러 처리」 참고.
 
 ### 향후 컴포넌트화 계획 (rule of three 충족)
 

@@ -1,8 +1,5 @@
-import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
-import { ApiError } from '../../api/client'
-import { showError } from '../../components/ErrorModal/errorModalStore'
 import { ArrowRight, BarChart, Chat, Check, Edit, FileLines, User } from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
@@ -61,17 +58,8 @@ const LEVEL_LABEL: Record<RiskLevel, string> = {
 
 export function MyPage() {
   const { token } = useAuth()
-  const { status, data: currentUser, error } = useCurrentUser(token)
-
-  useEffect(() => {
-    if (status !== 'error') return
-    if (error instanceof ApiError && error.code === 401) return
-
-    showError(
-      '프로필을 불러오지 못했습니다.',
-      error instanceof ApiError ? error.message : '잠시 후 다시 시도해 주세요.',
-    )
-  }, [error, status])
+  // 조회 실패는 client.ts 의 공통 처리가 오류 모달로 알린다 — 여기서 또 띄우지 않는다.
+  const { status, data: currentUser } = useCurrentUser(token)
 
   return (
     <div className={styles.page}>

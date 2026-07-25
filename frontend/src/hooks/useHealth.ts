@@ -11,7 +11,8 @@ export function useHealth() {
 
   useEffect(() => {
     let active = true
-    apiGet<HealthData>('/api/v1/health')
+    // 상태 위젯용 조회다 — 서버가 죽어 있을 때 오류 모달을 띄우는 건 이 화면의 몫이 아니다.
+    apiGet<HealthData>('/api/v1/health', { silent: true })
       .then((d) => {
         if (active) {
           setData(d)
