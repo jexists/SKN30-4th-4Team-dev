@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { Chat, Shield } from '../../components/icons'
 import { showToast } from '../../components/Toast/toastStore'
+import { keepSignedIn } from '../../config/authStorage'
 import { BRAND } from '../../config/env'
 import { supabase } from '../../config/supabase'
 import { useAuth } from '../../hooks/useAuth'
@@ -13,12 +14,13 @@ const SOON = '아직 준비 중인 기능입니다.'
 export function Login() {
   const { isAuthed, signIn } = useAuth()
   const navigate = useNavigate()
-  const { state } = useLocation() as { state: { from?: string } | null }
+  const { state } = useLocation() as { state: { from?: string; expired?: boolean } | null }
   const from = state?.from ?? '/mypage'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [keepSignedIn, setKeepSignedIn] = useState(true)
+  // 직전 선택을 기억한다(기본 유지). 이 값은 로그인 시 세션 저장 위치를 결정한다.
+  const [keep, setKeep] = useState(keepSignedIn.get())
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -34,6 +36,8 @@ export function Login() {
     }
 
     setSubmitting(true)
+    // storage 어댑터가 이 값을 보고 저장 위치를 고르므로 로그인 호출 전에 기록한다.
+    keepSignedIn.set(keep)
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.session) {
       showToast('이메일 또는 비밀번호가 올바르지 않습니다.', 'error')
@@ -59,11 +63,11 @@ export function Login() {
             <p className={styles.subtitle}>안전한 전세 계약의 시작, 로그인해주세요.</p>
           </div>
 
-          {/* {state?.from && (
+          {state?.expired && (
             <p className={styles.redirectNote} role="status">
-              로그인이 필요한 화면입니다. 로그인하면 <strong>{state.from}</strong> 으로 이동합니다.
+              세션이 만료되었습니다. 다시 로그인해 주세요.
             </p>
-          )} */}
+          )}
 
           <form className={styles.form} onSubmit={handleSubmit}>
             <div className={styles.field}>
@@ -100,8 +104,8 @@ export function Login() {
               <label className={styles.keep}>
                 <input
                   type="checkbox"
-                  checked={keepSignedIn}
-                  onChange={(e) => setKeepSignedIn(e.target.checked)}
+                  checked={keep}
+                  onChange={(e) => setKeep(e.target.checked)}
                 />
                 <span>로그인 상태 유지</span>
               </label>

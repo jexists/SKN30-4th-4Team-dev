@@ -69,18 +69,22 @@ export function SignUp() {
       return
     }
 
-    // 이메일 인증이 꺼져 있으면 세션이 바로 생긴다 → 로그인 상태로 홈에 진입.
-    if (data.session) signIn(data.session.access_token)
-
     setDone(true)
-    showToast(
-      data.session
-        ? '가입이 완료되었습니다. 잠시 후 홈 화면으로 이동합니다.'
-        : '가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요. 잠시 후 홈 화면으로 이동합니다.',
-      'success',
-    )
-    // 안내를 잠시 보여준 뒤 홈으로 이동.
-    setTimeout(() => void navigate('/', { replace: true }), 1800)
+
+    if (data.session) {
+      // 이메일 인증이 꺼져 있으면 세션이 바로 생긴다 → 자동 로그인 후 홈으로.
+      signIn(data.session.access_token)
+      showToast('가입이 완료되었습니다. 잠시 후 홈 화면으로 이동합니다.', 'success')
+      setTimeout(() => void navigate('/', { replace: true }), 1800)
+    } else {
+      // 이메일 인증 등으로 세션이 없으면 자동 로그인 불가 → 로그인 화면으로.
+      // from='/' 를 실어 보내 로그인 성공 시 홈으로 이동하게 한다.
+      showToast(
+        '가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요. 잠시 후 로그인 화면으로 이동합니다.',
+        'success',
+      )
+      setTimeout(() => void navigate('/login', { replace: true, state: { from: '/' } }), 1800)
+    }
   }
 
   // 이미 로그인한 상태라면 폼을 보여주지 않는다.
