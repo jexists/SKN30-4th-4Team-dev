@@ -90,6 +90,22 @@ def test_add_message_and_read_back(history_client):
     assert msgs[0]["content"] == "보증금 언제 돌려받나요?"
 
 
+def test_add_message_rejects_oversized_content(history_client):
+    """상한(20000자)을 넘는 본문은 422 — 무제한 텍스트가 DB 로 들어가지 못하게 한다."""
+    client, _ = history_client
+    room_id = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]["id"]
+
+    ok = client.post(
+        f"/api/v1/chat/rooms/{room_id}/messages", json={"role": "USER", "content": "가" * 20000}
+    )
+    too_long = client.post(
+        f"/api/v1/chat/rooms/{room_id}/messages", json={"role": "USER", "content": "가" * 20001}
+    )
+
+    assert ok.status_code == 200
+    assert too_long.status_code == 422
+
+
 def test_add_message_bumps_room_to_top(history_client):
     client, _ = history_client
     first = client.post("/api/v1/chat/rooms", json={"title": "먼저"}).json()["data"]["id"]

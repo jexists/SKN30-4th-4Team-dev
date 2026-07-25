@@ -180,10 +180,10 @@ def list_messages(
     next_cursor 는 반환분 중 가장 오래된 행 → 위로 스크롤 시 더 과거를 가져온다.
     """
     uid = _uid(user)
-    _get_owned_room(db, room_id, uid)
+    room = _get_owned_room(db, room_id, uid)
     stmt = (
         select(ChatMessage)
-        .where(ChatMessage.chat_room_id == uuid.UUID(room_id))
+        .where(ChatMessage.chat_room_id == room.id)
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(limit + 1)
     )

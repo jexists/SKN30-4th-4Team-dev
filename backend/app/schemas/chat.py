@@ -42,10 +42,15 @@ class ChatRoomOut(BaseModel):
 
 
 class AddMessageIn(BaseModel):
-    """메시지 저장 요청."""
+    """메시지 저장 요청.
+
+    content 상한(20000)은 질문(ChatRequest.message = 2000)보다 훨씬 넉넉하다 — 저장 대상에
+    근거 조문·판례를 붙인 RAG 답변이 들어오기 때문이다. 상한 자체는 두어야 무제한 본문이
+    DB(text 컬럼)로 그대로 들어가는 것을 막는다.
+    """
 
     role: DbRole
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=20000)
     response_time: int | None = None
 
 

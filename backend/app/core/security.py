@@ -118,6 +118,10 @@ def verify_token_with_reason(token: str) -> tuple[dict | None, str]:
         except OSError as exc:  # URLError·timeout 등 네트워크 계열
             return _fail(AUTH_UNAVAILABLE, f"JWKS 네트워크 오류({type(exc).__name__})")
         except Exception as exc:  # JSON 파싱 실패 등 예상 밖 → 서버 문제로 취급
+            # 여기만 traceback 까지 남긴다. 위의 분기들은 원인이 이미 특정된 운영 이슈지만,
+            # 이 분기는 '무엇인지 모르는 것'이라 스택 없이는 Supabase 장애인지 우리 코드
+            # 결함인지 가릴 수 없다. 토큰은 인자로만 넘어가므로 traceback 에 값이 찍히지 않는다.
+            logger.exception("JWKS 처리 중 예상 밖 예외 (jwks_url=%s)", _jwks_url)
             return _fail(AUTH_UNAVAILABLE, f"JWKS 처리 오류({type(exc).__name__})")
 
         try:
