@@ -6,7 +6,7 @@ import { sendChat, type ChatTurn } from '../../api/chat'
 import { addMessage, createRoom, listMessages, listRooms, type ChatRoom } from '../../api/chatHistory'
 import { isRetryable } from '../../api/apiErrorHandler'
 import { ErrorState } from '../../components/ErrorState/ErrorState'
-import { ChevronDown, Close, Info } from '../../components/icons'
+import { Chat as ChatIcon, ChevronDown, Close, Info } from '../../components/icons'
 import { isAuthConfigured } from '../../config/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { ChatComposer } from './ChatComposer'
@@ -16,10 +16,10 @@ import { EmptyState } from './EmptyState'
 import { MessageList } from './MessageList'
 import { RenameRoomModal } from './RenameRoomModal'
 import { groupRoomsByDate } from './roomGroups'
+import { TOPICS, topicById } from './topics'
 import type { Message } from './types'
 import styles from './Chat.module.scss'
 
-const TOPICS = ['보증금 반환', '수리비 분쟁', '계약 갱신 청구권', '해지 통보 시점']
 const MAX_LEN = 2000
 const HISTORY_TURNS = 10 // RAG 에 함께 보내는 최근 맥락 수
 const LEGAL_NOTICE_DISMISSED_KEY = 'homeshield:legal-notice-dismissed'
@@ -72,6 +72,8 @@ export function Chat() {
   const [sending, setSending] = useState(false)
   // 추천 주제는 기본 펼침. 접으면 그만큼 대화 목록이 길어진다.
   const [suggestOpen, setSuggestOpen] = useState(true)
+  // 고른 추천 주제(null = 기본 화면). 첫 화면 Hero 의 내용만 바꾸고 채팅은 만들지 않는다.
+  const [topicId, setTopicId] = useState<string | null>(null)
   const [showLegalNotice, setShowLegalNotice] = useState(() => {
     try {
       return window.sessionStorage.getItem(LEGAL_NOTICE_DISMISSED_KEY) !== 'true'
@@ -221,6 +223,7 @@ export function Chat() {
   }, [roomsCursor, loadingRooms, roomsError])
 
   function newChat() {
+    setTopicId(null) // 첫 화면을 고르기 전 상태로 되돌린다.
     if (activeRoomId) {
       navigate('/chat')
       return
@@ -244,6 +247,23 @@ export function Chat() {
     (roomId: string) => {
       if (roomId === activeRoomIdRef.current) return
       void navigate(`/chat/${encodeURIComponent(roomId)}`)
+    },
+    [navigate],
+  )
+
+  /**
+   * 추천 주제 선택 — 채팅은 만들지 않고 첫 화면(Hero)의 제목·설명·추천 질문만 바꾼다.
+   * 실제 채팅은 추천 질문을 누르거나 직접 입력해 보낼 때 생긴다.
+   */
+  const selectTopic = useCallback(
+    (id: string) => {
+      if (activeRoomIdRef.current) {
+        // 대화를 보고 있으면 바꿀 Hero 가 화면에 없다 — 새 대화 화면으로 나가 그 주제를 보여준다.
+        setTopicId(id)
+        void navigate('/chat')
+        return
+      }
+      setTopicId((prev) => (prev === id ? null : id)) // 같은 주제를 다시 누르면 기본 화면
     },
     [navigate],
   )
@@ -449,9 +469,11 @@ export function Chat() {
                     onRetry={isRetryable(roomsError) ? retryRooms : undefined}
                   />
                 ) : rooms.length === 0 ? (
-                  <p className={styles.sideEmpty}>
-                    아직 대화가 없어요. 아래에 질문을 입력해 시작해보세요.
-                  </p>
+                  // 목록은 최대한 조용하게 — 안내는 가운데 Hero 가 이미 하고 있다.
+                  <div className={styles.roomsEmpty}>
+                    <ChatIcon className={styles.roomsEmptyIcon} />
+                    <p className={styles.roomsEmptyText}>대화가 없습니다.</p>
+                  </div>
                 ) : null}
               </>
             )}
@@ -474,9 +496,15 @@ export function Chat() {
             </button>
             {suggestOpen && (
               <div id="chat-suggest-chips" className={styles.chips}>
-                {TOPICS.map((t) => (
-                  <button key={t} className={styles.chip} onClick={() => setInput(t)}>
-                    {t}
+                {TOPICS.map((topic) => (
+                  <button
+                    key={topic.id}
+                    type="button"
+                    className={`${styles.chip} ${topicId === topic.id ? styles.chipActive : ''}`}
+                    aria-pressed={topicId === topic.id}
+                    onClick={() => selectTopic(topic.id)}
+                  >
+                    {topic.label}
                   </button>
                 ))}
               </div>
@@ -513,7 +541,7 @@ export function Chat() {
               onRetry={isRetryable(conversationBlock.error) ? retryLoadMessages : undefined}
             />
           ) : showEmpty ? (
-            <EmptyState onExample={(q) => void submitQuestion(q)} />
+            <EmptyState topic={topicById(topicId)} onExample={(q) => void submitQuestion(q)} />
           ) : (
             <MessageList
               key={activeRoomId ?? 'new'}

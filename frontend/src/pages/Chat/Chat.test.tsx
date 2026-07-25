@@ -146,6 +146,82 @@ describe('Chat URL routing', () => {
     expect(screen.getByRole('button', { name: '보증금 반환' })).toBeInTheDocument()
   })
 
+  it('대화가 0건이면 목록에 "대화가 없습니다" 만 보여준다', async () => {
+    api.listRooms.mockResolvedValueOnce({ items: [], next_cursor: null })
+    renderChat('/chat')
+
+    expect(await screen.findByText('대화가 없습니다.')).toBeInTheDocument()
+    expect(screen.queryByText(/질문을 입력해 시작/)).not.toBeInTheDocument()
+  })
+
+  it('추천 주제를 고르면 채팅을 만들지 않고 가운데 Hero 만 바꾼다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat')
+
+    const chip = await screen.findByRole('button', { name: '수리비 분쟁' })
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    await user.click(chip)
+
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('heading', { name: '수리비 분쟁' })).toBeInTheDocument()
+    expect(screen.getByText('수리비 및 원상복구와 관련된 질문입니다.')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '누수 수리비는 누가 부담하나요?' }),
+    ).toBeInTheDocument()
+    // 기본 화면은 통째로 교체되고, 이 시점엔 아직 채팅이 생기지 않는다.
+    expect(screen.queryByRole('heading', { name: '무엇을 도와드릴까요?' })).not.toBeInTheDocument()
+    expect(api.createRoom).not.toHaveBeenCalled()
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/chat$/)
+  })
+
+  it('고른 주제를 다시 누르면 기본 화면으로 돌아간다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat')
+
+    const chip = await screen.findByRole('button', { name: '보증금 반환' })
+    await user.click(chip)
+    await user.click(chip)
+
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('heading', { name: '무엇을 도와드릴까요?' })).toBeInTheDocument()
+  })
+
+  it('추천 질문을 누르면 그때 새 채팅을 만들고 질문을 자동 전송한다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat')
+
+    await user.click(await screen.findByRole('button', { name: '보증금 반환' }))
+    const question = '임차권등기명령은 언제 신청하나요?'
+    await user.click(screen.getByRole('button', { name: question }))
+
+    await waitFor(() => {
+      expect(api.createRoom).toHaveBeenCalledWith(question)
+    })
+    expect(api.addMessage).toHaveBeenCalledWith('room-new', 'USER', question)
+    expect(api.sendChat).toHaveBeenCalledWith(question, [])
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-new')
+    })
+    expect(await screen.findByText('테스트 답변')).toBeInTheDocument()
+  })
+
+  it('대화를 보는 중에 추천 주제를 고르면 새 대화 화면으로 나가 그 주제를 보여준다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat/room-a')
+
+    expect(await screen.findByText('room-a 질문')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '해지 통보 시점' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent(/^\/chat$/)
+    })
+    expect(await screen.findByRole('heading', { name: '해지 통보 시점' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '해지 통보 시점' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
   it('직접 접근한 URL의 chatId로 메시지를 조회하고 목록 선택 상태를 표시한다', async () => {
     renderChat('/chat/room-a')
 
@@ -242,10 +318,10 @@ describe('Chat URL routing', () => {
     api.listRooms.mockRejectedValueOnce(new ApiError('서버 오류', '잠시 후 다시 시도해 주세요.', 500))
     renderChat('/chat')
 
-    // "아직 대화가 없어요" 로 위장하지 않는다 — 이게 이 화면의 원래 버그였다.
+    // "대화가 없습니다" 로 위장하지 않는다 — 이게 이 화면의 원래 버그였다.
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('대화 기록을 불러오지 못했습니다.')
-    expect(screen.queryByText(/아직 대화가 없어요/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/대화가 없습니다/)).not.toBeInTheDocument()
 
     await user.click(within(alert).getByRole('button', { name: '다시 시도' }))
 

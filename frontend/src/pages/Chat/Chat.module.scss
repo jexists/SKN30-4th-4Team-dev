@@ -101,6 +101,26 @@
   color: v.$slate;
 }
 
+/* 대화가 0건일 때(성공 + 빈 목록). 목록은 심플하게 — 안내는 가운데 Hero 가 한다.
+   실패는 여기가 아니라 공통 <ErrorState /> 가 그린다(components/ErrorState). */
+.roomsEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: v.$space-2;
+  padding: v.$space-8 v.$space-4;
+}
+.roomsEmptyIcon {
+  width: v.$space-6;
+  height: v.$space-6;
+  color: v.$slate-light;
+}
+.roomsEmptyText {
+  @include t.caption;
+  margin: 0;
+  color: v.$slate-light;
+}
+
 /* 목록·대화를 못 불러왔을 때는 공통 <ErrorState /> 를 쓴다(components/ErrorState). */
 .historyGroup {
   margin-bottom: v.$space-3;
@@ -385,6 +405,16 @@
 
   &:hover {
     background: #e0e6f4;
+  }
+}
+/* 지금 가운데 Hero 가 어느 주제인지 — 목록에서 한눈에 보이게 채워서 표시한다. */
+.chipActive {
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+  font-weight: v.$font-weight-semibold;
+
+  &:hover {
+    background: v.$navy-hover;
   }
 }
 
@@ -924,9 +954,28 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 40px 24px;
+  padding: v.$space-10 v.$space-6;
   text-align: center;
+}
+/* 추천 주제를 바꾸면 이 덩어리만 갈아끼워진다(EmptyState 가 topic.id 를 key 로 준다).
+   페이지가 넘어가는 게 아니라 같은 자리에서 내용만 바뀐다는 걸 페이드로 알린다. */
+.emptyHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: v.$space-4;
+  width: 100%;
+  animation: heroFade v.$transition-slow; // 0.2s ease
+}
+@keyframes heroFade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .emptyIcon {
   width: 60px;
@@ -954,6 +1003,7 @@
   font-size: 15px;
   line-height: 1.6;
   color: v.$slate;
+  white-space: pre-line; // 설명의 줄바꿈(\n)을 그대로 살린다.
 }
 .emptyCards {
   display: grid;
@@ -964,6 +1014,11 @@
   margin-top: 12px;
 }
 .emptyCard {
+  // 주제마다 질문 길이가 달라 카드가 1~2줄을 오간다. 높이를 맞춰두지 않으면
+  // 주제를 바꿀 때 Hero 전체가 위아래로 튀어 페이드가 이동처럼 보인다.
+  min-height: v.$space-18;
+  display: flex;
+  align-items: center;
   padding: 16px 18px;
   border: 1px solid #e1e6f2;
   border-radius: 14px;
@@ -1012,7 +1067,8 @@
   * {
     transition: none !important;
   }
-  .initialSpinner {
+  .initialSpinner,
+  .emptyHero {
     animation: none;
   }
 }
