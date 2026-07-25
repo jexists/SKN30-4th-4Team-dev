@@ -28,9 +28,9 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
         <div className={styles.compactInner}>
           {/* 브랜드 워드마크는 헤더와 중복이라 생략하고, 법적 고지만 남긴다. */}
           <p className={styles.compactLegal}>
-            <Shield className={styles.compactMark} />
+            {/* <Shield className={styles.compactMark} /> */}
             <span>
-              © 2024 {BRAND_LEGAL_NAME} · {DISCLAIMER}
+              © 2026 {BRAND_LEGAL_NAME} · {DISCLAIMER}
             </span>
           </p>
           <nav className={styles.compactLinks}>
@@ -54,7 +54,7 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
             <span>{BRAND.name}</span>
           </div>
           <p>
-            © 2024 {BRAND_LEGAL_NAME}. {DISCLAIMER}
+            © 2026 {BRAND_LEGAL_NAME}. {DISCLAIMER}
           </p>
         </div>
         <nav className={styles.footerLinks}>

@@ -8,8 +8,8 @@ import styles from './SiteHeader.module.scss'
 
 const NAV = [
   { to: '/analyze', label: '계약 진단' },
-  { to: '/chat', label: 'AI 챗봇' },
   { to: '/risk-report', label: '위험 보고서' },
+  { to: '/chat', label: 'AI 챗봇' },
 ]
 
 export function SiteHeader() {
@@ -49,9 +49,9 @@ export function SiteHeader() {
             </>
           )}
 
-          <Link to="/chat" className={styles.ctaSm}>
+          {/* <Link to="/chat" className={styles.ctaSm}>
             상담 시작하기
-          </Link>
+          </Link> */}
 
           {isAuthed ? (
             <UserMenu />
