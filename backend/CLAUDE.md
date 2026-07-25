@@ -5,7 +5,8 @@
 ## 스택
 - FastAPI · uv · Python 3.12
 - DB: **Supabase Postgres + pgvector** (하이브리드 — Supabase=호스팅, **SQLAlchemy=ORM**). `supabase-py` 클라이언트는 쓰지 않음.
-- 로컬은 `DATABASE_URL` 미설정 시 SQLite 폴백.
+- DB 연결은 둘로 나뉜다: **`APP_DB_URL`**(앱 데이터 — `chat_room`·`chat_message`, SQLAlchemy ORM)과 **`RAG_DB_URL`**(pgvector 벡터 스토어 — `legal_chunks`, psycopg 직접). `RAG_DB_URL` 을 비우면 `APP_DB_URL` 을 재사용한다.
+- 로컬은 `APP_DB_URL` 미설정 시 SQLite 폴백 — 서버는 뜨지만 대화 기록 API 는 503(`HISTORY_UNAVAILABLE`).
 
 ## 폴더 레이아웃
 - `app/main.py` — 앱 생성, CORS·에러핸들러·로깅 등록, 라우터 `/api/v1` prefix

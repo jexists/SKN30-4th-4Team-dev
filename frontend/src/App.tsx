@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom'
 
+import { ErrorModalHost } from './components/ErrorModal/ErrorModalHost'
 import { HealthStatus } from './components/HealthStatus/HealthStatus'
 import { SiteFooter } from './components/SiteFooter/SiteFooter'
 import { SiteHeader } from './components/SiteHeader/SiteHeader'
@@ -19,16 +20,19 @@ export default function App() {
     isChat ||
     pathname === '/analyze' ||
     pathname === '/login' ||
-    pathname === '/support'
+    pathname === '/support' ||
+    pathname === '/mypage' ||
+    pathname === '/risk-report'
 
   return (
-    <div className={styles.layout}>
+    <div className={isChat ? `${styles.layout} ${styles.chatLayout}` : styles.layout}>
       <SiteHeader />
       <main className={isFullBleed ? styles.fullMain : styles.main}>
         <Outlet />
       </main>
       {!isChat && <SiteFooter variant={isLanding ? 'full' : 'compact'} />}
       <Toaster />
+      <ErrorModalHost />
       {/* 백엔드 연결 표시는 로컬 개발 서버에서만 좌하단에 띄운다. 빌드 결과물에는 포함되지 않는다. */}
       {ENV.isDev && (
         <div className={styles.devStatus}>

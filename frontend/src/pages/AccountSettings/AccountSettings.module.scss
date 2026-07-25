@@ -1,7 +1,7 @@
 @use '../../styles/variables' as v;
 
 .page {
-  background: v.$bg-soft;
+  background: v.$page-bg;
   min-height: 100%;
   padding: 48px 0 96px;
 }
@@ -33,8 +33,8 @@
 
 /* ══════════════ 공통 카드 ══════════════ */
 .card {
-  background: #fff;
-  border: 1px solid #e8ebf1;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
   border-radius: 16px;
   padding: 32px;
   display: flex;
@@ -48,7 +48,7 @@
 
   & + & {
     padding-top: 20px;
-    border-top: 1px solid #eef0f4;
+    border-top: 1px solid v.$border-subtle;
   }
 }
 .cardHead {
@@ -93,13 +93,13 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #b6c1de, #7f8fb8);
+  background: v.$avatar-gradient;
   border: 1px solid rgba(255, 255, 255, 0.5);
 }
 .avatarIcon {
   width: 38px;
   height: 38px;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .avatarEdit {
   position: absolute;
@@ -112,7 +112,7 @@
   border-radius: 50%;
   border: none;
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   cursor: pointer;
   box-shadow: 0 4px 10px rgba(15, 26, 53, 0.25);
   transition: transform 0.15s ease;
@@ -139,7 +139,7 @@
 
 .infoList {
   padding-top: 20px;
-  border-top: 1px solid #eef0f4;
+  border-top: 1px solid v.$border-subtle;
   display: flex;
   flex-direction: column;
 }
@@ -178,14 +178,14 @@
   display: flex;
   flex-direction: column;
   padding: 28px;
-  background: #fff;
-  border: 1px solid #e8ebf1;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
   border-radius: 16px;
 }
 .planCurrent {
   background: v.$navy-800;
   border: 2px solid v.$navy-900;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .planBadge {
   position: absolute;
@@ -194,7 +194,7 @@
   padding: 4px 10px;
   border-radius: 999px;
   background: v.$orange;
-  color: #fff;
+  color: v.$text-on-dark;
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
@@ -210,7 +210,7 @@
   color: v.$slate;
 }
 .planCurrent .planName {
-  color: #c3cbe2;
+  color: v.$text-on-dark-muted;
 }
 .planPrice {
   display: flex;
@@ -224,14 +224,14 @@
   }
 }
 .planCurrent .planPrice span:first-child {
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .planPriceUnit {
   font-size: 13px;
   color: v.$slate;
 }
 .planCurrent .planPriceUnit {
-  color: #c3cbe2;
+  color: v.$text-on-dark-muted;
 }
 .planFeatures {
   list-style: none;
@@ -251,7 +251,7 @@
   }
 }
 .planCurrent .planFeatures li {
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .planFeatureIcon {
   flex-shrink: 0;
@@ -275,7 +275,7 @@
   transition: background 0.15s ease;
 }
 .planBtnSelect {
-  background: v.$bg-soft;
+  background: v.$page-bg;
   color: v.$slate;
 
   &:hover {
@@ -284,7 +284,7 @@
   }
 }
 .planBtnCurrent {
-  background: #fff;
+  background: v.$surface;
   color: v.$navy-800;
   opacity: 0.6;
   cursor: default;
@@ -297,7 +297,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 16px;
-  border: 1px solid #e8ebf1;
+  border: 1px solid v.$border-default;
   border-radius: 12px;
 }
 .paymentInfo {
@@ -312,7 +312,7 @@
   height: 28px;
   border-radius: 6px;
   background: #1d4ed8;
-  color: #fff;
+  color: v.$text-on-dark;
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -347,7 +347,7 @@
   justify-content: center;
   gap: 8px;
   padding: 16px;
-  border: 2px dashed #dfe3ec;
+  border: 2px dashed v.$border-strong;
   border-radius: 12px;
   background: none;
   color: v.$slate;
@@ -364,7 +364,7 @@
     height: 20px;
   }
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
     border-color: #c9d0e0;
   }
 }
@@ -425,7 +425,7 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #fff;
+  background: v.$surface;
   box-shadow: 0 1px 3px rgba(15, 26, 53, 0.3);
   transition: transform 0.15s ease;
 }
@@ -436,7 +436,7 @@
 /* ══════════════ 결제 내역 ══════════════ */
 .tableWrap {
   overflow-x: auto;
-  border: 1px solid #e8ebf1;
+  border: 1px solid v.$border-default;
   border-radius: 12px;
 }
 .table {
@@ -451,13 +451,13 @@
     white-space: nowrap;
   }
   th {
-    background: v.$bg-soft;
+    background: v.$page-bg;
     color: v.$slate;
     font-size: 12px;
     font-weight: 700;
   }
   tbody tr + tr td {
-    border-top: 1px solid #eef0f4;
+    border-top: 1px solid v.$border-subtle;
   }
 }
 .amountCol {

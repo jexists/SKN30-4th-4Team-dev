@@ -19,7 +19,7 @@
 .tableWrap {
   margin: 14px 0;
   overflow-x: auto;
-  border: 1px solid #e8ebf1;
+  border: 1px solid v.$border-default;
   border-radius: 10px;
 }
 .table {
@@ -32,11 +32,11 @@
   td {
     padding: 10px 14px;
     text-align: left;
-    border-bottom: 1px solid #eef0f6;
+    border-bottom: 1px solid v.$border-subtle;
     white-space: normal;
   }
   th {
-    background: v.$bg-soft;
+    background: v.$page-bg;
     color: v.$navy-800;
     font-weight: 700;
     white-space: nowrap;
@@ -51,7 +51,7 @@
   padding: 14px 18px;
   border-left: 3px solid v.$navy-800;
   border-radius: 0 8px 8px 0;
-  background: v.$bg-soft;
+  background: v.$page-bg;
   color: v.$ink;
 
   p {

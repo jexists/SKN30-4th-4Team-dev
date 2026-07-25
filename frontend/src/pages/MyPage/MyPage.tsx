@@ -1,14 +1,11 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
-import {
-  ArrowRight,
-  BarChart,
-  Chat,
-  Check,
-  Edit,
-  FileLines,
-  User,
-} from '../../components/icons'
+import { ApiError } from '../../api/client'
+import { showError } from '../../components/ErrorModal/errorModalStore'
+import { ArrowRight, BarChart, Chat, Check, Edit, FileLines, User } from '../../components/icons'
+import { useAuth } from '../../hooks/useAuth'
+import { useCurrentUser } from '../../hooks/useCurrentUser'
 import styles from './MyPage.module.scss'
 
 type RiskLevel = 'safe' | 'caution' | 'risk'
@@ -63,6 +60,19 @@ const LEVEL_LABEL: Record<RiskLevel, string> = {
 }
 
 export function MyPage() {
+  const { token } = useAuth()
+  const { status, data: currentUser, error } = useCurrentUser(token)
+
+  useEffect(() => {
+    if (status !== 'error') return
+    if (error instanceof ApiError && error.code === 401) return
+
+    showError(
+      '프로필을 불러오지 못했습니다.',
+      error instanceof ApiError ? error.message : '잠시 후 다시 시도해 주세요.',
+    )
+  }, [error, status])
+
   return (
     <div className={styles.page}>
       <div className={styles.container}>
@@ -76,8 +86,14 @@ export function MyPage() {
               <Edit />
             </Link>
           </div>
-          <h1 className={styles.name}>
-            김철수 <span className={styles.nameSuffix}>님</span>
+          <h1 className={styles.name} aria-live="polite">
+            {status === 'loading' ? (
+              <span role="status">프로필을 불러오는 중입니다.</span>
+            ) : (
+              <>
+                {currentUser?.nickname || '회원'} <span className={styles.nameSuffix}>님</span>
+              </>
+            )}
           </h1>
           <span className={styles.tierBadge}>
             <Check className={styles.tierBadgeIcon} /> 프리미엄 회원

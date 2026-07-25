@@ -2,7 +2,7 @@
 
 .siteFooter {
   background: v.$navy-900;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .footerInner {
   width: 100%;
@@ -21,13 +21,13 @@
   gap: 9px;
   font-size: 19px;
   font-weight: 800;
-  color: #fff;
+  color: v.$text-on-dark;
   letter-spacing: -0.02em;
 }
 .brandMark {
   width: 22px;
   height: 22px;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .footerBrand {
   max-width: 30rem;
@@ -36,7 +36,7 @@
     margin: 14px 0 0;
     font-size: 13px;
     line-height: 1.65;
-    color: #8b93a7;
+    color: v.$slate-light;
   }
 }
 .footerLinks {
@@ -50,17 +50,17 @@
     text-decoration: none;
 
     &:hover {
-      color: #fff;
+      color: v.$text-on-dark;
     }
   }
 }
 
 /* ══════════════ compact — 작업 화면용 고지 스트립 ══════════════ */
-/* 자기를 드러내지 않는 마감 띠. 흰색이면 톤이 깔린 본문(진단 #f2f4fb 등) 아래에서
-   덜 칠해진 것처럼 보이므로, 본문 톤과 거의 붙는 $bg-soft 로 깔고 헤어라인만 남긴다. */
+/* 자기를 드러내지 않는 마감 띠. 흰색이면 톤이 깔린 본문($page-bg) 아래에서
+   덜 칠해진 것처럼 보이므로, 본문 톤과 거의 붙는 $footer-compact-bg 로 깔고 헤어라인만 남긴다. */
 .compact {
-  background: v.$bg-soft;
-  border-top: 1px solid #e3e7ef;
+  background: v.$footer-compact-bg;
+  border-top: 1px solid v.$border-strong;
 }
 .compactInner {
   width: 100%;
@@ -86,7 +86,7 @@
   width: 15px;
   height: 15px;
   flex-shrink: 0;
-  color: #a7aec0;
+  color: v.$text-placeholder;
 }
 .compactLinks {
   display: flex;

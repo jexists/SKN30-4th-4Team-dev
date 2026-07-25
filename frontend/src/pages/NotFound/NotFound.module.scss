@@ -7,7 +7,7 @@
   justify-content: center;
   min-height: 60vh;
   padding: 64px 24px;
-  background: #fff;
+  background: v.$page-bg;
 }
 
 .content {
@@ -65,19 +65,19 @@
 }
 .btnPrimary {
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   box-shadow: 0 8px 20px rgba(15, 26, 53, 0.18);
 
   &:hover {
-    background: #101a3c;
+    background: v.$navy-hover;
   }
 }
 .btnOutline {
-  background: #fff;
+  background: v.$surface;
   color: v.$navy-800;
   border: 2px solid v.$pill;
 
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
   }
 }

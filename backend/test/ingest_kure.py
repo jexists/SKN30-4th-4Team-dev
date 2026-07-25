@@ -4,12 +4,13 @@ data/02_processed/api_text/*.jsonl 의 법령·판례·해석 문서를 읽어
   1) 청킹(recursive char split) →
   2) KURE-v1(nlpai-lab/KURE-v1, 1024차원) 임베딩 →
   3) Supabase Postgres(pgvector) 벡터 스토어에 적재
-한다. FastAPI 백엔드가 사용하는 것과 같은 DB(DATABASE_URL)에 저장한다.
+한다. 백엔드의 RAG 검색(services/retrieval)이 읽는 것과 같은 DB(RAG_DB_URL)에 저장한다.
 
 ── 실행 (backend/ 에서) ──────────────────────────────────────────────
     uv sync --group ingest                       # 의존성(sentence-transformers·torch) 설치
-    # .env 의 DATABASE_URL 을 Postgres 연결 문자열로 설정해야 함 (sqlite 불가)
-    #   예) DATABASE_URL=postgresql+psycopg://USER:PW@HOST:5432/postgres
+    # .env 의 RAG_DB_URL 을 Postgres 연결 문자열로 설정해야 함 (sqlite 불가).
+    # 비워 두면 APP_DB_URL 을 재사용한다.
+    #   예) RAG_DB_URL=postgresql://USER:PW@HOST:5432/postgres
 
     uv run --group ingest python -m test.ingest_kure --dry-run     # 청킹 통계만 확인
     uv run --group ingest python -m test.ingest_kure --limit 20    # 파일당 20건 소량 시험
@@ -211,21 +212,25 @@ def to_libpq_dsn(url: str) -> str:
 
 
 def resolve_database_url(cli_url: str | None) -> str:
-    """우선순위: --database-url > INGEST_DATABASE_URL > app 설정(DATABASE_URL)."""
+    """우선순위: --database-url > INGEST_DATABASE_URL > app 설정(vector_db_dsn).
+
+    app 설정으로 떨어질 때는 RAG 벡터 스토어(vector_db_dsn = RAG_DB_URL, 없으면 앱 DB)를
+    쓴다 — 색인이 쓰는 곳과 services/retrieval/search.py 가 읽는 곳이 반드시 같아야 한다.
+    """
     url = cli_url or os.getenv("INGEST_DATABASE_URL")
     if not url:
         try:
             from app.core.config import settings  # backend/ 를 pythonpath 로 실행 시 가능
 
-            url = settings.DATABASE_URL
+            url = settings.vector_db_dsn
         except Exception:
-            url = os.getenv("DATABASE_URL", "")
+            url = os.getenv("RAG_DB_URL") or os.getenv("APP_DB_URL", "")
     if not url:
-        sys.exit("❌ DATABASE_URL 이 없습니다. .env 또는 --database-url 로 지정하세요.")
+        sys.exit("❌ RAG_DB_URL 이 없습니다. .env 또는 --database-url 로 지정하세요.")
     if url.startswith("sqlite"):
         sys.exit(
             "❌ pgvector 는 Postgres 가 필요합니다.\n"
-            "   DATABASE_URL 을 Supabase/Postgres 연결 문자열로 설정하세요.\n"
+            "   RAG_DB_URL(또는 APP_DB_URL) 을 Supabase/Postgres 연결 문자열로 설정하세요.\n"
             "   예) postgresql+psycopg://USER:PW@HOST:5432/postgres"
         )
     return to_libpq_dsn(url)

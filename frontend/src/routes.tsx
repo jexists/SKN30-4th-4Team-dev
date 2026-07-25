@@ -25,27 +25,27 @@ export const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <Home /> },
-      { path: 'analyze', element: <Analyze /> },
-      { path: 'analyze/:id', element: <AnalyzeResult /> },
-      { path: 'chat', element: <Chat /> },
-      { path: 'chat/:id', element: <Chat /> },
       { path: 'login', element: <Login /> },
       { path: 'signup', element: <SignUp /> },
       { path: 'onboarding', element: <Onboarding /> },
-      // 로그인이 필요한 화면 — 비로그인이면 /login 으로 이동
+      { path: 'terms', element: <Terms /> },
+      { path: 'privacy', element: <Privacy /> },
+      // 로그인이 필요한 화면 — 비로그인이면 /login 으로 이동(로그인 후 원래 위치로 복귀)
       {
         element: <RequireAuth />,
         children: [
+          { path: 'analyze', element: <Analyze /> },
+          { path: 'analyze/:id', element: <AnalyzeResult /> },
+          { path: 'chat/:chatId?', element: <Chat /> },
           { path: 'mypage', element: <MyPage /> },
           { path: 'account', element: <AccountSettings /> },
           { path: 'account/cards/new', element: <AddCard /> },
           { path: 'risk-report', element: <RiskReport /> },
         ],
       },
-      { path: 'terms', element: <Terms /> },
-      { path: 'privacy', element: <Privacy /> },
       { path: 'legal-basis', element: <LegalBasis /> },
       { path: 'support', element: <Support /> },
+      // 매칭되지 않는 모든 경로 — 404 (로그인 불필요)
       { path: '*', element: <NotFound /> },
     ],
   },

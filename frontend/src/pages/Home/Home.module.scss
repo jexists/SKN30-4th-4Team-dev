@@ -2,16 +2,6 @@
 
 .page {
   color: v.$ink;
-  font-family:
-    'Pretendard Variable',
-    Pretendard,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Malgun Gothic',
-    'Apple SD Gothic Neo',
-    system-ui,
-    sans-serif;
-  letter-spacing: -0.01em;
 }
 
 // 공통 컨테이너
@@ -24,7 +14,7 @@
 
 /* ══════════════ 히어로 ══════════════ */
 .hero {
-  background: #fff;
+  background: v.$surface;
 }
 .heroInner {
   @extend %container;
@@ -95,7 +85,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    border: 2px solid #fff;
+    border: 2px solid v.$white;
     margin-left: -8px;
     background: linear-gradient(135deg, #c7d0e8, #93a2c8);
 
@@ -137,21 +127,21 @@
 }
 .btnPrimary {
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   border: 1px solid v.$navy-800;
   box-shadow: 0 8px 20px rgba(15, 26, 53, 0.18);
 
   &:hover {
-    background: #101a3c;
+    background: v.$navy-hover;
   }
 }
 .btnGhost {
-  background: #fff;
+  background: v.$surface;
   color: v.$navy-800;
-  border: 1px solid #dfe3ec;
+  border: 1px solid v.$border-strong;
 
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
   }
 }
 .btnOutline {
@@ -175,7 +165,7 @@
   max-width: 420px;
   padding: 40px 20px 20px;
   border-radius: 18px;
-  background: #fff;
+  background: v.$surface;
   border: 1px solid #eceef3;
   box-shadow:
     0 30px 60px -24px rgba(15, 26, 53, 0.28),
@@ -192,7 +182,7 @@
     width: 9px;
     height: 9px;
     border-radius: 50%;
-    background: #dfe3ec;
+    background: v.$border-strong;
   }
   i:nth-child(1) {
     background: #ff5f57;
@@ -258,11 +248,11 @@
   margin-top: 4px;
   border-radius: 12px;
   padding: 18px;
-  background: linear-gradient(160deg, #eef1f8, #dde3f0);
+  background: linear-gradient(160deg, v.$pill, #dde3f0);
   overflow: hidden;
 }
 .mockPaper {
-  background: #fff;
+  background: v.$surface;
   border-radius: 8px;
   padding: 14px;
   box-shadow: 0 6px 16px rgba(15, 26, 53, 0.1);
@@ -303,7 +293,7 @@
 /* ══════════════ 다크 밴드 ══════════════ */
 .darkBand {
   background: v.$navy-900;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .darkInner {
   @extend %container;
@@ -333,7 +323,7 @@
   font-size: clamp(34px, 4vw, 46px);
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: #fff;
+  color: v.$text-on-dark;
   font-variant-numeric: tabular-nums;
 }
 .statLabel {
@@ -391,7 +381,7 @@
 
 /* ══════════════ 기능 카드 (벤토) ══════════════ */
 .features {
-  background: v.$bg-soft;
+  background: v.$page-bg;
 }
 .featuresInner {
   @extend %container;
@@ -428,8 +418,8 @@
   position: relative;
   border-radius: 20px;
   padding: 30px;
-  border: 1px solid #e8ebf1;
-  background: #fff;
+  border: 1px solid v.$border-default;
+  background: v.$surface;
   overflow: hidden;
 }
 .featOcr {
@@ -446,7 +436,7 @@
   grid-area: chat;
   background: v.$navy-900;
   border-color: v.$navy-700;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .featRatio {
   grid-area: ratio;
@@ -502,7 +492,7 @@
   margin-top: 24px;
   height: 132px;
   border-radius: 12px;
-  background: linear-gradient(150deg, #eef1f8, #e0e6f1);
+  background: linear-gradient(150deg, v.$pill, #e0e6f1);
   overflow: hidden;
 }
 .ocrPaper {
@@ -511,7 +501,7 @@
   top: 20px;
   width: 150px;
   padding: 14px;
-  background: #fff;
+  background: v.$surface;
   border-radius: 8px;
   transform: rotate(-5deg);
   box-shadow: 0 8px 20px rgba(15, 26, 53, 0.14);

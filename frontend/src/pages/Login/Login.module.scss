@@ -5,18 +5,8 @@
   display: flex;
   flex-direction: column;
   // 본문 그라디언트 끝색과 같은 톤이라 compact 푸터까지 매끄럽게 이어진다.
-  background: v.$bg-soft;
+  background: v.$page-bg;
   color: v.$ink;
-  font-family:
-    'Pretendard Variable',
-    Pretendard,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Malgun Gothic',
-    'Apple SD Gothic Neo',
-    system-ui,
-    sans-serif;
-  letter-spacing: -0.01em;
 }
 
 .body {
@@ -27,15 +17,15 @@
   justify-content: center;
   gap: 32px;
   padding: 56px 16px 72px;
-  background: linear-gradient(180deg, #f8f9ff, v.$bg-soft);
+  background: linear-gradient(180deg, #f8f9ff, v.$page-bg);
 }
 
 .card {
   width: 100%;
   max-width: 440px;
   padding: 40px;
-  background: #fff;
-  border: 1px solid #e6e9f2;
+  background: v.$surface;
+  border: 1px solid v.$border-card;
   border-radius: v.$radius;
   box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }
@@ -108,9 +98,9 @@
 .input {
   width: 100%;
   padding: 13px 16px;
-  border: 1px solid #dfe3ec;
+  border: 1px solid v.$border-strong;
   border-radius: v.$radius-sm;
-  background: #fcfdff;
+  background: v.$surface-raised;
   font: inherit;
   font-size: 15px;
   color: v.$ink;
@@ -120,7 +110,7 @@
     box-shadow 0.15s ease;
 
   &::placeholder {
-    color: #a7aec0;
+    color: v.$text-placeholder;
   }
   &:focus {
     border-color: v.$navy-800;
@@ -174,7 +164,7 @@
   border: none;
   border-radius: v.$radius-sm;
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   font: inherit;
   font-size: 16px;
   font-weight: 700;
@@ -184,7 +174,7 @@
     transform 0.12s ease;
 
   &:hover {
-    background: #101a3c;
+    background: v.$navy-hover;
   }
   &:active {
     transform: scale(0.985);
@@ -207,15 +197,15 @@
     top: 50%;
     left: 0;
     right: 0;
-    border-top: 1px solid #e6e9f2;
+    border-top: 1px solid v.$border-card;
   }
   span {
     position: relative;
     padding: 0 14px;
-    background: #fff;
+    background: v.$surface;
     font-size: 12px;
     letter-spacing: 0.05em;
-    color: #8b93a7;
+    color: v.$slate-light;
   }
 }
 
@@ -252,12 +242,12 @@
   height: 20px;
 }
 .kakao {
-  background: #fee500;
-  color: #191919;
+  background: v.$brand-kakao;
+  color: v.$brand-kakao-text;
 }
 .naver {
-  background: #03c75a;
-  color: #fff;
+  background: v.$brand-naver;
+  color: v.$text-on-dark;
 }
 .naverMark {
   font-size: 18px;

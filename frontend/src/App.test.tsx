@@ -1,9 +1,13 @@
 import { render, screen, within } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 import { BRAND } from './config/env'
+
+// 헤더가 useAuth 를 쓰므로 Supabase 를 꺼둔다. 켜두면 비동기 getSession 이 테스트가
+// 끝난 뒤 resolve 되며 act() 경고를 낸다.
+vi.mock('./config/supabase', () => ({ supabase: null, isAuthConfigured: false }))
 
 const DISCLAIMER = /법적 자문을 대신하지 않습니다/
 
