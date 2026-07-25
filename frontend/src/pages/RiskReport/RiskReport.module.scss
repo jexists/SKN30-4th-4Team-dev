@@ -1,7 +1,7 @@
 @use '../../styles/variables' as v;
 
 .page {
-  background: v.$bg-soft;
+  background: v.$page-bg;
   padding: 40px 0 80px;
   min-height: 100%;
 }
@@ -60,21 +60,21 @@
   }
 }
 .btnOutline {
-  background: #fff;
+  background: v.$surface;
   color: v.$navy-800;
-  border: 1px solid #dfe3ec;
+  border: 1px solid v.$border-strong;
 
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
   }
 }
 .btnPrimary {
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   border: 1px solid v.$navy-800;
 
   &:hover {
-    background: #101a3c;
+    background: v.$navy-hover;
   }
 }
 
@@ -95,8 +95,8 @@
 /* 종합 안전 점수 */
 .scoreCard {
   grid-column: span 12;
-  background: #fff;
-  border: 1px solid #e8ebf1;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
   border-radius: 20px;
   padding: 32px;
   display: flex;
@@ -165,8 +165,8 @@
 /* 재무 건전성 분석 */
 .financeCard {
   grid-column: span 12;
-  background: #fff;
-  border: 1px solid #e8ebf1;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
   border-radius: 20px;
   padding: 32px;
 }
@@ -194,7 +194,7 @@
 .financeStat {
   padding: 16px;
   border-radius: 12px;
-  background: v.$bg-soft;
+  background: v.$page-bg;
 }
 .financeStatWarn {
   background: v.$orange-soft;
@@ -311,8 +311,8 @@
   }
 }
 .clauseCard {
-  background: #fff;
-  border: 1px solid #e8ebf1;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
   border-left-width: 6px;
   border-radius: 16px;
   padding: 22px 24px;
@@ -356,7 +356,7 @@
   margin: 0 0 12px;
   padding: 12px 14px;
   border-radius: 8px;
-  background: v.$bg-soft;
+  background: v.$page-bg;
   font-size: 14px;
   font-style: italic;
   line-height: 1.6;
@@ -386,7 +386,7 @@
   position: sticky;
   top: 88px;
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   border-radius: 20px;
   padding: 32px;
   box-shadow: 0 20px 44px -20px rgba(15, 26, 53, 0.4);
@@ -436,7 +436,7 @@
   margin: 0;
   font-size: 14px;
   line-height: 1.6;
-  color: #c3cbe2;
+  color: v.$text-on-dark-muted;
 }
 .actionCta {
   display: flex;
@@ -446,7 +446,7 @@
   padding: 14px;
   border-radius: 12px;
   background: v.$green;
-  color: #fff;
+  color: v.$text-on-dark;
   font-size: 15px;
   font-weight: 700;
   text-decoration: none;
@@ -470,7 +470,7 @@
   height: 300px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid #e8ebf1;
+  border: 1px solid v.$border-default;
 }
 .visualArt {
   position: absolute;
@@ -506,7 +506,7 @@
   margin: 0 0 6px;
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  color: v.$text-on-dark;
 }
 .visualOverlayDesc {
   margin: 0;
@@ -521,7 +521,7 @@
   padding: 6px 14px;
   border-radius: 999px;
   background: v.$navy-800;
-  color: #fff;
+  color: v.$text-on-dark;
   font-size: 12px;
   font-weight: 700;
 }

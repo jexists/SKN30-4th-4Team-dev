@@ -19,8 +19,8 @@
   width: 100%;
   max-width: 560px;
   max-height: min(80vh, 720px);
-  background: #fff;
-  border: 1px solid #e6e9f2;
+  background: v.$surface;
+  border: 1px solid v.$border-card;
   border-radius: v.$radius;
   box-shadow: 0 16px 48px rgba(15, 23, 42, 0.24);
   outline: none;
@@ -34,7 +34,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 20px 24px;
-  border-bottom: 1px solid #eef0f6;
+  border-bottom: 1px solid v.$border-subtle;
 }
 .title {
   margin: 0;
@@ -59,7 +59,7 @@
     color 0.15s ease;
 
   &:hover {
-    background: v.$bg-soft;
+    background: v.$page-bg;
     color: v.$ink;
   }
 }

@@ -2,20 +2,10 @@
 
 .page {
   color: v.$ink;
-  font-family:
-    'Pretendard Variable',
-    Pretendard,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Malgun Gothic',
-    'Apple SD Gothic Neo',
-    system-ui,
-    sans-serif;
-  letter-spacing: -0.01em;
 }
 
 .main {
-  background: #f2f4fb;
+  background: v.$page-bg;
   min-height: calc(100vh - 66px);
 }
 .inner {
@@ -66,8 +56,8 @@
   gap: 20px;
 }
 .uploadCard {
-  background: #fff;
-  border: 1px solid #e6e9f1;
+  background: v.$surface;
+  border: 1px solid v.$border-card;
   border-radius: v.$radius;
   padding: 26px 24px;
   box-shadow: 0 1px 2px rgba(15, 26, 53, 0.04);
@@ -111,7 +101,7 @@
   padding: 40px 18px;
   border: 1.5px dashed #c4cbdd;
   border-radius: 12px;
-  background: #fbfcfe;
+  background: v.$surface-sunken;
   cursor: pointer;
   text-align: center;
   transition:
@@ -150,7 +140,7 @@
 
 /* ── 서류 발급 안내 ── */
 .guide {
-  background: #e9edf9;
+  background: v.$lavender;
   border-radius: v.$radius;
   padding: 30px 28px;
 }
@@ -198,8 +188,8 @@
 
 /* ── 위험 점수 카드 ── */
 .scoreCard {
-  background: #fff;
-  border: 1px solid #e6e9f1;
+  background: v.$surface;
+  border: 1px solid v.$border-card;
   border-radius: v.$radius;
   padding: 28px 26px 24px;
   box-shadow: 0 1px 2px rgba(15, 26, 53, 0.04);
@@ -296,7 +286,7 @@
   position: relative;
   overflow: hidden;
   background: v.$navy-900;
-  color: #fff;
+  color: v.$text-on-dark;
   border-radius: v.$radius;
   padding: 26px 26px 24px;
 
@@ -319,7 +309,7 @@
   margin-top: 18px;
   font-size: 14px;
   font-weight: 700;
-  color: #fff;
+  color: v.$text-on-dark;
   text-decoration: underline;
   text-underline-offset: 3px;
 }

@@ -26,8 +26,20 @@
 
 - **API 호출은 `api/client.ts` 를 통해서**. client 가 표준 응답 봉투(`ApiResponse<T>`)를 벗겨 `data` 반환, 실패는 `ApiError` throw → 화면 코드는 봉투를 몰라도 됨.
 - 백엔드 경로는 **`/api/v1`** (dev 는 vite 프록시가 `/api` → :8000 전달).
-- **기본 UI 컴포넌트(Button/Input)는 미리 만들지 않는다** — 실제 화면에서 반복이 생기면(rule of three) 추가.
-- 디자인 토큰은 `styles/_variables.scss` 에서 관리하고 `@use` 로 참조.
+- 디자인 토큰은 `styles/_variables.scss` 에서, 타이포 믹스인은 `styles/_typography.scss` 에서 관리하고 `@use` 로 참조.
+
+## 디자인 시스템 (필수)
+
+**새 페이지·컴포넌트를 만들거나 수정할 때 반드시 [`../design.md`](../design.md) 를 먼저 읽는다.**
+
+- **페이지 배경은 반드시 `v.$page-bg` (#f2f4fb)**. 다른 색을 새 페이지에 쓰지 않는다.
+- **색상은 토큰만.** 임의 `#xxx` 하드코딩 금지. 부족하면 `_variables.scss` 에 먼저 추가하고 `design.md` 를 동기화한다.
+- **Typography 는 `_typography.scss` 믹스인만** 사용 (`@include t.body;` 등). `font-size: 14.5px` 같은 반쪽 값을 새로 만들지 않는다.
+- **Spacing 은 `$space-*` 4pt 스케일만.** 임의의 `padding: 13px` 같은 값 금지.
+- **radius/shadow/z-index/transition/breakpoint 도 토큰만** 사용한다.
+- **공통 컴포넌트 우선**: Button/Input/Card/Modal/Toast/Badge 등 새로 만들기 전에 `components/*` 를 확인한다. 같은 스타일 블록이 rule of three (3번째 반복) 를 넘기면 페이지 로컬 CSS 로 두지 말고 `components/` 로 추출한다. 추출 후 `design.md` §16 인벤토리에 등록.
+- **인라인 스타일 금지**. 항상 CSS Modules (`*.module.scss`) 를 통한 클래스 사용.
+- **디자인 시스템이 바뀌면 `design.md` 도 함께 업데이트.**
 
 ## 명령
 
