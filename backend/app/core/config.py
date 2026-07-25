@@ -43,15 +43,18 @@ class Settings(BaseSettings):
     def _app_pg_url(self) -> str:
         """앱 데이터(chat history 등)가 있는 Postgres URL 원본.
 
-        DB_URL 우선, 없으면 Postgres 인 DATABASE_URL, 둘 다 아니면 빈 문자열."""
-        return self.DB_URL or (
-            self.DATABASE_URL if not self.DATABASE_URL.startswith("sqlite") else ""
-        )
+        반드시 DATABASE_URL 기준(=Base.metadata.create_all 이 향하는 곳). RAG 벡터 스토어
+        (DB_URL) 와 뒤섞으면 chat_room/chat_message 테이블이 만들어진 DB 와 조회하는 DB 가
+        갈려 "관계 없음" 실패가 난다. DATABASE_URL 이 SQLite 면 빈 문자열 → 로컬 개발에서
+        app_engine 은 비활성(get_app_db 가 503) — 스켈레톤(SessionLocal) 은 별개다."""
+        return "" if self.DATABASE_URL.startswith("sqlite") else self.DATABASE_URL
 
     @property
     def vector_db_dsn(self) -> str:
-        """psycopg.connect 용 DSN (RAG 벡터 스토어)."""
-        url = self._app_pg_url
+        """psycopg.connect 용 DSN (RAG 벡터 스토어).
+
+        DB_URL 우선, 없으면 앱 DB 재사용. 둘 다 없으면 빈 문자열(검색 비활성)."""
+        url = self.DB_URL or self._app_pg_url
         if not url:
             return ""
         for prefix in ("postgresql+psycopg2://", "postgresql+psycopg://", "postgres://"):
@@ -64,7 +67,7 @@ class Settings(BaseSettings):
         """앱 데이터용 SQLAlchemy URL(psycopg3 드라이버로 정규화).
 
         chat_room/chat_message 등 실데이터가 있는 Supabase Postgres. Postgres 가 아니면 빈 문자열
-        → get_app_db 가 503(HISTORY_UNAVAILABLE). RAG 와 같은 소스(_app_pg_url)를 쓴다."""
+        → get_app_db 가 503(HISTORY_UNAVAILABLE). RAG(DB_URL) 와 무관하게 DATABASE_URL 만 본다."""
         url = self._app_pg_url
         if not url:
             return ""

@@ -9,13 +9,17 @@ from app.core.security import AUTH_EXPIRED, AUTH_UNAVAILABLE, verify_token_with_
 AUTH_MISSING = "missing"
 
 
-async def _authenticate(
+def _authenticate(
     authorization: Annotated[str | None, Header()] = None,
 ) -> tuple[dict | None, str]:
     """Authorization 헤더를 검증해 (클레임, 사유) 를 반환한다.
 
     사유를 함께 들고 다니는 이유: '토큰 없음'·'만료'·'서명 오류'·'인증 서버 장애' 를
     같은 401 로 뭉개면 프론트가 "재로그인시킬 것 vs 잠시 후 재시도할 것" 을 구분할 수 없다.
+
+    sync 함수인 이유: verify_token_with_reason 내부의 PyJWKClient 조회(캐시 미스·kid
+    회전 시)가 동기 HTTP 라 async 로 두면 이벤트 루프를 블록한다. sync 로 두면
+    FastAPI 가 threadpool 에서 실행해 다른 요청을 막지 않는다.
     """
     if not authorization or not authorization.lower().startswith("bearer "):
         return None, AUTH_MISSING
@@ -25,7 +29,7 @@ async def _authenticate(
     return verify_token_with_reason(token)
 
 
-async def get_current_user(
+def get_current_user(
     auth: Annotated[tuple[dict | None, str], Depends(_authenticate)],
 ) -> dict | None:
     """현재 사용자(클레임). 미인증이면 None — 인증이 '선택'인 엔드포인트에서 쓴다.
@@ -35,7 +39,7 @@ async def get_current_user(
     return auth[0]
 
 
-async def require_user(
+def require_user(
     auth: Annotated[tuple[dict | None, str], Depends(_authenticate)],
 ) -> dict:
     """인증이 필수인 엔드포인트용. 실패 사유에 따라 401/503(표준 error 봉투)을 던진다.
