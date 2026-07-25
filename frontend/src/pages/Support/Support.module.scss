@@ -1,7 +1,7 @@
 @use '../../styles/variables' as v;
 
 .page {
-  background: v.$surface;
+  background: v.$page-bg;
 }
 
 /* ══════════════ 히어로 ══════════════ */
@@ -124,8 +124,9 @@
   cursor: pointer;
   transition: background 0.15s ease;
 
+  // 페이지 배경($page-bg) 위에 바로 놓이는 항목이라 hover 는 흰 표면으로 들뜨게 한다.
   &:hover {
-    background: v.$page-bg;
+    background: v.$surface;
   }
 }
 .navItemIcon {
@@ -252,7 +253,7 @@
   margin-top: 48px;
   padding: 36px;
   border-radius: 20px;
-  background: v.$page-bg;
+  background: v.$surface;
   border: 1px solid v.$border-default;
 }
 .contactTitle {

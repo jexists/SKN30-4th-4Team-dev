@@ -23,7 +23,8 @@ export function EmptyState({ onExample }: Props) {
       <div className={styles.emptyIcon}>
         <Shield />
       </div>
-      <h1 className={styles.emptyTitle}>무엇을 도와드릴까요?</h1>
+      {/* 사이드바('대화 기록')가 이미 h2 다 — 본문도 같은 단계로 맞춰 순서를 지킨다. */}
+      <h2 className={styles.emptyTitle}>무엇을 도와드릴까요?</h2>
       <p className={styles.emptySubtitle}>
         전·월세 계약과 임대차 분쟁에 대해 물어보세요.<br />{BRAND.name}가 관련 법령·판례를 근거로 답해드려요.
       </p>
