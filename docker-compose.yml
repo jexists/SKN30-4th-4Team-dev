@@ -8,7 +8,7 @@ services:
     env_file:
       - ./backend/.env
     # DB는 Supabase(외부 관리형). Supabase 없이 로컬에서 돌리려면 아래 db 서비스 주석을 풀고
-    # backend/.env 의 DATABASE_URL 을 postgresql+psycopg://app:app@db:5432/app 로 설정하세요.
+    # backend/.env 의 APP_DB_URL 을 postgresql+psycopg://app:app@db:5432/app 로 설정하세요.
     # depends_on:
     #   - db
 

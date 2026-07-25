@@ -7,9 +7,9 @@ from app.core.config import settings
 from app.core.exceptions import AppError
 
 # SQLite 폴백일 때만 필요한 연결 옵션 (Postgres/Supabase 에서는 불필요)
-_connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+_connect_args = {"check_same_thread": False} if settings.APP_DB_URL.startswith("sqlite") else {}
 
-engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args, future=True)
+engine = create_engine(settings.APP_DB_URL, connect_args=_connect_args, future=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
