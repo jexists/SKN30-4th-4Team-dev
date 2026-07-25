@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { AddCircle, Check, Edit, Lock, LogOut, Shield, User } from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
@@ -156,9 +157,9 @@ export function AccountSettings() {
                 삭제
               </button>
             </div>
-            <button type="button" className={styles.addCardBtn}>
+            <Link to="/account/cards/new" className={styles.addCardBtn}>
               <AddCircle /> 새 카드 등록하기
-            </button>
+            </Link>
           </div>
         </section>
 
