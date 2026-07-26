@@ -53,6 +53,27 @@ const rooms = [
   },
 ]
 
+/** 응답 도착 시점을 테스트가 직접 정한다 — "기다리는 중" 상태를 붙잡아 두기 위해. */
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
+/** 본문 하단 타이핑 인디케이터. 사이드바 점과 라벨이 같으므로 대화 영역으로 좁혀서 찾는다. */
+const typingIndicator = () =>
+  screen.queryByTestId('message-scroll')
+    ? within(screen.getByTestId('message-scroll')).queryByLabelText('답변 생성 중')
+    : null
+
+/** 사이드바에서 생성 중 점이 붙은 대화 제목들. */
+const generatingRooms = () =>
+  screen
+    .queryAllByRole('img', { name: '답변 생성 중' })
+    .map((dot) => dot.closest('button')?.textContent)
+
 function LocationProbe() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -392,6 +413,143 @@ describe('Chat URL routing', () => {
     })
     expect(screen.queryByRole('button', { name: '첫 번째 대화' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '두 번째 대화' })).toBeInTheDocument()
+  })
+
+  it('답변을 기다리는 중에 다른 대화로 옮기면 그 방에는 작성중 표시가 없다', async () => {
+    const user = userEvent.setup()
+    const send = deferred<{ answer: string; response_time_ms: number }>()
+    api.sendChat.mockReturnValueOnce(send.promise)
+    renderChat('/chat/room-a')
+
+    await screen.findByText('room-a 질문')
+    await user.type(await screen.findByPlaceholderText('법률적인 상황을 설명해주세요...'), '질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+    await waitFor(() => expect(typingIndicator()).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /두 번째 대화/ }))
+
+    // 이게 원래 버그였다 — room-a 의 요청인데 room-b 에서 '작성중' 이 보였다.
+    expect(await screen.findByText('room-b 질문')).toBeInTheDocument()
+    expect(typingIndicator()).not.toBeInTheDocument()
+    // 대신 사이드바가 "저쪽에서 돌고 있다" 를 알린다.
+    expect(generatingRooms()).toEqual(['첫 번째 대화'])
+
+    send.resolve({ answer: '테스트 답변', response_time_ms: 10 })
+    // 답변은 room-a 에 저장될 뿐, 보고 있는 room-b 에는 붙지 않는다.
+    await waitFor(() => {
+      expect(api.addMessage).toHaveBeenCalledWith('room-a', 'ASSISTANT', '테스트 답변', 10)
+    })
+    expect(screen.queryByText('테스트 답변')).not.toBeInTheDocument()
+  })
+
+  it('다른 대화가 생성 중이면 이유를 밝히고 전송을 막는다', async () => {
+    const user = userEvent.setup()
+    const send = deferred<{ answer: string; response_time_ms: number }>()
+    api.sendChat.mockReturnValueOnce(send.promise)
+    renderChat('/chat/room-a')
+
+    await screen.findByText('room-a 질문')
+    await user.type(await screen.findByPlaceholderText('법률적인 상황을 설명해주세요...'), '질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+    await waitFor(() => expect(typingIndicator()).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /두 번째 대화/ }))
+    await screen.findByText('room-b 질문')
+
+    // 이유 없이 죽어 있는 입력창은 고장으로 보인다 — 입력창이 왜, 사이드바가 어디서 인지 말한다.
+    const busy = screen.getByPlaceholderText('다른 대화에서 답변을 생성 중입니다...')
+    expect(generatingRooms()).toEqual(['첫 번째 대화'])
+
+    await user.type(busy, '다른 질문')
+    expect(screen.getByRole('button', { name: '전송' })).toBeDisabled()
+    expect(api.sendChat).toHaveBeenCalledTimes(1)
+
+    send.resolve({ answer: '테스트 답변', response_time_ms: 10 })
+
+    // 끝나면 안내가 사라지고 바로 보낼 수 있다.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '전송' })).toBeEnabled()
+    })
+    expect(screen.getByPlaceholderText('법률적인 상황을 설명해주세요...')).toBeInTheDocument()
+    expect(generatingRooms()).toEqual([])
+  })
+
+  it('답변을 기다리는 중에 새 대화로 나가도 추천 주제 화면이 보인다', async () => {
+    const user = userEvent.setup()
+    const send = deferred<{ answer: string; response_time_ms: number }>()
+    api.sendChat.mockReturnValueOnce(send.promise)
+    renderChat('/chat/room-a')
+
+    await screen.findByText('room-a 질문')
+    await user.type(await screen.findByPlaceholderText('법률적인 상황을 설명해주세요...'), '질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+    await waitFor(() => expect(typingIndicator()).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: '+ 새 대화' }))
+
+    // 예전엔 sending 이 전역이라 Hero 가 숨고 타이핑 점만 남은 빈 화면이 됐다.
+    expect(await screen.findByRole('heading', { name: '무엇을 도와드릴까요?' })).toBeInTheDocument()
+    expect(typingIndicator()).not.toBeInTheDocument()
+    expect(generatingRooms()).toEqual(['첫 번째 대화'])
+    // 눌러도 전송되지 않는 추천 질문은 비활성으로 보여준다.
+    const example = '집주인이 갑자기 월세를 크게 올려달라고 합니다. 거절할 수 있나요?'
+    expect(screen.getByRole('button', { name: example })).toBeDisabled()
+
+    send.resolve({ answer: '테스트 답변', response_time_ms: 10 })
+    await waitFor(() => {
+      expect(api.addMessage).toHaveBeenCalledWith('room-a', 'ASSISTANT', '테스트 답변', 10)
+    })
+  })
+
+  it('생성 중이던 대화로 돌아오면 작성중 표시가 다시 보이고 답변이 붙는다', async () => {
+    const user = userEvent.setup()
+    const send = deferred<{ answer: string; response_time_ms: number }>()
+    api.sendChat.mockReturnValueOnce(send.promise)
+    renderChat('/chat/room-a')
+
+    await screen.findByText('room-a 질문')
+    await user.type(await screen.findByPlaceholderText('법률적인 상황을 설명해주세요...'), '질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+    await waitFor(() => expect(typingIndicator()).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /두 번째 대화/ }))
+    await screen.findByText('room-b 질문')
+    await user.click(screen.getByRole('button', { name: /첫 번째 대화/ }))
+    await screen.findByText('room-a 질문')
+
+    expect(typingIndicator()).toBeInTheDocument()
+
+    send.resolve({ answer: '테스트 답변', response_time_ms: 10 })
+
+    // 방 조회 응답이 늦게 도착해도 방금 붙은 답변을 덮어쓰지 않는다.
+    expect(await screen.findByText('테스트 답변')).toBeInTheDocument()
+  })
+
+  it('새 대화를 만드는 사이 다른 대화를 열면 새 방으로 끌고 가지 않는다', async () => {
+    const user = userEvent.setup()
+    const create = deferred<(typeof rooms)[number]>()
+    api.createRoom.mockReturnValueOnce(create.promise)
+    renderChat('/chat')
+
+    const composer = await screen.findByPlaceholderText('법률적인 상황을 설명해주세요...')
+    await user.type(composer, '첫 질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+
+    await user.click(screen.getByRole('button', { name: /두 번째 대화/ }))
+    expect(await screen.findByText('room-b 질문')).toBeInTheDocument()
+
+    create.resolve({
+      id: 'room-new',
+      title: '첫 질문',
+      last_chat_at: today.toISOString(),
+      updated_at: '2026-07-24T10:00:00Z',
+    })
+
+    await waitFor(() => {
+      expect(api.sendChat).toHaveBeenCalled()
+    })
+    // 사용자가 이미 다른 대화를 보고 있다 — 만들어진 방으로 URL 을 빼앗지 않는다.
+    expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-b')
   })
 
   it('보고 있던 대화를 삭제하면 새 대화 URL로 이동한다', async () => {

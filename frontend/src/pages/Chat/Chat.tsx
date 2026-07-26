@@ -24,6 +24,13 @@ const MAX_LEN = 2000
 const HISTORY_TURNS = 10 // RAG 에 함께 보내는 최근 맥락 수
 const LEGAL_NOTICE_DISMISSED_KEY = 'homeshield:legal-notice-dismissed'
 
+/** 아직 방이 없는 새 대화의 대기 키. 방 id 는 빈 문자열이 될 수 없어 충돌하지 않는다. */
+const NEW_CHAT_KEY = ''
+const roomKey = (roomId: string | null) => roomId ?? NEW_CHAT_KEY
+
+/** 입력창 플레이스홀더 자리에 들어가므로 한 줄로 짧게 — 자세한 위치는 사이드바 점이 알린다. */
+const BUSY_ELSEWHERE_NOTICE = '다른 대화에서 답변을 생성 중입니다...'
+
 let _id = 0
 const newId = () => `m${Date.now()}-${_id++}`
 
@@ -69,7 +76,9 @@ export function Chat() {
   const [followLatestRequest, setFollowLatestRequest] = useState(0)
 
   const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
+  // 답변 생성이 진행 중인 방들. 전역 boolean 이면 답변을 기다리는 도중 다른 방으로 옮겼을 때
+  // 그 방에도 '작성중' 이 뜨고 입력창까지 잠긴다 — 대기 상태는 방에 묶여 있어야 한다.
+  const [pendingRooms, setPendingRooms] = useState<ReadonlySet<string>>(() => new Set())
   // 추천 주제는 기본 펼침. 접으면 그만큼 대화 목록이 길어진다.
   const [suggestOpen, setSuggestOpen] = useState(true)
   // 고른 추천 주제(null = 기본 화면). 첫 화면 Hero 의 내용만 바꾸고 채팅은 만들지 않는다.
@@ -86,7 +95,26 @@ export function Chat() {
   const createdRoomIdRef = useRef<string | null>(null)
   const sidebarRef = useRef<HTMLElement>(null)
   const roomsSentinel = useRef<HTMLDivElement>(null)
+  // pendingRooms 는 리렌더 후에야 반영된다 — 연타로 두 요청이 새는 걸 막으려면 즉시 잠가야 한다.
+  const generatingRef = useRef(false)
   activeRoomIdRef.current = activeRoomId
+
+  const setPending = useCallback((key: string, on: boolean) => {
+    setPendingRooms((prev) => {
+      if (prev.has(key) === on) return prev
+      const next = new Set(prev)
+      if (on) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+
+  // 지금 보고 있는 방이 생성 중인가 — 타이핑 인디케이터는 이 방의 것만 그린다.
+  // 다른 방의 생성은 백그라운드에서 계속되고, 그 방으로 돌아오면 다시 '작성중' 이 보인다.
+  const sending = pendingRooms.has(roomKey(activeRoomId))
+  // 생성은 한 번에 하나만 한다. 다만 다른 방의 요청이라 이 방엔 '작성중' 이 없으므로,
+  // 입력창을 그냥 잠그면 이유를 알 수 없다 — 잠그는 김에 왜 잠겼는지도 같이 말해준다.
+  const busyElsewhere = pendingRooms.size > 0 && !sending
 
   /**
    * 답변 저장 후 그 방을 목록 맨 앞으로 올린다(백엔드가 last_chat_at 을 갱신한 것과 같은 결과).
@@ -179,7 +207,14 @@ export function Chat() {
     void listMessages(activeRoomId)
       .then((page) => {
         if (cancelled) return
-        setMessages(page.items.map(toMessage))
+        setMessages((prev) => {
+          const fetched = page.items.map(toMessage)
+          // 조회하는 동안 도착한 답변은 남긴다. 위에서 이미 [] 로 비웠으므로 prev 에는 그 사이
+          // 붙은 로컬 말풍선만 있다(로컬 id 는 `m…` 이라 DB id 와 겹치지 않는다). 그냥 덮어쓰면
+          // 생성 중이던 방으로 돌아왔을 때 방금 붙은 답변이 사라진다.
+          const ids = new Set(fetched.map((m) => m.id))
+          return [...fetched, ...prev.filter((m) => !ids.has(m.id))]
+        })
         setMessagesCursor(page.next_cursor)
       })
       .catch((error: unknown) => {
@@ -320,7 +355,9 @@ export function Chat() {
 
   async function submitQuestion(text: string, regenerate = false) {
     const q = text.trim()
-    if (!q || sending) return
+    // 어느 방이든 생성 중이면 보내지 않는다(방을 옮겨도 마찬가지). 막힌 이유는 입력창이 안내한다.
+    if (!q || generatingRef.current) return
+    generatingRef.current = true
 
     // 직접 전송(재생성 포함)은 과거를 읽던 중이어도 최신 메시지 추적을 강제로 시작한다.
     setFollowLatestRequest((request) => request + 1)
@@ -335,7 +372,9 @@ export function Chat() {
     }
     lastQuestion.current = q
     setInput('')
-    setSending(true)
+    // 이 요청이 어느 방의 것인지 들고 다닌다 — 방을 옮겨도 '작성중' 은 자기 방에만 남는다.
+    let pendingKey = roomKey(activeRoomId)
+    setPending(pendingKey, true)
 
     // regenerate 면 끝에 붙어있던 에러 버블을 제거하고 다시 시도한다.
     const dropTrailingError = (list: Message[]) =>
@@ -346,10 +385,16 @@ export function Chat() {
       if (persistent && !roomId) {
         const room = await createRoom(q.slice(0, 40)) // 첫 질문을 방 제목으로
         roomId = room.id
+        // 대기 표시를 새 대화 슬롯에서 실제 방으로 옮긴다. 안 옮기면 아래 URL 전환 직후
+        // 인디케이터가 사라진다.
+        setPending(pendingKey, false)
+        pendingKey = roomId
+        setPending(pendingKey, true)
         setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)])
       }
       if (persistent && roomId && !regenerate) await addMessage(roomId, 'USER', q)
-      if (persistent && roomId && activeRoomId === null) {
+      // 방을 만드는 사이 사용자가 다른 대화를 열었으면 새 방으로 끌고 오지 않는다.
+      if (persistent && roomId && activeRoomId === null && activeRoomIdRef.current === null) {
         createdRoomIdRef.current = roomId
         activeRoomIdRef.current = roomId
         navigate(`/chat/${encodeURIComponent(roomId)}`)
@@ -382,7 +427,8 @@ export function Chat() {
         ])
       }
     } finally {
-      setSending(false)
+      generatingRef.current = false
+      setPending(pendingKey, false)
     }
   }
 
@@ -451,6 +497,7 @@ export function Chat() {
                           key={room.id}
                           room={room}
                           active={activeRoomId === room.id}
+                          generating={pendingRooms.has(room.id)}
                           onOpen={openRoom}
                           onRename={handleRename}
                           onDelete={handleDelete}
@@ -541,7 +588,11 @@ export function Chat() {
               onRetry={isRetryable(conversationBlock.error) ? retryLoadMessages : undefined}
             />
           ) : showEmpty ? (
-            <EmptyState topic={topicById(topicId)} onExample={(q) => void submitQuestion(q)} />
+            <EmptyState
+              topic={topicById(topicId)}
+              disabled={busyElsewhere}
+              onExample={(q) => void submitQuestion(q)}
+            />
           ) : (
             <MessageList
               key={activeRoomId ?? 'new'}
@@ -562,7 +613,8 @@ export function Chat() {
               value={input}
               onChange={setInput}
               onSubmit={() => void submitQuestion(input)}
-              disabled={sending || openingRoom}
+              disabled={sending || openingRoom || busyElsewhere}
+              notice={busyElsewhere ? BUSY_ELSEWHERE_NOTICE : undefined}
               maxLength={MAX_LEN}
             />
           )}

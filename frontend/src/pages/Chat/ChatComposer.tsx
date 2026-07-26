@@ -9,16 +9,22 @@ interface Props {
   onSubmit: () => void
   /** 전송 중(중복 전송 방지). */
   disabled: boolean
+  /**
+   * 잠긴 이유(있을 때만). 이유 없이 죽어 있는 입력창은 고장으로 보인다.
+   * 별도 줄이 아니라 플레이스홀더 자리를 빌려 쓴다 — 나타났다 사라지며 입력창을 밀지 않게.
+   */
+  notice?: string
   maxLength: number
 }
 
+const PLACEHOLDER = '법률적인 상황을 설명해주세요...'
 const MAX_HEIGHT = 200 // px — 이 높이까지 늘고 그 뒤엔 내부 스크롤
 
 /**
  * 하단 고정 입력창. Enter 전송 / Shift+Enter 줄바꿈, 내용이 길어지면 높이만 증가(상한 후 내부 스크롤),
  * 전송 중엔 비활성. 기존 .composer 마크업/스타일을 그대로 사용한다.
  */
-export function ChatComposer({ value, onChange, onSubmit, disabled, maxLength }: Props) {
+export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxLength }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
   // 내용에 맞춰 높이 자동 조절(레이아웃은 안 밀리게 상한 적용).
@@ -55,7 +61,7 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, maxLength }:
         <textarea
           ref={ref}
           className={styles.input}
-          placeholder="법률적인 상황을 설명해주세요..."
+          placeholder={notice ?? PLACEHOLDER}
           value={value}
           maxLength={maxLength}
           rows={1}
@@ -66,6 +72,8 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, maxLength }:
           type="submit"
           className={styles.sendBtn}
           aria-label="전송"
+          // 이미 초안을 써둬 플레이스홀더가 가려진 경우에도 이유를 확인할 수 있게.
+          title={notice}
           disabled={disabled || !value.trim()}
         >
           <Send />
