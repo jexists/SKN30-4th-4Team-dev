@@ -373,8 +373,14 @@ export function Chat() {
     lastQuestion.current = q
     setInput('')
     // 이 요청이 어느 방의 것인지 들고 다닌다 — 방을 옮겨도 '작성중' 은 자기 방에만 남는다.
-    let pendingKey = roomKey(activeRoomId)
-    setPending(pendingKey, true)
+    // 새 대화는 방을 만든 뒤 URL 전환까지 한 왕복(질문 저장)이 더 걸려서 그 사이 두 슬롯을
+    // 함께 켜 둔다. 그래서 정리는 하나가 아니라 켜 둔 것 전부를 대상으로 한다.
+    const pendingKeys = new Set<string>()
+    const markPending = (key: string) => {
+      pendingKeys.add(key)
+      setPending(key, true)
+    }
+    markPending(roomKey(activeRoomId))
 
     // regenerate 면 끝에 붙어있던 에러 버블을 제거하고 다시 시도한다.
     const dropTrailingError = (list: Message[]) =>
@@ -385,11 +391,10 @@ export function Chat() {
       if (persistent && !roomId) {
         const room = await createRoom(q.slice(0, 40)) // 첫 질문을 방 제목으로
         roomId = room.id
-        // 대기 표시를 새 대화 슬롯에서 실제 방으로 옮긴다. 안 옮기면 아래 URL 전환 직후
-        // 인디케이터가 사라진다.
-        setPending(pendingKey, false)
-        pendingKey = roomId
-        setPending(pendingKey, true)
+        // 실제 방 슬롯을 함께 켠다. 새 대화 슬롯은 URL 전환까지 그대로 둔다 — 여기서 끄면
+        // 아래 질문 저장(한 왕복) 동안 '지금 보는 방'(아직 새 대화다)이 대기 목록에서 빠져
+        // 인디케이터가 사라지고 입력창 안내가 '다른 대화에서...' 로 바뀌며 깜빡인다.
+        markPending(roomId)
         setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)])
       }
       if (persistent && roomId && !regenerate) await addMessage(roomId, 'USER', q)
@@ -398,6 +403,13 @@ export function Chat() {
         createdRoomIdRef.current = roomId
         activeRoomIdRef.current = roomId
         navigate(`/chat/${encodeURIComponent(roomId)}`)
+      }
+      // 방을 새로 만든 경우에만 새 대화 슬롯을 뒤늦게 끈다. 이제 URL 이 새 방을 가리키거나
+      // (혹은 사용자가 다른 방으로 옮겨) 새 대화 화면은 이 요청과 무관하다 — 그대로 남기면
+      // '+ 새 대화' 로 나갔을 때 빈 화면에 인디케이터가 샌다.
+      if (persistent && roomId && activeRoomId === null) {
+        pendingKeys.delete(NEW_CHAT_KEY)
+        setPending(NEW_CHAT_KEY, false)
       }
 
       const res = await sendChat(q, history)
@@ -428,7 +440,8 @@ export function Chat() {
       }
     } finally {
       generatingRef.current = false
-      setPending(pendingKey, false)
+      pendingKeys.forEach((key) => setPending(key, false))
+      pendingKeys.clear()
     }
   }
 

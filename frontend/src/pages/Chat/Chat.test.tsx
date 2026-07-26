@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../api/client'
+import { BRAND } from '../../config/env'
 import { Chat } from './Chat'
 
 const api = vi.hoisted(() => ({
@@ -440,6 +441,100 @@ describe('Chat URL routing', () => {
       expect(api.addMessage).toHaveBeenCalledWith('room-a', 'ASSISTANT', '테스트 답변', 10)
     })
     expect(screen.queryByText('테스트 답변')).not.toBeInTheDocument()
+  })
+
+  it('답변이 붙으면 저장이 끝나기 전이어도 봇 말풍선은 하나만 보인다', async () => {
+    const user = userEvent.setup()
+    // 15자를 넘겨 타이핑 연출을 타게 한다 — 짧은 답변은 즉시 표시돼 이 창을 재현하지 못한다.
+    const answer = '보증금 반환은 임대차 종료 후 청구할 수 있습니다. 우선 내용증명을 보내세요.'
+    const saveAnswer = deferred<unknown>()
+    // ASSISTANT 저장만 붙잡는다. USER 저장을 막으면 sendChat 까지 가지도 못한다.
+    api.addMessage.mockImplementation((_roomId: string, role: string) =>
+      role === 'ASSISTANT'
+        ? saveAnswer.promise
+        : Promise.resolve({
+            id: 'stored-message',
+            role,
+            content: '저장됨',
+            created_at: '2026-07-24T10:00:00Z',
+          }),
+    )
+    api.sendChat.mockResolvedValueOnce({ answer, response_time_ms: 10 })
+    renderChat('/chat/room-a')
+
+    await screen.findByText('room-a 질문')
+    await user.type(await screen.findByPlaceholderText('법률적인 상황을 설명해주세요...'), '질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+
+    // 답변 말풍선이 붙은 시점 — 타이핑은 시작 전이고 ASSISTANT 저장은 아직 대기 중이다.
+    await waitFor(() => {
+      expect(api.addMessage).toHaveBeenCalledWith('room-a', 'ASSISTANT', answer, 10)
+    })
+    // 저장이 안 끝났으니 sending 은 여전히 true 다(사이드바 점이 그 증거).
+    expect(generatingRooms()).toEqual(['첫 번째 대화'])
+
+    // 이게 원래 버그였다 — 저장이 끝날 때까지 인디케이터가 남아, 커서만 있는 빈 말풍선과
+    // 함께 봇 말풍선이 두 개로 보였다.
+    const thread = within(screen.getByTestId('message-scroll'))
+    expect(thread.getAllByText(`${BRAND.name} 봇`)).toHaveLength(1)
+    expect(typingIndicator()).not.toBeInTheDocument()
+
+    saveAnswer.resolve({ id: 'stored-answer' })
+
+    // 저장까지 끝나면 사이드바 점도 사라지고, 인디케이터는 계속 없다.
+    await waitFor(() => expect(generatingRooms()).toEqual([]))
+    expect(typingIndicator()).not.toBeInTheDocument()
+  })
+
+  it('첫 채팅에서 방을 만드는 동안 대기 표시가 깜빡이지 않는다', async () => {
+    const user = userEvent.setup()
+    const saveQuestion = deferred<unknown>()
+    // 답변도 붙잡아 둔다 — 바로 도착하면 URL 전환 직후 상태가 '대기 중' 이 아니게 된다.
+    const send = deferred<{ answer: string; response_time_ms: number }>()
+    api.sendChat.mockReturnValueOnce(send.promise)
+    // USER 저장을 붙잡아 "방 생성 완료 ~ URL 전환 직전" 구간을 열어 둔다.
+    api.addMessage.mockImplementation((_roomId: string, role: string) =>
+      role === 'USER'
+        ? saveQuestion.promise
+        : Promise.resolve({
+            id: 'stored-message',
+            role,
+            content: '저장됨',
+            created_at: '2026-07-24T10:00:00Z',
+          }),
+    )
+    renderChat('/chat')
+
+    const composer = await screen.findByPlaceholderText('법률적인 상황을 설명해주세요...')
+    await user.type(composer, '질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+
+    // 방은 만들어졌고 질문 저장 중 — URL 은 아직 새 대화(/chat)다.
+    await waitFor(() => {
+      expect(api.addMessage).toHaveBeenCalledWith('room-new', 'USER', '질문')
+    })
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/chat$/)
+
+    // 이게 원래 버그였다 — 대기 표시를 URL 전환보다 먼저 새 방으로 옮겨서, 이 구간에는
+    // 어느 쪽도 "지금 보는 방" 이 아니게 됐다. 인디케이터가 사라지고 입력창 안내가
+    // '다른 대화에서...' 로 바뀌며 첫 채팅마다 화면이 깜빡였다.
+    expect(typingIndicator()).toBeInTheDocument()
+    expect(composer).toHaveAttribute('placeholder', '법률적인 상황을 설명해주세요...')
+
+    saveQuestion.resolve({ id: 'stored-question' })
+
+    // URL 전환 뒤에도 대기 표시는 끊기지 않고 이어진다(답변은 아직 오지 않았다).
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-new'))
+    expect(typingIndicator()).toBeInTheDocument()
+    expect(composer).toHaveAttribute('placeholder', '법률적인 상황을 설명해주세요...')
+
+    const answer = '테스트 답변'
+    send.resolve({ answer, response_time_ms: 10 })
+
+    // 답변이 붙고 대기 표시도 정리된다. findByText 는 쓰지 않는다 — 타이핑이 끝나면
+    // 스트리밍 span 이 마크다운 렌더로 교체돼, 먼저 잡은 노드가 분리된 상태로 넘어온다.
+    await waitFor(() => expect(screen.getByText(answer)).toBeInTheDocument())
+    await waitFor(() => expect(generatingRooms()).toEqual([]))
   })
 
   it('다른 대화가 생성 중이면 이유를 밝히고 전송을 막는다', async () => {
