@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -115,6 +115,51 @@ describe('SiteHeader', () => {
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '로그인' })).toBeInTheDocument()
+  })
+
+  it('햄버거를 누르면 서비스 이동 메뉴 3개가 열린다', async () => {
+    const user = userEvent.setup()
+    renderHeader()
+
+    await user.click(screen.getByLabelText('메뉴 열기'))
+
+    const drawer = screen.getByRole('dialog', { name: '메뉴' })
+    expect(within(drawer).getByRole('link', { name: '계약 진단' })).toHaveAttribute(
+      'href',
+      '/analyze',
+    )
+    expect(within(drawer).getByRole('link', { name: '위험 보고서' })).toHaveAttribute(
+      'href',
+      '/risk-report',
+    )
+    expect(within(drawer).getByRole('link', { name: 'AI 챗봇' })).toHaveAttribute('href', '/chat')
+  })
+
+  it('햄버거 메뉴는 서비스 이동만 담당한다 (설정·로그아웃·대화기록 없음)', async () => {
+    signedIn()
+    const user = userEvent.setup()
+    renderHeader()
+
+    await user.click(screen.getByLabelText('메뉴 열기'))
+
+    const drawer = screen.getByRole('dialog', { name: '메뉴' })
+    expect(within(drawer).queryByText('설정')).not.toBeInTheDocument()
+    expect(within(drawer).queryByText('로그아웃')).not.toBeInTheDocument()
+    expect(within(drawer).queryByText('대화기록')).not.toBeInTheDocument()
+  })
+
+  it('햄버거 메뉴의 링크를 누르면 이동하고 메뉴가 닫힌다', async () => {
+    signedIn()
+    const user = userEvent.setup()
+    renderApp('/')
+
+    await user.click(screen.getByLabelText('메뉴 열기'))
+    await user.click(
+      within(screen.getByRole('dialog', { name: '메뉴' })).getByRole('link', { name: 'AI 챗봇' }),
+    )
+
+    expect(await screen.findByText('채팅 화면')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '메뉴' })).not.toBeInTheDocument()
   })
 
   it('보호 화면에서 로그아웃하면 로그인 화면이 아니라 홈으로 이동한다', async () => {

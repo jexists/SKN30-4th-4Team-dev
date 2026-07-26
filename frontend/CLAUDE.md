@@ -17,7 +17,7 @@
 ## 폴더 역할
 
 - `pages/` — 화면 단위 (라우트에 연결). 지금은 이름 텍스트만 있는 **스텁**.
-- `components/` — 재사용 컴포넌트 (현재 `SiteHeader`·`SiteFooter`·`HealthStatus`·`icons`).
+- `components/` — 재사용 컴포넌트 (`SiteHeader`·`SiteFooter`·`Modal`·`Drawer`·`Toast`·`ErrorModal`·`ErrorState`·`LegalDoc`·`RequireAuth`·`HealthStatus`·`icons`). 전체 목록·용도는 `design.md` §16.
 - `hooks/` — 커스텀 훅. `api/` — 백엔드 호출 래퍼. `types/` — 공용 타입. `styles/` — 전역 SCSS·토큰.
 - `config/` — 앱 전역 설정. **`import.meta.env` 는 `config/env.ts` 에서만 읽고**, 서비스명은 `BRAND` 를 쓰고 하드코딩하지 않는다.
 - `routes.tsx` — URL ↔ 페이지 매핑. `App.tsx` — 공통 레이아웃.

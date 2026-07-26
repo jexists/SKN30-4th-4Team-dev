@@ -5,18 +5,23 @@ import { ApiError } from '../../api/client'
 import { sendChat, type ChatTurn } from '../../api/chat'
 import { addMessage, createRoom, listMessages, listRooms, type ChatRoom } from '../../api/chatHistory'
 import { isRetryable } from '../../api/apiErrorHandler'
+import { Drawer } from '../../components/Drawer/Drawer'
 import { ErrorState } from '../../components/ErrorState/ErrorState'
-import { Chat as ChatIcon, ChevronDown, Close, Info } from '../../components/icons'
+import { Close, Info } from '../../components/icons'
 import { isAuthConfigured } from '../../config/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { useHideOnScrollDown } from '../../hooks/useHideOnScrollDown'
+import { useIsMobile } from '../../hooks/useMediaQuery'
 import { ChatComposer } from './ChatComposer'
-import { ChatRoomItem } from './ChatRoomItem'
+import { ChatHistoryPanel } from './ChatHistoryPanel'
+import { ChatMobileActions } from './ChatMobileActions'
+import { ChatSuggestTopics } from './ChatSuggestTopics'
 import { DeleteRoomModal } from './DeleteRoomModal'
 import { EmptyState } from './EmptyState'
 import { MessageList } from './MessageList'
 import { RenameRoomModal } from './RenameRoomModal'
 import { groupRoomsByDate } from './roomGroups'
-import { TOPICS, topicById } from './topics'
+import { topicById } from './topics'
 import type { Message } from './types'
 import styles from './Chat.module.scss'
 
@@ -54,6 +59,14 @@ export function Chat() {
   const { chatId } = useParams<{ chatId: string }>()
   const persistent = isAuthed && isAuthConfigured // 로그인 + Supabase 설정 시 DB 저장
   const activeRoomId = chatId ?? null
+
+  // 좁은 화면에서는 사이드바 대신 드로어로 같은 목록을 보여준다. CSS 로 감추지 않고
+  // 마운트 자체를 가르는 이유는 무한스크롤 sentinel 이 둘이 되면 안 되기 때문이다.
+  const isMobile = useIsMobile()
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // 떠 있는 액션은 대화 위에 겹치므로, 읽으려고 내릴 때는 비켜 준다.
+  const { hidden: actionsHidden, onScroll: onThreadScroll, reveal: revealActions } =
+    useHideOnScrollDown()
 
   // 방 목록(커서 페이지네이션)
   const [rooms, setRooms] = useState<ChatRoom[]>([])
@@ -93,7 +106,8 @@ export function Chat() {
   const lastQuestion = useRef('')
   const activeRoomIdRef = useRef<string | null>(activeRoomId)
   const createdRoomIdRef = useRef<string | null>(null)
-  const sidebarRef = useRef<HTMLElement>(null)
+  // 목록 무한스크롤의 스크롤 컨테이너. 사이드바·드로어 중 지금 마운트된 쪽이 채운다.
+  const roomsScrollRef = useRef<HTMLDivElement>(null)
   const roomsSentinel = useRef<HTMLDivElement>(null)
   // pendingRooms 는 리렌더 후에야 반영된다 — 연타로 두 요청이 새는 걸 막으려면 즉시 잠가야 한다.
   const generatingRef = useRef(false)
@@ -230,12 +244,15 @@ export function Chat() {
     }
   }, [activeRoomId, persistent, messagesReloadKey])
 
-  // 방 목록 무한스크롤 — 사이드바 목록 끝 sentinel.
+  // 방 목록 무한스크롤 — 목록 끝 sentinel.
   // 실패했으면 관찰을 멈춘다. sentinel 이 계속 보이는 상태라 그냥 두면 실패한 요청을
   // 무한히 다시 쏜다(오류 모달도 그만큼 다시 뜬다) — "다시 시도" 를 누를 때 재개한다.
+  //
+  // isMobile·historyOpen 이 의존성에 있는 이유: 목록이 사이드바에서 드로어로 옮겨가면
+  // 두 ref 가 새 DOM 으로 바뀐다. 다시 실행하지 않으면 사라진 옛 노드를 계속 관찰한다.
   useEffect(() => {
     const sentinel = roomsSentinel.current
-    const root = sidebarRef.current
+    const root = roomsScrollRef.current
     if (!sentinel || !root || !roomsCursor || roomsError !== null) return
     const io = new IntersectionObserver(
       (entries) => {
@@ -255,9 +272,22 @@ export function Chat() {
     )
     io.observe(sentinel)
     return () => io.disconnect()
-  }, [roomsCursor, loadingRooms, roomsError])
+  }, [roomsCursor, loadingRooms, roomsError, isMobile, historyOpen])
+
+  // 넓어지면 열려 있던 드로어를 정리한다 — 사이드바가 돌아오는데 겹쳐 남으면 안 된다.
+  useEffect(() => {
+    if (!isMobile) setHistoryOpen(false)
+  }, [isMobile])
+
+  // 대화가 바뀌면 스크롤도 처음부터다 — 감춰둔 액션을 다시 꺼내지 않으면 들어간 채로 남는다.
+  useEffect(() => {
+    revealActions()
+  }, [activeRoomId, revealActions])
+
+  const closeHistory = useCallback(() => setHistoryOpen(false), [])
 
   function newChat() {
+    setHistoryOpen(false)
     setTopicId(null) // 첫 화면을 고르기 전 상태로 되돌린다.
     if (activeRoomId) {
       navigate('/chat')
@@ -278,8 +308,11 @@ export function Chat() {
     }
   }
 
+  // 대화를 고르면 드로어만 닫는다. 활성 대화의 기준은 URL 이므로 채팅 영역은 그 자리에서
+  // 내용만 바뀐다(화면 이동·리마운트 없음).
   const openRoom = useCallback(
     (roomId: string) => {
+      setHistoryOpen(false)
       if (roomId === activeRoomIdRef.current) return
       void navigate(`/chat/${encodeURIComponent(roomId)}`)
     },
@@ -292,6 +325,7 @@ export function Chat() {
    */
   const selectTopic = useCallback(
     (id: string) => {
+      setHistoryOpen(false)
       if (activeRoomIdRef.current) {
         // 대화를 보고 있으면 바꿀 Hero 가 화면에 없다 — 새 대화 화면으로 나가 그 주제를 보여준다.
         setTopicId(id)
@@ -482,95 +516,53 @@ export function Chat() {
   const showEmpty =
     activeRoomId === null && messages.length === 0 && !openingRoom && !sending
 
+  // 데스크탑 사이드바와 모바일 드로어가 **같은 목록 컴포넌트**를 쓴다 — 담는 그릇만 다르다.
+  const historyPanel = (
+    <ChatHistoryPanel
+      variant={isMobile ? 'drawer' : 'sidebar'}
+      persistent={persistent}
+      groups={groups}
+      isEmpty={rooms.length === 0}
+      roomsError={roomsError}
+      hasMoreRooms={roomsCursor !== null}
+      activeRoomId={activeRoomId}
+      pendingRooms={pendingRooms}
+      scrollRef={roomsScrollRef}
+      sentinelRef={roomsSentinel}
+      onNewChat={newChat}
+      onOpenRoom={openRoom}
+      onRenameRoom={handleRename}
+      onDeleteRoom={handleDelete}
+      onRetryRooms={retryRooms}
+      footer={
+        <ChatSuggestTopics
+          topicId={topicId}
+          open={suggestOpen}
+          onToggle={() => setSuggestOpen((open) => !open)}
+          onSelect={selectTopic}
+        />
+      }
+    />
+  )
+
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
-        {/* ── 사이드바 ── */}
-        <aside className={styles.sidebar} ref={sidebarRef}>
-          <div className={styles.sidebarTop}>
-            <div className={styles.sideHead}>
-              <h2 className={styles.sideTitle}>대화 기록</h2>
-              {persistent && (
-                <button className={styles.newChat} onClick={newChat}>
-                  + 새 대화
-                </button>
-              )}
-            </div>
-
-            {!persistent ? (
-              <p className={styles.sideEmpty}>로그인하면 대화가 저장되어 언제든 다시 볼 수 있어요.</p>
-            ) : (
-              <>
-                {groups.map((group) => (
-                  <div key={group.label} className={styles.historyGroup}>
-                    <h3 className={styles.historyGroupLabel}>{group.label}</h3>
-                    <ul className={styles.historyList}>
-                      {group.rooms.map((room) => (
-                        <ChatRoomItem
-                          key={room.id}
-                          room={room}
-                          active={activeRoomId === room.id}
-                          generating={pendingRooms.has(room.id)}
-                          onOpen={openRoom}
-                          onRename={handleRename}
-                          onDelete={handleDelete}
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-                {/* 무한스크롤 감시 지점은 날짜 그룹 목록과 분리해 유효한 마크업을 유지한다. */}
-                {roomsCursor && <div ref={roomsSentinel} className={styles.roomsSentinel} />}
-
-                {/* 실패가 Empty State 를 이긴다 — 서버 장애를 "대화가 없다" 로 보여주면 안 된다. */}
-                {roomsError !== null ? (
-                  <ErrorState
-                    message="대화 기록을 불러오지 못했습니다."
-                    onRetry={isRetryable(roomsError) ? retryRooms : undefined}
-                  />
-                ) : rooms.length === 0 ? (
-                  // 목록은 최대한 조용하게 — 안내는 가운데 Hero 가 이미 하고 있다.
-                  <div className={styles.roomsEmpty}>
-                    <ChatIcon className={styles.roomsEmptyIcon} />
-                    <p className={styles.roomsEmptyText}>대화가 없습니다.</p>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </div>
-
-          <div className={styles.suggest}>
-            <button
-              type="button"
-              className={styles.suggestToggle}
-              aria-expanded={suggestOpen}
-              aria-controls="chat-suggest-chips"
-              onClick={() => setSuggestOpen((open) => !open)}
-            >
-              <h3 className={styles.suggestTitle}>추천 주제</h3>
-              <ChevronDown
-                className={`${styles.suggestChevron} ${
-                  suggestOpen ? styles.suggestChevronOpen : ''
-                }`}
-              />
-            </button>
-            {suggestOpen && (
-              <div id="chat-suggest-chips" className={styles.chips}>
-                {TOPICS.map((topic) => (
-                  <button
-                    key={topic.id}
-                    type="button"
-                    className={`${styles.chip} ${topicId === topic.id ? styles.chipActive : ''}`}
-                    aria-pressed={topicId === topic.id}
-                    onClick={() => selectTopic(topic.id)}
-                  >
-                    {topic.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </aside>
+        {/* ── 대화 기록: 넓으면 사이드바, 좁으면 FAB → 드로어 ── */}
+        {isMobile ? (
+          <>
+            <ChatMobileActions
+              hidden={actionsHidden}
+              onOpenHistory={() => setHistoryOpen(true)}
+              onNewChat={newChat}
+            />
+            <Drawer open={historyOpen} onClose={closeHistory} title="대화기록">
+              {historyPanel}
+            </Drawer>
+          </>
+        ) : (
+          <aside className={styles.sidebar}>{historyPanel}</aside>
+        )}
 
         {/* ── 채팅 영역 ── */}
         <section className={styles.chat}>
@@ -605,6 +597,7 @@ export function Chat() {
               topic={topicById(topicId)}
               disabled={busyElsewhere}
               onExample={(q) => void submitQuestion(q)}
+              onScroll={isMobile ? onThreadScroll : undefined}
             />
           ) : (
             <MessageList
@@ -618,6 +611,7 @@ export function Chat() {
               onLoadOlder={loadOlder}
               onStreamingDone={onStreamingDone}
               onRegenerate={regenerate}
+              onScroll={isMobile ? onThreadScroll : undefined}
             />
           )}
 

@@ -8,6 +8,8 @@
   display: flex;
   flex-direction: column;
   color: v.$ink;
+  // 모바일 FAB 이 이 박스를 기준으로 떠 있는다.
+  position: relative;
 }
 
 .initialLoading {
@@ -93,12 +95,84 @@
     border-color: v.$navy-800;
   }
 }
+/* 드로어에서는 제목을 Drawer 헤더가 이미 그리므로 '+ 새 대화' 만 폭 전체로 놓는다. */
+.sideHeadDrawer {
+  margin-bottom: v.$space-4;
+}
+.newChatBlock {
+  width: 100%;
+  padding: v.$space-3;
+  border-radius: v.$radius;
+  font-size: 14px;
+}
 .sideEmpty {
   margin: 0;
   padding: 4px 2px;
   font-size: 13px;
   line-height: 1.6;
   color: v.$slate;
+}
+
+/* ══════════════ 모바일 떠 있는 액션 ══════════════
+   자리를 예약하지 않고 대화 위에 겹쳐 뜬다 — 좌측 대화기록, 우측 새 채팅.
+   두 버튼 사이의 빈 공간이 대화 클릭을 가로채지 않도록 컨테이너는 포인터를 받지 않는다. */
+.mobileActions {
+  position: absolute;
+  top: v.$space-3;
+  left: v.$space-4;
+  right: v.$space-4;
+  z-index: v.$z-fab;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$space-2;
+  pointer-events: none;
+  transition:
+    transform v.$transition-expand,
+    opacity v.$transition-expand;
+}
+/* 아래로 스크롤하는 동안 위로 걷어낸다(제자리에서 사라지면 튀어 보인다). */
+.mobileActionsHidden {
+  transform: translateY(calc(-100% - #{v.$space-4}));
+  opacity: 0;
+}
+.floatBtn {
+  @include t.button-text-sm;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: v.$space-1;
+  min-height: 38px;
+  padding: v.$space-2 v.$space-4;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-pill;
+  // 대화 글자 위에 겹치므로 뒤가 비쳐 읽기 어려워지지 않게 거의 불투명하게 둔다.
+  background: v.$glass-surface;
+  backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: v.$shadow-fab;
+  color: v.$navy-800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background v.$transition-base,
+    border-color v.$transition-base;
+
+  &:hover {
+    background: v.$surface;
+    border-color: v.$navy-800;
+  }
+  &:active {
+    transform: translateY(1px);
+  }
+}
+.floatBtnIcon,
+.floatBtnChevron {
+  width: v.$space-4;
+  height: v.$space-4;
+  flex-shrink: 0;
+}
+.floatBtnChevron {
+  color: v.$slate-light;
 }
 
 /* 대화가 0건일 때(성공 + 빈 목록). 목록은 심플하게 — 안내는 가운데 Hero 가 한다.
@@ -968,7 +1042,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  // justify-content: center 를 쓰면 안 된다 — 내용이 컨테이너보다 길어질 때 위아래 '양쪽'으로
+  // 넘치는데 스크롤은 아래로만 가므로, 위로 넘친 부분(아이콘·제목)이 영영 잘린다.
+  // 대신 자식의 margin-block: auto 로 중앙에 두면 짧을 땐 가운데, 길 땐 정상 스크롤이 된다.
   padding: v.$space-10 v.$space-6;
   text-align: center;
 }
@@ -980,6 +1056,7 @@
   align-items: center;
   gap: v.$space-4;
   width: 100%;
+  margin-block: auto; // .empty 의 justify-content 를 대신하는 안전한 세로 중앙 정렬
   animation: heroFade v.$transition-slow; // 0.2s ease
 }
 @keyframes heroFade {
@@ -1065,15 +1142,39 @@
   }
 }
 
+/* 케밥은 hover 로만 나타난다 — 터치 기기에는 hover 가 없어 제목 수정·삭제에
+   영영 닿을 수 없으므로 항상 보여준다. */
+@media (hover: none) {
+  .roomMenuTrigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 /* ══════════════ 반응형 ══════════════ */
-@media (max-width: 820px) {
+/* 사이드바는 JS(useIsMobile)가 아예 마운트하지 않지만, 스타일만으로도 어긋나지 않도록
+   같은 브레이크포인트를 남겨 둔다. hooks/useMediaQuery.ts 의 MOBILE_QUERY 와 같은 값. */
+@media (max-width: v.$bp-lg) {
   .sidebar {
     display: none;
   }
   .notice,
   .thread,
   .composer {
-    padding-inline: 20px;
+    padding-inline: v.$space-5;
+  }
+  // 떠 있는 액션은 자리를 예약하지 않고 겹쳐 뜬다. 대신 스크롤 컨테이너 '안쪽'에 여백을 줘,
+  // 맨 위에서는 첫 메시지가 가리지 않고 내려가면 그 아래로 자연스럽게 지나가게 한다.
+  .thread {
+    padding-top: v.$space-14;
+  }
+  // 고지 바가 있으면 액션이 그 위에 겹친다 — 문구가 가리지 않도록 아래로 내린다.
+  .notice {
+    padding-top: v.$space-14;
+  }
+  // 첫 화면도 같은 값으로 — 버튼 아래 끝(12 + 38 = 50px)보다 짧으면 Hero 를 덮는다.
+  .empty {
+    padding-top: v.$space-14;
   }
 }
 @media (max-width: v.$bp-md) {

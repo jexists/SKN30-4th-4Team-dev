@@ -321,6 +321,27 @@ export const MoreVertical = ({ className }: IconProps) => (
   </svg>
 )
 
+/** 가로 더보기(⋯) — 확장형 액션 버튼의 초기 상태. 점 렌더링 이유는 MoreVertical 참고. */
+export const MoreHorizontal = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <circle cx="5" cy="12" r="1.75" />
+    <circle cx="12" cy="12" r="1.75" />
+    <circle cx="19" cy="12" r="1.75" />
+  </svg>
+)
+
+/** 햄버거(☰) — 모바일 헤더의 서비스 이동 메뉴. */
+export const Menu = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="M4 7h16M4 12h16M4 17h16"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
 export const Trash = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
     <path
@@ -380,6 +401,18 @@ export const ChevronDown = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
     <path
       d="m6 9 6 6 6-6"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+export const ChevronRight = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="m9 6 6 6-6 6"
       stroke="currentColor"
       strokeWidth="1.8"
       strokeLinecap="round"

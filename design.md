@@ -88,6 +88,15 @@
 |---|---|---|
 | `$avatar-gradient` | `linear-gradient(135deg, #b6c1de, #7f8fb8)` | 사용자 아바타 |
 
+### 겹쳐 뜨는 표면
+
+| 토큰 | 값 | 용도 |
+|---|---|---|
+| `$glass-surface` | `rgba(255, 255, 255, 0.92)` | 콘텐츠 위에 겹쳐 뜨는 버튼·바. `backdrop-filter` 와 함께 사용 |
+
+> 겹쳐 뜨는 표면은 **거의 불투명하게** 둡니다. 뒤 글자가 비치면 버튼 글씨와 본문이 섞여
+> 둘 다 읽기 어려워집니다. 투명도는 "떠 있다"를 알리는 정도까지만 씁니다.
+
 ---
 
 ## 2. Typography
@@ -206,6 +215,7 @@
 | `$shadow-modal` | 모달 다이얼로그 |
 | `$shadow-btn-primary` | Primary 버튼 |
 | `$shadow-toast` | 토스트 |
+| `$shadow-fab` | 콘텐츠 위에 떠 있는 액션 버튼 (챗 모바일 액션) |
 
 ---
 
@@ -224,20 +234,25 @@
 | `$z-fab` | 40 | 플로팅 액션 버튼 |
 | `$z-header` | 50 | 사이트 헤더 (sticky) |
 | `$z-menu` | 60 | 팝오버·유저 메뉴 |
+| `$z-drawer` | 90 | 좌측 슬라이드 드로어 |
 | `$z-modal` | 100 | 모달 백드롭 |
 | `$z-toast` | 200 | 토스트 |
+
+> `$z-drawer` 가 `$z-modal` 보다 **낮아야** 합니다. 드로어 안의 목록에서 제목 수정·삭제 모달이
+> 열리므로, 순서가 뒤집히면 모달이 드로어에 가려집니다.
 
 ---
 
 ## 8. Transition
 
-hover·클릭 등 마이크로 인터랙션은 아래 세 개만 사용합니다.
+hover·클릭 등 마이크로 인터랙션은 아래 네 개만 사용합니다.
 
 | 토큰 | 값 | 용도 |
 |---|---|---|
 | `$transition-fast` | `0.12s ease` | 클릭 반응 (transform) |
 | `$transition-base` | `0.15s ease` | 기본 hover (색·배경) |
 | `$transition-slow` | `0.2s ease` | 슬라이드·페이드 |
+| `$transition-expand` | `0.22s cubic-bezier(0.32, 0.72, 0, 1)` | 폭이 늘어나는 전환 (드로어 진입, 확장형 버튼) |
 
 반드시 `@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }` 를 페이지 하단에 두세요 (이미 여러 페이지에 적용됨).
 
@@ -254,6 +269,22 @@ hover·클릭 등 마이크로 인터랙션은 아래 세 개만 사용합니다
 | `$bp-2xl` | 1120px | 콘텐츠 최대폭 |
 
 `@media (max-width: v.$bp-md)` 형식으로 사용하세요.
+
+### 모바일 전환 기준 — `$bp-lg` (820px)
+
+데스크탑 네비/사이드바가 사라지고 햄버거·드로어로 바뀌는 지점은 **`$bp-lg` 하나**로 통일합니다.
+헤더와 챗 화면이 서로 다른 지점에서 전환되면 그 사이 폭에서 이동 수단이 통째로 사라집니다.
+
+### JS 에서 화면 크기로 분기할 때
+
+CSS 로 감출 수 없는 경우(중복 마운트가 부작용을 만드는 경우)에만 JS 로 분기하고,
+**반드시 `hooks/useMediaQuery` 의 `useIsMobile()`** 을 씁니다. 쿼리 문자열은 그 파일의
+`MOBILE_QUERY` 한 곳에서만 관리하며, 값을 바꿀 때는 `$bp-lg` 와 **함께** 고칩니다.
+
+```tsx
+const isMobile = useIsMobile()
+{isMobile ? <Drawer …>{panel}</Drawer> : <aside>{panel}</aside>}
+```
 
 ---
 
@@ -363,6 +394,7 @@ hover·클릭 등 마이크로 인터랙션은 아래 세 개만 사용합니다
 | `SiteHeader` | `components/SiteHeader/` | 상단 sticky 헤더 (로고·네비·유저 메뉴) |
 | `SiteFooter` | `components/SiteFooter/` | 하단 다크 푸터 / compact 스트립 |
 | `Modal` | `components/Modal/` | 다이얼로그 (헤더·바디·백드롭·ESC 닫힘, 초기 포커스 지정 가능) |
+| `Drawer` | `components/Drawer/` | 좌측 슬라이드 오버레이. 모바일 네비·챗 대화기록 공용 (`open`·`onClose`·`title`) |
 | `Toast` (`Toaster`) | `components/Toast/` | 알림 (success/error/info) |
 | `LegalDoc` | `components/LegalDoc/` | 약관·개인정보 문서 프레임 (blocks 포함) |
 | `HealthStatus` | `components/HealthStatus/` | 백엔드 헬스 체크 칩 (dev only) |
@@ -374,6 +406,22 @@ hover·클릭 등 마이크로 인터랙션은 아래 세 개만 사용합니다
 > **API 실패는 Empty State 로 그리지 않는다.** "데이터가 없습니다" 는 성공 응답의 0건 전용이고,
 > 실패한 영역에는 `<ErrorState />` 를 놓는다(원인 안내는 `ErrorModal` 이 맡음). 자세한 규칙은
 > `frontend/CLAUDE.md` 의 「API 에러 처리」 참고.
+
+관련 훅 (`frontend/src/hooks/*`):
+
+| 훅 | 용도 |
+|---|---|
+| `useOverlayDismiss` | 화면을 덮는 오버레이 공통 동작 — ESC 닫기·포커스 트랩·배경 스크롤 잠금·포커스 복원. `Modal`·`Drawer` 가 공유 |
+| `useMediaQuery` / `useIsMobile` | 화면 크기 분기 (§9 참고) |
+| `useHideOnScrollDown` | 아래로 스크롤하면 감추고 위로 올리면 되돌리는 토글. 콘텐츠 위에 겹쳐 뜨는 요소에 사용 |
+
+> **콘텐츠 위에 겹쳐 뜨는 요소는 자리를 예약하지 말고 비켜나게 만듭니다.** 상단에 빈 띠를
+> 남겨 두면 좁은 화면에서 그만큼 대화가 줄어듭니다. `useHideOnScrollDown` 으로 읽는 동안
+> 걷어내고, 스크롤 컨테이너 **안쪽** padding 으로 맨 위에서만 첫 줄이 가리지 않게 합니다.
+
+> **데스크탑과 모바일이 같은 목록을 보여줘야 하면 컴포넌트를 하나만 만들고 그릇만 바꾼다.**
+> 예: 챗 대화기록은 `pages/Chat/ChatHistoryPanel` 하나를 데스크탑 `<aside>` 와 모바일 `<Drawer>`
+> 가 그대로 재사용한다. 레이아웃 차이는 `variant` prop 한 개로만 흡수한다.
 
 ### 향후 컴포넌트화 계획 (rule of three 충족)
 
@@ -414,6 +462,10 @@ hover·클릭 등 마이크로 인터랙션은 아래 세 개만 사용합니다
 - ❌ 컴포넌트 안에서 로컬 버튼/인풋을 새로 만드는 것 (이미 존재 여부 확인 필수).
 - ❌ 인라인 스타일 (`style={{ color: '#xxx' }}`) — 항상 CSS Modules.
 - ❌ Tailwind class — 이 프로젝트는 SCSS Modules 만 사용합니다.
+- ❌ **hover 로만 나타나는 조작 버튼.** 터치 기기에는 hover 가 없어 기능에 영영 닿을 수 없습니다.
+  `opacity: 0` + `:hover` 패턴을 쓸 거면 `@media (hover: none)` 에서 항상 보이게 열어 두세요.
+- ❌ **좁은 화면에서 UI 를 `display: none` 으로 지우고 대체 수단을 두지 않는 것.**
+  네비게이션·목록을 감출 거면 햄버거·FAB·드로어 같은 대체 진입점을 반드시 함께 만듭니다.
 
 ---
 

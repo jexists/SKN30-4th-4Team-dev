@@ -1,7 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../api/client'
 import { BRAND } from '../../config/env'
@@ -107,8 +107,30 @@ function renderChat(path: string) {
   )
 }
 
+/** 모바일 레이아웃으로 전환한다 — useIsMobile 이 보는 matchMedia 를 갈아끼운다. */
+function mobileViewport() {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}
+
+let desktopMatchMedia: typeof window.matchMedia
+
 beforeAll(() => {
   HTMLElement.prototype.scrollTo = vi.fn()
+  desktopMatchMedia = window.matchMedia // setup.ts 의 기본 스텁(= 데스크탑)
+})
+
+afterEach(() => {
+  window.matchMedia = desktopMatchMedia
 })
 
 beforeEach(() => {
@@ -659,5 +681,136 @@ describe('Chat URL routing', () => {
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent('/chat')
     })
+  })
+})
+
+describe('Chat 모바일 대화기록', () => {
+  beforeEach(() => {
+    mobileViewport()
+  })
+
+  it('사이드바 대신 떠 있는 액션을 보여주고 목록은 감춘다', async () => {
+    renderChat('/chat')
+
+    expect(await screen.findByRole('button', { name: '대화기록' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '새 채팅' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '첫 번째 대화' })).not.toBeInTheDocument()
+  })
+
+  it('대화기록을 누르면 데스크탑과 같은 목록이 드로어에 담긴다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat')
+
+    await user.click(await screen.findByRole('button', { name: '대화기록' }))
+
+    // 날짜 그룹·항목·새 대화·추천 주제까지 사이드바와 같은 구성이 드로어 안에 들어온다.
+    const drawer = within(screen.getByRole('dialog', { name: '대화기록' }))
+    expect(drawer.getByRole('heading', { name: '오늘' })).toBeInTheDocument()
+    expect(drawer.getByRole('heading', { name: '어제' })).toBeInTheDocument()
+    expect(drawer.getByRole('button', { name: '첫 번째 대화' })).toBeInTheDocument()
+    expect(drawer.getByRole('button', { name: '+ 새 대화' })).toBeInTheDocument()
+    expect(drawer.getByRole('button', { name: /추천 주제/ })).toBeInTheDocument()
+    // 제목은 드로어 헤더가 그리므로 목록이 또 그리지 않는다.
+    expect(drawer.queryByRole('heading', { name: '대화 기록' })).not.toBeInTheDocument()
+  })
+
+  it('대화를 고르면 드로어만 닫히고 채팅 내용이 그 대화로 바뀐다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat')
+
+    await user.click(await screen.findByRole('button', { name: '대화기록' }))
+    await user.click(
+      within(screen.getByRole('dialog', { name: '대화기록' })).getByRole('button', {
+        name: '두 번째 대화',
+      }),
+    )
+
+    expect(screen.queryByRole('dialog', { name: '대화기록' })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-b')
+    })
+    expect(await screen.findByText('room-b 질문')).toBeInTheDocument()
+  })
+
+  it('드로어에서도 대화가 0건이면 같은 빈 상태를 보여준다', async () => {
+    api.listRooms.mockResolvedValueOnce({ items: [], next_cursor: null })
+    const user = userEvent.setup()
+    renderChat('/chat')
+
+    await user.click(await screen.findByRole('button', { name: '대화기록' }))
+
+    expect(
+      within(screen.getByRole('dialog', { name: '대화기록' })).getByText('대화가 없습니다.'),
+    ).toBeInTheDocument()
+  })
+
+  it('드로어에서 목록 조회 실패는 빈 상태가 아니라 ErrorState 로 그린다', async () => {
+    api.listRooms.mockRejectedValueOnce(
+      new ApiError('서버 오류', '잠시 후 다시 시도해 주세요.', 500),
+    )
+    const user = userEvent.setup()
+    renderChat('/chat')
+
+    await user.click(await screen.findByRole('button', { name: '대화기록' }))
+
+    const drawer = within(screen.getByRole('dialog', { name: '대화기록' }))
+    expect(drawer.getByText('대화 기록을 불러오지 못했습니다.')).toBeInTheDocument()
+    expect(drawer.queryByText('대화가 없습니다.')).not.toBeInTheDocument()
+  })
+
+  it('드로어의 + 새 대화 를 누르면 드로어가 닫힌다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat/room-a')
+
+    await user.click(await screen.findByRole('button', { name: '대화기록' }))
+    await user.click(
+      within(screen.getByRole('dialog', { name: '대화기록' })).getByRole('button', {
+        name: '+ 새 대화',
+      }),
+    )
+
+    expect(screen.queryByRole('dialog', { name: '대화기록' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/chat$/))
+  })
+
+  it('떠 있는 새 채팅 버튼은 드로어를 열지 않고 바로 새 대화로 간다', async () => {
+    const user = userEvent.setup()
+    renderChat('/chat/room-a')
+
+    await user.click(await screen.findByRole('button', { name: '새 채팅' }))
+
+    expect(screen.queryByRole('dialog', { name: '대화기록' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/chat$/))
+  })
+
+  it('아래로 스크롤하면 액션이 비켜났다가 위로 올리면 돌아온다', async () => {
+    renderChat('/chat/room-a')
+    await screen.findByText('room-a 질문')
+
+    const actions = screen.getByRole('button', { name: '대화기록' }).parentElement as HTMLElement
+    expect(actions).toHaveAttribute('aria-hidden', 'false')
+
+    const thread = screen.getByTestId('message-scroll')
+    fireEvent.scroll(thread, { target: { scrollTop: 300 } })
+    await waitFor(() => expect(actions).toHaveAttribute('aria-hidden', 'true'))
+
+    fireEvent.scroll(thread, { target: { scrollTop: 120 } })
+    await waitFor(() => expect(actions).toHaveAttribute('aria-hidden', 'false'))
+  })
+
+  // 빈 화면도 자체 스크롤 컨테이너다 — 연결을 빠뜨리면 버튼이 Hero 를 계속 덮는다.
+  it('새 채팅 화면에서도 스크롤하면 액션이 비켜난다', async () => {
+    renderChat('/chat')
+
+    const actions = (await screen.findByRole('button', { name: '대화기록' }))
+      .parentElement as HTMLElement
+    const empty = screen.getByRole('heading', { name: '무엇을 도와드릴까요?' })
+      .parentElement?.parentElement as HTMLElement
+
+    fireEvent.scroll(empty, { target: { scrollTop: 300 } })
+    await waitFor(() => expect(actions).toHaveAttribute('aria-hidden', 'true'))
+
+    fireEvent.scroll(empty, { target: { scrollTop: 100 } })
+    await waitFor(() => expect(actions).toHaveAttribute('aria-hidden', 'false'))
   })
 })

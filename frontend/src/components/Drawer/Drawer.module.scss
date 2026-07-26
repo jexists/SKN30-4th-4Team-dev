@@ -1,0 +1,90 @@
+@use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: v.$z-drawer;
+  display: flex;
+  background: v.$backdrop;
+  backdrop-filter: blur(2px);
+  animation: fade v.$transition-slow;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(320px, 86vw);
+  height: 100dvh;
+  background: v.$surface;
+  border-right: 1px solid v.$border-default;
+  box-shadow: v.$shadow-modal;
+  outline: none;
+  overflow: hidden;
+  animation: slideIn v.$transition-expand;
+}
+
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$space-4;
+  padding: v.$space-5 v.$space-5 v.$space-4;
+  border-bottom: 1px solid v.$border-subtle;
+}
+.title {
+  @include t.title;
+  margin: 0;
+  color: v.$navy-800;
+}
+.close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: v.$space-8;
+  height: v.$space-8;
+  border: none;
+  border-radius: v.$radius-sm;
+  background: transparent;
+  color: v.$slate;
+  cursor: pointer;
+  transition:
+    background v.$transition-base,
+    color v.$transition-base;
+
+  &:hover {
+    background: v.$page-bg;
+    color: v.$ink;
+  }
+}
+.closeMark {
+  width: v.$space-5;
+  height: v.$space-5;
+}
+
+/* 스크롤은 내용(ChatHistoryPanel 등)이 직접 소유한다 — 무한스크롤 root 가 되어야 하기 때문. */
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .panel {
+    animation: none;
+  }
+}

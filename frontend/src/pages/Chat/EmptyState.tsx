@@ -9,6 +9,8 @@ interface Props {
   onExample: (text: string) => void
   /** 다른 대화가 답변 생성 중 — 눌러도 전송되지 않으므로 비활성으로 보여준다. */
   disabled?: boolean
+  /** 이 화면도 자체 스크롤 컨테이너다 — 겹쳐 뜨는 모바일 액션이 비켜날 수 있게 알린다. */
+  onScroll?: (event: React.UIEvent<HTMLDivElement>) => void
 }
 
 /**
@@ -17,9 +19,9 @@ interface Props {
  * 주제가 바뀌면 key 로 내용을 갈아끼워 페이드가 매번 다시 재생되게 한다 —
  * 페이지 이동 없이 같은 자리에서 내용만 바뀐다는 걸 보여주는 신호다.
  */
-export function EmptyState({ topic, onExample, disabled = false }: Props) {
+export function EmptyState({ topic, onExample, disabled = false, onScroll }: Props) {
   return (
-    <div className={styles.empty}>
+    <div className={styles.empty} onScroll={onScroll}>
       <div key={topic.id} className={styles.emptyHero}>
         <div className={styles.emptyIcon}>
           <Shield />

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { BRAND } from '../../config/env'
 import { useAuth } from '../../hooks/useAuth'
-import { Bell, Clock, Shield } from '../icons'
+import { Drawer } from '../Drawer/Drawer'
+import { Bell, Clock, Menu, Shield } from '../icons'
 import styles from './SiteHeader.module.scss'
 
 const NAV = [
@@ -14,10 +15,24 @@ const NAV = [
 
 export function SiteHeader() {
   const { isAuthed } = useAuth()
+  const [navOpen, setNavOpen] = useState(false)
+  // 드로어의 "이동하면 닫기" effect 의존성이 되므로 identity 를 고정한다.
+  const closeNav = useCallback(() => setNavOpen(false), [])
 
   return (
     <header className={styles.siteHeader}>
       <div className={styles.headerInner}>
+        {/* 좁은 화면에서 .nav 대신 서비스 이동을 담당한다(CSS 로 표시 전환). */}
+        <button
+          type="button"
+          className={styles.menuBtn}
+          aria-label="메뉴 열기"
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen(true)}
+        >
+          <Menu />
+        </button>
+
         <Link to="/" className={styles.brand}>
           <Shield className={styles.brandMark} />
           <span>{BRAND.name}</span>
@@ -36,6 +51,8 @@ export function SiteHeader() {
             </NavLink>
           ))}
         </nav>
+
+        <MobileNavDrawer open={navOpen} onClose={closeNav} />
 
         <div className={styles.headerRight}>
           {isAuthed && (
@@ -63,6 +80,40 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
+  )
+}
+
+/**
+ * 좁은 화면의 서비스 이동 드로어 — 데스크탑 .nav 와 같은 NAV 를 그린다.
+ *
+ * 설정·로그아웃·대화기록은 넣지 않는다. 이동은 여기, 계정은 헤더 우측 UserMenu,
+ * AI 대화 관리는 챗 화면의 FAB 으로 역할을 나눠 둔다.
+ */
+function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { pathname } = useLocation()
+
+  // 뒤로가기 등 링크 클릭 외의 이동에도 닫는다.
+  useEffect(() => {
+    onClose()
+  }, [pathname, onClose])
+
+  return (
+    <Drawer open={open} onClose={onClose} title="메뉴">
+      <nav className={styles.drawerNav}>
+        {NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              isActive ? `${styles.drawerLink} ${styles.drawerLinkActive}` : styles.drawerLink
+            }
+            onClick={onClose}
+          >
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+    </Drawer>
   )
 }
 

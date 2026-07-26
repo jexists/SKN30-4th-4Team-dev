@@ -102,6 +102,10 @@ $orange-soft: #fdece1;
 // 색상 · 그라디언트 (아바타 등 반복 사용)
 $avatar-gradient: linear-gradient(135deg, #b6c1de, #7f8fb8);
 
+// 콘텐츠 위에 겹쳐 뜨는 표면 — 뒤 글자가 비쳐 읽기 어려워지지 않도록 거의 불투명하게 둔다.
+// backdrop-filter 와 함께 쓴다.
+$glass-surface: rgba(255, 255, 255, 0.92);
+
 // 색상 · 브랜드 소셜
 $brand-kakao: #fee500;
 $brand-kakao-text: #191919;
@@ -134,6 +138,7 @@ $shadow-elevated: 0 12px 28px rgba(23, 34, 74, 0.14); // 팝오버·메뉴
 $shadow-modal: 0 16px 48px rgba(15, 23, 42, 0.24); // 모달
 $shadow-btn-primary: 0 8px 20px rgba(15, 26, 53, 0.18); // primary 버튼
 $shadow-toast: 0 8px 28px rgba(15, 23, 42, 0.16);
+$shadow-fab: 0 4px 16px rgba(15, 26, 53, 0.12); // 콘텐츠 위에 떠 있는 액션 버튼
 
 // ══════════════ Spacing (4pt scale) ══════════════════════════
 // 페이지·컴포넌트의 padding/margin/gap 은 반드시 이 값에서 고른다.
@@ -180,6 +185,7 @@ $z-sticky: 30; // sticky 요소(예: sidebar-nav)
 $z-fab: 40; // 플로팅 액션 버튼
 $z-header: 50; // 사이트 헤더
 $z-menu: 60; // 팝오버 메뉴
+$z-drawer: 90; // 좌측 슬라이드 드로어 (모달보다 아래 — 드로어 위에서 모달이 열린다)
 $z-modal: 100; // 모달·다이얼로그
 $z-toast: 200; // 토스트
 
@@ -187,3 +193,5 @@ $z-toast: 200; // 토스트
 $transition-fast: 0.12s ease; // 클릭 반응
 $transition-base: 0.15s ease; // 기본 hover
 $transition-slow: 0.2s ease; // 슬라이드·페이드
+// 폭 확장(200~250ms). ease 는 감속이 없어 늘어나는 모션이 뻣뻣하다.
+$transition-expand: 0.22s cubic-bezier(0.32, 0.72, 0, 1);

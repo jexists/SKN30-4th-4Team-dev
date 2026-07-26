@@ -25,6 +25,8 @@ interface Props {
   onLoadOlder: () => void
   onStreamingDone: (id: string) => void
   onRegenerate: () => void
+  /** 스크롤 컨테이너를 밖에서도 관찰해야 할 때(모바일 액션 감춤 등). */
+  onScroll?: (event: React.UIEvent<HTMLDivElement>) => void
 }
 
 function Skeletons() {
@@ -52,6 +54,7 @@ export function MessageList({
   onLoadOlder,
   onStreamingDone,
   onRegenerate,
+  onScroll,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
@@ -160,7 +163,12 @@ export function MessageList({
 
   return (
     <div className={styles.listWrap}>
-      <div className={styles.thread} ref={scrollRef} data-testid="message-scroll">
+      <div
+        className={styles.thread}
+        ref={scrollRef}
+        onScroll={onScroll}
+        data-testid="message-scroll"
+      >
         <div ref={topSentinelRef} className={styles.topSentinel} />
         {isLoadingOlder && (
           <div className={styles.topLoader} aria-label="이전 메시지 불러오는 중">
