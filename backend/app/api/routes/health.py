@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.health import HealthResponse
+from app.services.ingestion import embedder
 
 router = APIRouter(tags=["health"])
 
@@ -17,7 +18,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 def health(db: DbSession) -> ApiResponse[HealthResponse]:
     """서버 + DB 연결 상태 확인 (표준 응답 봉투)."""
     db.execute(text("SELECT 1"))
-    return success_response(HealthResponse(status="ok", db="ok"))
+    return success_response(HealthResponse(status="ok", db="ok", embedder=embedder.status()))
 
 
 @router.get("/hello", response_model=ApiResponse[dict])

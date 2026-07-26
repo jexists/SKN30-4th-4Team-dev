@@ -7,6 +7,8 @@ interface Props {
   topic: Topic
   /** 추천 질문 클릭 → 즉시 전송(새 채팅은 이때 만들어진다). */
   onExample: (text: string) => void
+  /** 다른 대화가 답변 생성 중 — 눌러도 전송되지 않으므로 비활성으로 보여준다. */
+  disabled?: boolean
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * 주제가 바뀌면 key 로 내용을 갈아끼워 페이드가 매번 다시 재생되게 한다 —
  * 페이지 이동 없이 같은 자리에서 내용만 바뀐다는 걸 보여주는 신호다.
  */
-export function EmptyState({ topic, onExample }: Props) {
+export function EmptyState({ topic, onExample, disabled = false }: Props) {
   return (
     <div className={styles.empty}>
       <div key={topic.id} className={styles.emptyHero}>
@@ -27,7 +29,13 @@ export function EmptyState({ topic, onExample }: Props) {
         <p className={styles.emptySubtitle}>{topic.description}</p>
         <div className={styles.emptyCards}>
           {topic.questions.map((q) => (
-            <button key={q} type="button" className={styles.emptyCard} onClick={() => onExample(q)}>
+            <button
+              key={q}
+              type="button"
+              className={styles.emptyCard}
+              disabled={disabled}
+              onClick={() => onExample(q)}
+            >
               {q}
             </button>
           ))}

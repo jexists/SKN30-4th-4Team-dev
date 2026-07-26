@@ -66,6 +66,20 @@ def _get_run_turn():
     return _run_turn
 
 
+def prewarm_engine() -> bool:
+    """기동 시 챗봇 엔진(langchain·langgraph import + 그래프 컴파일)을 미리 로드한다.
+
+    첫 요청이 이 비용을 물지 않게 하려는 것뿐이므로 실패는 삼킨다 — 실제 요청에서
+    _get_run_turn 이 다시 시도하고, 그때도 실패하면 503 을 돌려준다. OPENAI_API_KEY 가
+    없으면 graph_rag 의 ChatOpenAI 생성이 여기서 터지지만 기동은 그대로 계속된다.
+    """
+    try:
+        _get_run_turn()
+    except Exception:
+        return False  # 원인은 _get_run_turn 이 이미 logger.exception 으로 남겼다
+    return True
+
+
 @router.post("/chat", response_model=ApiResponse[ChatResponse])
 def chat(req: ChatRequest) -> ApiResponse[ChatResponse]:
     """한 턴을 처리하고 답변 + 응답시간(ms)을 돌려준다.

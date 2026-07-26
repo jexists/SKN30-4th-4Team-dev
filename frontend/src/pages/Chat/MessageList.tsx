@@ -9,7 +9,10 @@ import styles from './Chat.module.scss'
 
 interface Props {
   messages: Message[]
-  /** AI 응답 대기(생성 중) → 하단 타이핑 인디케이터. */
+  /**
+   * 이 방의 요청이 진행 중(답변 생성 + 저장). 하단 타이핑 인디케이터의 근거지만, 답변이 이미
+   * 붙었으면 저장이 남아도 인디케이터는 내린다(아래 waitingForAnswer).
+   */
   sending: boolean
   /** 방 열기 로딩 → 스켈레톤. */
   isLoading: boolean
@@ -64,6 +67,14 @@ export function MessageList({
   // 사용자가 보낸 직후부터 AI 타이핑이 끝날 때까지는 수동으로 위로 올려도 새 내용과 함께 하단 추적.
   const forceFollow = useRef(false)
   const hasStreaming = messages.some((message) => message.streaming)
+
+  // 답변 말풍선이 붙은 뒤에도 sending 은 DB 저장(addMessage)이 끝날 때까지 true 다. 그대로
+  // 그리면 답변 말풍선과 인디케이터가 함께 보여 봇 말풍선이 두 개로 보인다(타이핑이 아직
+  // 시작 전이면 앞 말풍선은 커서만 있어 더 이상하다). 이 턴의 답변이 이미 마지막에 있으면
+  // 더 기다릴 게 없으므로 인디케이터를 내린다.
+  // 에러 버블은 제외한다 — 재생성 중에는 마지막이 에러 버블이라 계속 기다리는 게 맞다.
+  const last = messages[messages.length - 1]
+  const waitingForAnswer = sending && !(last?.role === 'assistant' && !last.error)
 
   const followGrow = useCallback(() => {
     if (forceFollow.current || atBottomRef.current) scrollToBottom(false)
@@ -173,7 +184,7 @@ export function MessageList({
           ))
         )}
 
-        {sending && (
+        {waitingForAnswer && (
           <div className={styles.msgRow}>
             <div className={styles.botCol}>
               {/* 답변이 도착할 때 라벨이 새로 끼어들어 줄이 밀리지 않도록 대기 중에도 같이 둔다. */}

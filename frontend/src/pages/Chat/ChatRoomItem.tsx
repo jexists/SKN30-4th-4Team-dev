@@ -7,6 +7,8 @@ import styles from './Chat.module.scss'
 type Props = {
   room: ChatRoom
   active: boolean
+  /** 이 방이 답변 생성 중 — 다른 방을 보고 있어도 어디서 일이 돌고 있는지 알려준다. */
+  generating: boolean
   onOpen: (roomId: string) => void
   onRename: (room: ChatRoom) => void
   onDelete: (room: ChatRoom) => void
@@ -16,6 +18,7 @@ type Props = {
 export const ChatRoomItem = memo(function ChatRoomItem({
   room,
   active,
+  generating,
   onOpen,
   onRename,
   onDelete,
@@ -57,13 +60,13 @@ export const ChatRoomItem = memo(function ChatRoomItem({
         onClick={() => onOpen(room.id)}
       >
         <span className={styles.historyTitle}>{title}</span>
+        {/* role=img + label 이라 버튼 이름이 "첫 번째 대화 답변 생성 중" 으로 읽힌다. */}
+        {generating && <span className={styles.historyDot} role="img" aria-label="답변 생성 중" />}
       </button>
 
       <button
         type="button"
-        className={`${styles.roomMenuTrigger} ${
-          menuOpen ? styles.roomMenuTriggerOpen : ''
-        }`}
+        className={`${styles.roomMenuTrigger} ${menuOpen ? styles.roomMenuTriggerOpen : ''}`}
         aria-label="대화 옵션"
         aria-haspopup="menu"
         aria-expanded={menuOpen}

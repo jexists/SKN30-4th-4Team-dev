@@ -177,6 +177,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+// 답변 생성 중인 방 표시. 본문 타이핑 인디케이터와 같은 박자로 뛰게 해 같은 일임을 알린다.
+.historyDot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-left: v.$space-2;
+  border-radius: 50%;
+  background: v.$navy-800;
+  animation: chatBlink 1.2s infinite ease-in-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .historyDot {
+    animation: none;
+  }
+}
 .roomMenuTrigger {
   position: absolute;
   // 한 줄짜리 항목이라 고정 top 대신 중앙에 맞춘다(제목 글꼴이 바뀌어도 따라간다).
@@ -1033,10 +1048,15 @@
     background 0.15s ease,
     transform 0.15s ease;
 
-  &:hover {
+  &:hover:not(:disabled) {
     border-color: v.$navy-800;
     background: #f7f9ff;
     transform: translateY(-2px);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 }
 @media (max-width: 640px) {

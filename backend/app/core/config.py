@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # 둘 다 Postgres 가 아니면 검색이 조용히 꺼진다(빈 결과 → 근거 없는 답변).
     RAG_DB_URL: str = ""
 
+    # 기동 시 임베딩 모델(KURE-v1 ~2GB)과 챗봇 엔진을 백그라운드 데몬 스레드로 미리 로드한다.
+    # 끄면 첫 /api/v1/chat 요청이 그 로드를 대신 물어 10~20초 걸린다. 워밍업은 기동을 막지
+    # 않고, 실패해도 서버는 그대로 뜬다(검색만 빈 결과로 우회).
+    # 테스트·CI 는 반드시 꺼야 한다 — 캐시가 없으면 HuggingFace 에서 2GB 를 내려받는다.
+    WARMUP_ON_STARTUP: bool = True
+
     # 사용자 계약서 OCR/마스킹은 별도 worker에서 실행한다.
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
