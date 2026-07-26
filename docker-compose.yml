@@ -7,6 +7,10 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    volumes:
+      # 임베딩 모델(KURE-v1 ~2GB) 캐시 — 컨테이너를 다시 만들어도 재다운로드하지 않는다.
+      # docker compose down -v 로 볼륨을 지우거나 모델 revision 이 바뀌면 다시 받는다.
+      - hf-cache:/models
     # DB는 Supabase(외부 관리형). Supabase 없이 로컬에서 돌리려면 아래 db 서비스 주석을 풀고
     # backend/.env 의 APP_DB_URL 을 postgresql+psycopg://app:app@db:5432/app 로 설정하세요.
     # depends_on:
@@ -31,5 +35,6 @@ services:
   #   volumes:
   #     - pgdata:/var/lib/postgresql/data
 
-# volumes:
+volumes:
+  hf-cache:
 #   pgdata:

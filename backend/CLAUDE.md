@@ -9,7 +9,7 @@
 - 로컬은 `APP_DB_URL` 미설정 시 SQLite 폴백 — 서버는 뜨지만 대화 기록 API 는 503("대화 기록 사용 불가").
 
 ## 폴더 레이아웃
-- `app/main.py` — 앱 생성, CORS·에러핸들러·로깅 등록, 라우터 `/api/v1` prefix
+- `app/main.py` — 앱 생성, 기동 워밍업(lifespan → 데몬 스레드), CORS·에러핸들러·로깅 등록, 라우터 `/api/v1` prefix
 - `app/api/routes/` — 엔드포인트. `app/api/deps.py` — 공통 의존성(`get_current_user`)
 - `app/core/` — `config`(설정)·`logging`·`exceptions`(에러핸들러)·`security`(JWT 검증)
 - `app/db/` — `base`(DeclarativeBase)·`session`(`get_db`)
@@ -26,6 +26,7 @@
 - **API 경로는 `/api/v1` prefix.**
 - **비밀값(Supabase/API 키) 하드코딩 금지** — `.env`(pydantic-settings)로만.
 - **청킹·임베딩 로직은 `services/ingestion`** 에 두고, 오프라인 배치(`pipeline/`)와 런타임이 공유.
+- **기동 워밍업은 실패해도 기동을 막지 않는다**(fail-soft — 검색은 빈 결과로 우회).
 - **인증**: Supabase Auth 가 로그인·토큰 발급. 백엔드는 `security.verify_token` 으로 **검증만**. 로그인/회원가입 엔드포인트는 만들지 않음.
 
 ## API 응답·에러 처리 정책 (프로젝트 공통)

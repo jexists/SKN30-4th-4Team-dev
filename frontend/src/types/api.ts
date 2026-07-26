@@ -15,4 +15,5 @@ export interface ApiResponse<T> {
 export interface HealthData {
   status: string
   db: string
+  embedder: string
 }

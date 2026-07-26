@@ -31,6 +31,10 @@ uv run uvicorn app.main:app --reload --port 8000
 # → http://localhost:8000   (API 문서: /docs, 헬스체크: /api/v1/health)
 ```
 
+첫 실행에서는 임베딩 모델(KURE-v1, 약 2GB)을 백그라운드로 내려받아 워밍업하므로 준비에
+시간이 걸릴 수 있지만 서버와 헬스체크는 즉시 응답합니다. 백엔드 저장이 잦은 개발 중에는
+`.env`의 `WARMUP_ON_STARTUP=false`로 워밍업을 끌 수 있습니다.
+
 프론트엔드:
 ```bash
 cd frontend
