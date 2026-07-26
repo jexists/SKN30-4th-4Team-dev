@@ -9,3 +9,4 @@
 | [스캐폴딩_계획.md](./스캐폴딩_계획.md) | 초기 구조·기술 결정 사항 + 추가로 할 일 |
 | [setup.md](./setup.md) | 첫 설정·실행 가이드 (Mac/Windows) |
 | [폴더 파일 구조.md](./폴더%20파일%20구조.md) | 폴더/파일 구조 지도 |
+| [ocr-masking.md](./ocr-masking.md) | PaddleOCR-VL 계약서 OCR·마스킹 설계 및 완료 기준 |
