@@ -21,6 +21,7 @@ _작성 예정_
 |------|------|
 | `backend/` | 백엔드 (API 서버) |
 | `frontend/` | 프론트엔드 (웹) |
+| `ocr-worker/` | PaddleOCR-VL 계약서 OCR·마스킹 worker |
 | `data/` | 수집한 데이터 |
 | `docs/` | 프로젝트 문서 |
 | `final/` | 산출물 |
@@ -34,6 +35,7 @@ _작성 예정_
 - 📐 [팀 규칙 (컨벤션)](docs/conventions.md)
 - 🗺️ [스캐폴딩 계획 (결정·할 일)](docs/스캐폴딩_계획.md)
 - 🗂️ [폴더·파일 구조](docs/폴더%20파일%20구조.md)
+- 🔒 [계약서 OCR·개인정보 마스킹](docs/ocr-masking.md)
 
 ## 👥 팀
 _작성 예정_
@@ -42,3 +44,4 @@ _작성 예정_
 ▶ **[시작 가이드 (docs/setup.md)](docs/setup.md)** — 첫 설정·실행 (Mac/Windows)
 - 백엔드: [backend/README.md](backend/README.md)
 - 프론트엔드: [frontend/README.md](frontend/README.md)
+- OCR worker: [ocr-worker/README.md](ocr-worker/README.md)

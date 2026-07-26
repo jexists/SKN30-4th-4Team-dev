@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # 둘 다 Postgres 가 아니면 검색이 조용히 꺼진다(빈 결과 → 근거 없는 답변).
     RAG_DB_URL: str = ""
 
+    # 사용자 계약서 OCR/마스킹은 별도 worker에서 실행한다.
+    OCR_WORKER_URL: str = "http://ocr-worker:8100"
+    OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

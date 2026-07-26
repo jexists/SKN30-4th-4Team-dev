@@ -33,5 +33,10 @@ desktop.ini
 # ===== 임시 작업 디렉터리 =====
 .tmp_*/
 
+# ===== 로컬 OCR 모델·중간 산출물 (대용량/개인정보) =====
+models/
+.ocr-cache/
+.ocr-output/
+
 # ===== Playwright MCP 산출물 (스냅샷·콘솔 로그·스크린샷) =====
 .playwright-mcp/
