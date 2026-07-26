@@ -4,4 +4,5 @@
 주의: DB 테이블은 여기(models/), API 입출력은 schemas/ 로 항상 분리합니다.
 """
 
+from app.models.auth import AppUser, LoginHistory, Profile, UserAgreement  # noqa: F401
 from app.models.chat import ChatMessage, ChatRoom  # noqa: F401

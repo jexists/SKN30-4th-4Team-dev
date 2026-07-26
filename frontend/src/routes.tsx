@@ -6,6 +6,7 @@ import { AccountSettings } from './pages/AccountSettings/AccountSettings'
 import { AddCard } from './pages/AddCard/AddCard'
 import { Analyze } from './pages/Analyze/Analyze'
 import { AnalyzeResult } from './pages/AnalyzeResult/AnalyzeResult'
+import { AuthCallback } from './pages/AuthCallback/AuthCallback'
 import { Chat } from './pages/Chat/Chat'
 import { Home } from './pages/Home/Home'
 import { LegalBasis } from './pages/LegalBasis/LegalBasis'
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Home /> },
       { path: 'login', element: <Login /> },
       { path: 'signup', element: <SignUp /> },
+      { path: 'auth/callback', element: <AuthCallback /> },
       { path: 'onboarding', element: <Onboarding /> },
       { path: 'terms', element: <Terms /> },
       { path: 'privacy', element: <Privacy /> },

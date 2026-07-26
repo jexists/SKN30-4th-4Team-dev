@@ -16,7 +16,9 @@ import { ENV } from './env'
  */
 export const supabase: SupabaseClient | null =
   ENV.supabaseUrl && ENV.supabaseAnonKey
-    ? createClient(ENV.supabaseUrl, ENV.supabaseAnonKey, { auth: { storage: authStorage } })
+    ? createClient(ENV.supabaseUrl, ENV.supabaseAnonKey, {
+        auth: { storage: authStorage, flowType: 'pkce' },
+      })
     : null
 
 /** 인증 설정이 켜져 있는지. */

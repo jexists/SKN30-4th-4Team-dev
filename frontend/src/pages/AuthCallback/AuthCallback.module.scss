@@ -1,0 +1,45 @@
+@use '../../styles/variables' as v;
+
+.page {
+  display: grid;
+  min-height: 70vh;
+  place-items: center;
+  padding: 2rem;
+}
+
+.card {
+  display: grid;
+  max-width: 28rem;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: 2.5rem;
+  border: 1px solid v.$border-default;
+  border-radius: 1.25rem;
+  background: v.$white;
+  text-align: center;
+  box-shadow: v.$shadow-md;
+
+  h1,
+  p {
+    margin: 0;
+  }
+
+  p {
+    color: v.$slate;
+  }
+}
+
+.badge {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border-radius: 50%;
+  background: v.$pill;
+  color: v.$navy-800;
+}
+
+.mark {
+  width: 1.5rem;
+  height: 1.5rem;
+}

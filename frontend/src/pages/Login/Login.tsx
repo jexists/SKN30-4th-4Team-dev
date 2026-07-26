@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
+import { startKakaoOAuth } from '../../auth/kakaoOAuth'
 import { Chat, Shield } from '../../components/icons'
 import { showToast } from '../../components/Toast/toastStore'
 import { keepSignedIn } from '../../config/authStorage'
@@ -23,11 +24,26 @@ export function Login() {
   const [keep, setKeep] = useState(keepSignedIn.get())
   const [submitting, setSubmitting] = useState(false)
 
+  async function handleKakaoLogin() {
+    keepSignedIn.set(keep)
+    setSubmitting(true)
+    try {
+      await startKakaoOAuth(from)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : '카카오 로그인에 실패했습니다. 다시 시도해 주세요.'
+      showToast(message, 'error')
+      setSubmitting(false)
+    }
+  }
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
 
     if (!supabase) {
-      showToast('로그인 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)', 'error')
+      showToast(
+        '로그인 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)',
+        'error',
+      )
       return
     }
     if (!email || !password) {
@@ -102,11 +118,7 @@ export function Login() {
 
             <div className={styles.formRow}>
               <label className={styles.keep}>
-                <input
-                  type="checkbox"
-                  checked={keep}
-                  onChange={(e) => setKeep(e.target.checked)}
-                />
+                <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
                 <span>로그인 상태 유지</span>
               </label>
               <button
@@ -131,7 +143,7 @@ export function Login() {
             <button
               type="button"
               className={`${styles.social} ${styles.kakao}`}
-              onClick={() => showToast(`카카오 로그인은 ${SOON}`, 'info')}
+              onClick={() => void handleKakaoLogin()}
             >
               <Chat className={styles.socialMark} />
               카카오로 로그인

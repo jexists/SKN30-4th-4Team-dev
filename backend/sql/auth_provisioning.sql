@@ -8,6 +8,12 @@ security definer
 set search_path = public
 as $$
 begin
+  -- 카카오 OAuth 성공은 인증 식별자 생성일 뿐, 서비스 약관 동의 전이다.
+  -- app_user가 서비스 회원의 기준이므로 가입 완료 API가 원자적으로 생성한다.
+  if new.raw_app_meta_data->>'provider' = 'kakao' then
+    return new;
+  end if;
+
   insert into public.app_user (id)
     values (new.id)
     on conflict (id) do nothing;

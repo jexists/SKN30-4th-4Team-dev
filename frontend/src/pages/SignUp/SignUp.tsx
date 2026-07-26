@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
+import { completeKakaoSignup } from '../../api/kakaoAuth'
+import { consumeKakaoReturnTo, startKakaoOAuth } from '../../auth/kakaoOAuth'
 import { Chat, Shield } from '../../components/icons'
 import { LegalDocView } from '../../components/LegalDoc/LegalDoc'
 import { Modal } from '../../components/Modal/Modal'
@@ -16,6 +18,8 @@ const SOON = '아직 준비 중인 기능입니다.'
 export function SignUp() {
   const { isAuthed, signIn } = useAuth()
   const navigate = useNavigate()
+  const { search } = useLocation()
+  const isKakao = new URLSearchParams(search).get('mode') === 'kakao'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,8 +34,44 @@ export function SignUp() {
   const pwValid = password.length >= 8
   const pwMatch = confirm.length > 0 && password === confirm
 
+  async function handleKakaoStart() {
+    setSubmitting(true)
+    try {
+      await startKakaoOAuth('/mypage')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : '카카오 회원가입을 시작하지 못했습니다. 다시 시도해 주세요.'
+      showToast(message, 'error')
+      setSubmitting(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+
+    if (isKakao) {
+      if (!agreeRequired) {
+        showToast('필수 약관에 동의해주세요.', 'error')
+        return
+      }
+
+      setSubmitting(true)
+      try {
+        await completeKakaoSignup({
+          nickname: nickname.trim() || null,
+          agree_terms: true,
+          agree_privacy: true,
+          agree_marketing: agreeMarketing,
+        })
+        setDone(true)
+        void navigate(consumeKakaoReturnTo(), { replace: true })
+      } catch {
+        setSubmitting(false)
+      }
+      return
+    }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       showToast('올바른 이메일 주소를 입력해주세요.', 'error')
@@ -50,7 +90,10 @@ export function SignUp() {
       return
     }
     if (!supabase) {
-      showToast('회원가입 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)', 'error')
+      showToast(
+        '회원가입 서비스가 아직 설정되지 않았습니다. (VITE_SUPABASE_* 환경변수 필요)',
+        'error',
+      )
       return
     }
 
@@ -88,7 +131,7 @@ export function SignUp() {
   }
 
   // 이미 로그인한 상태라면 폼을 보여주지 않는다.
-  if (isAuthed) return <Navigate to="/mypage" replace />
+  if (isAuthed && !isKakao) return <Navigate to="/mypage" replace />
 
   return (
     <div className={styles.page}>
@@ -103,20 +146,22 @@ export function SignUp() {
           </div>
 
           <form className={styles.form} onSubmit={handleSubmit} noValidate>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="email">
-                이메일 주소
-              </label>
-              <input
-                id="email"
-                type="email"
-                className={styles.input}
-                placeholder="example@homeshield.co.kr"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            {!isKakao && (
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="email">
+                  이메일 주소
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  className={styles.input}
+                  placeholder="example@homeshield.co.kr"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            )}
 
             <div className={styles.field}>
               <label className={styles.label} htmlFor="nickname">
@@ -134,43 +179,47 @@ export function SignUp() {
               />
             </div>
 
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="password">
-                비밀번호
-              </label>
-              <input
-                id="password"
-                type="password"
-                className={styles.input}
-                placeholder="8자 이상 입력하세요"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              {password.length > 0 && !pwValid && (
-                <span className={`${styles.hint} ${styles.bad}`}>8자 이상이어야 합니다.</span>
-              )}
-            </div>
+            {!isKakao && (
+              <>
+                <div className={styles.field}>
+                  <label className={styles.label} htmlFor="password">
+                    비밀번호
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    className={styles.input}
+                    placeholder="8자 이상 입력하세요"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  {password.length > 0 && !pwValid && (
+                    <span className={`${styles.hint} ${styles.bad}`}>8자 이상이어야 합니다.</span>
+                  )}
+                </div>
 
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="confirm">
-                비밀번호 확인
-              </label>
-              <input
-                id="confirm"
-                type="password"
-                className={styles.input}
-                placeholder="비밀번호를 다시 입력하세요"
-                autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-              />
-              {confirm.length > 0 && (
-                <span className={`${styles.hint} ${pwMatch ? styles.ok : styles.bad}`}>
-                  {pwMatch ? '비밀번호가 일치합니다.' : '비밀번호가 일치하지 않습니다.'}
-                </span>
-              )}
-            </div>
+                <div className={styles.field}>
+                  <label className={styles.label} htmlFor="confirm">
+                    비밀번호 확인
+                  </label>
+                  <input
+                    id="confirm"
+                    type="password"
+                    className={styles.input}
+                    placeholder="비밀번호를 다시 입력하세요"
+                    autoComplete="new-password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                  />
+                  {confirm.length > 0 && (
+                    <span className={`${styles.hint} ${pwMatch ? styles.ok : styles.bad}`}>
+                      {pwMatch ? '비밀번호가 일치합니다.' : '비밀번호가 일치하지 않습니다.'}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className={styles.agreements}>
               {/* 약관 링크는 버튼이라 label 안에 두지 않고 형제로 배치한다. 체크박스는 htmlFor 로 연결. */}
@@ -220,33 +269,37 @@ export function SignUp() {
             </button>
           </form>
 
-          <div className={styles.divider}>
-            <span>또는 SNS로 시작하기</span>
-          </div>
+          {!isKakao && (
+            <>
+              <div className={styles.divider}>
+                <span>또는 SNS로 시작하기</span>
+              </div>
 
-          <div className={styles.socials}>
-            <button
-              type="button"
-              className={`${styles.social} ${styles.kakao}`}
-              onClick={() => showToast(`카카오 회원가입은 ${SOON}`, 'info')}
-            >
-              <Chat className={styles.socialMark} />
-              카카오로 시작하기
-            </button>
-            <button
-              type="button"
-              className={`${styles.social} ${styles.naver}`}
-              onClick={() => showToast(`네이버 회원가입은 ${SOON}`, 'info')}
-            >
-              <span className={styles.naverMark}>N</span>
-              네이버로 시작하기
-            </button>
-          </div>
+              <div className={styles.socials}>
+                <button
+                  type="button"
+                  className={`${styles.social} ${styles.kakao}`}
+                  onClick={() => void handleKakaoStart()}
+                >
+                  <Chat className={styles.socialMark} />
+                  카카오로 시작하기
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.social} ${styles.naver}`}
+                  onClick={() => showToast(`네이버 회원가입은 ${SOON}`, 'info')}
+                >
+                  <span className={styles.naverMark}>N</span>
+                  네이버로 시작하기
+                </button>
+              </div>
 
-          <p className={styles.signin}>
-            이미 회원이신가요?
-            <Link to="/login">로그인</Link>
-          </p>
+              <p className={styles.signin}>
+                이미 회원이신가요?
+                <Link to="/login">로그인</Link>
+              </p>
+            </>
+          )}
         </div>
       </div>
 
