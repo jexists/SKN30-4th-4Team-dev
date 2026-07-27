@@ -22,7 +22,23 @@ npm install
 cp .env.example .env          # Windows(PowerShell): Copy-Item .env.example .env
 ```
 
-## 2. 실행 (개발) — 터미널 2개
+OCR worker:
+```bash
+cd ocr-worker
+uv sync
+cp .env.example .env          # Windows(PowerShell): Copy-Item .env.example .env
+```
+
+`ocr-worker/.env`의 `OCR_VL_MODEL_DIR`에는 로컬 PaddleOCR-VL 모델 경로를 지정합니다.
+
+## 2. 실행 (개발) — 터미널 3개
+
+OCR worker:
+```bash
+cd ocr-worker
+uv run uvicorn app.main:app --reload --port 8100
+# → http://localhost:8100/health
+```
 
 백엔드:
 ```bash
@@ -39,18 +55,22 @@ uv run uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm run dev
-# → http://localhost:5173   (하단에 "백엔드 연결됨" 초록불 확인)
+# → http://localhost:5173/analyze
 ```
+
+`/analyze`에서는 임대차계약서를 포함한 계약 서류 묶음이 필수이고, 등기부등본은
+선택입니다. PDF·JPG·PNG를 파일당 20MB, PDF 20쪽까지 처리합니다.
 
 ## 3. Docker로 한 번에 (선택)
 ```bash
 docker compose up --build
-# 프론트 http://localhost:5173 · 백엔드 http://localhost:8000
+# 프론트 http://localhost:5173 · 백엔드 http://localhost:8000 · OCR worker http://localhost:8100
 ```
 
 ## 4. 테스트 / 린트
 ```bash
 cd backend  && uv run pytest         # 백엔드 테스트
+cd ocr-worker && uv run pytest       # OCR worker 테스트
 cd frontend && npm run test          # 프론트 테스트
 cd frontend && npm run lint          # 프론트 린트
 ```

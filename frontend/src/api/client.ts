@@ -63,7 +63,7 @@ export interface ApiOptions {
 interface RequestOptions extends ApiOptions {
   method?: string
   headers?: Record<string, string>
-  body?: string
+  body?: BodyInit
 }
 
 /**
@@ -128,6 +128,15 @@ export async function apiPost<T>(path: string, body: unknown, options?: ApiOptio
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+/** POST + multipart/form-data. Content-Type 경계값은 브라우저가 자동으로 붙인다. */
+export async function apiPostForm<T>(
+  path: string,
+  body: FormData,
+  options?: ApiOptions,
+): Promise<T> {
+  return request<T>(path, { ...options, method: 'POST', body })
 }
 
 /** PUT + JSON 바디. 표준 응답 봉투를 벗겨 data 반환, 실패면 ApiError. */

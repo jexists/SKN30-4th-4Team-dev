@@ -4,6 +4,9 @@ from pathlib import Path
 from app.core.config import Settings
 from app.document.pdf_renderer import PdfRenderer
 from app.document.preprocessor import preprocess_page
+from app.document.text_layer import extract_text_layer_pages
+from app.extraction.schemas import ExtractionMethod
+from app.extraction.types import RecognizedPage
 from app.inference.engine import DocumentOcrEngine
 from app.masking.coordinate_mapper import MaskRegion, map_match_to_region
 from app.masking.detector import PiiDetector
@@ -17,6 +20,7 @@ class ProcessingResult:
     mask_count: int
     coarse_mask_count: int
     review_required: bool
+    recognized_pages: list[RecognizedPage]
 
 
 class ContractProcessingPipeline:
@@ -29,13 +33,20 @@ class ContractProcessingPipeline:
     def process(self, input_path: Path, work_dir: Path, output_path: Path) -> ProcessingResult:
         rendered_pages = self.renderer.render(input_path, work_dir / "pages")
         pages = [preprocess_page(page) for page in rendered_pages]
+        text_pages = extract_text_layer_pages(input_path, self.renderer.dpi)
         all_regions: list[MaskRegion] = []
         masked_pages: list[Path] = []
+        recognized_pages: list[RecognizedPage] = []
 
         for page in pages:
-            spotted = self.engine.spot_page(page.path, page.index)
+            parsed = text_pages.get(page.index)
+            method = ExtractionMethod.TEXT
+            if parsed is None:
+                parsed = self.engine.spot_page(page.path, page.index)
+                method = ExtractionMethod.OCR
+            recognized_pages.append(RecognizedPage(parsed=parsed, method=method))
             page_regions: list[MaskRegion] = []
-            for region in spotted.regions:
+            for region in parsed.regions:
                 for match in self.detector.detect(region.text):
                     page_regions.append(map_match_to_region(region, match))
                 if region.label.lower() == "seal":
@@ -59,4 +70,5 @@ class ContractProcessingPipeline:
             coarse_mask_count=coarse_count,
             # 글자 단위 좌표가 확정되기 전 coarse 마스킹은 검토 대상으로 둔다.
             review_required=remaining or coarse_count > 0,
+            recognized_pages=recognized_pages,
         )

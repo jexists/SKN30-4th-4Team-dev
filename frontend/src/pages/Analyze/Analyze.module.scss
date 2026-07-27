@@ -1,136 +1,150 @@
 @use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
 
 .page {
   color: v.$ink;
 }
 
 .main {
+  min-height: calc(100vh - #{v.$header-height});
   background: v.$page-bg;
-  min-height: calc(100vh - 66px);
 }
+
 .inner {
   width: 100%;
   max-width: v.$content-max;
-  margin: 0 auto;
-  padding: 52px 24px 72px;
+  margin: v.$space-0 auto;
+  padding: v.$space-12 v.$space-6 v.$space-18;
 }
 
 .pageHead {
-  margin-bottom: 40px;
+  margin-bottom: v.$space-10;
 }
+
 .title {
-  margin: 0;
-  font-size: clamp(28px, 3.4vw, 38px);
-  font-weight: 800;
-  letter-spacing: -0.035em;
+  @include t.h1;
+  margin: v.$space-0;
   color: v.$ink;
 }
+
 .subtitle {
-  margin: 16px 0 0;
+  @include t.body;
   max-width: 44rem;
-  font-size: 16px;
-  line-height: 1.7;
+  margin: v.$space-4 v.$space-0 v.$space-0;
   color: v.$slate;
 }
 
-/* ── 2단 레이아웃 ── */
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
-  gap: 24px;
+  gap: v.$space-6;
   align-items: start;
 }
-.left {
-  display: grid;
-  gap: 24px;
-}
+
+.left,
 .right {
   display: grid;
-  gap: 20px;
+  gap: v.$space-6;
 }
 
-/* ── 업로드 카드 ── */
+.right {
+  gap: v.$space-5;
+}
+
 .uploads {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: v.$space-5;
 }
-.uploadCard {
-  background: v.$surface;
+
+.uploadCard,
+.scoreCard {
+  padding: v.$space-6;
   border: 1px solid v.$border-card;
   border-radius: v.$radius;
-  padding: 26px 24px;
-  box-shadow: 0 1px 2px rgba(15, 26, 53, 0.04);
+  background: v.$surface;
+  box-shadow: v.$shadow-xs;
 }
+
 .uploadHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: v.$space-3;
 
   h2 {
-    margin: 0;
-    font-size: 21px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    @include t.title;
+    margin: v.$space-0;
     color: v.$ink;
   }
 }
+
 .uploadIcon {
   display: grid;
-  place-items: center;
   color: v.$navy-800;
+  place-items: center;
 
   svg {
-    width: 24px;
-    height: 24px;
+    width: v.$space-6;
+    height: v.$space-6;
   }
 }
+
 .uploadHint {
-  margin: 8px 0 20px;
-  font-size: 14px;
+  @include t.caption;
+  margin: v.$space-2 v.$space-0 v.$space-5;
   font-style: italic;
-  color: v.$slate;
 }
+
 .dropzone {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 40px 18px;
-  border: 1.5px dashed #c4cbdd;
-  border-radius: 12px;
+  gap: v.$space-3;
+  min-height: 176px;
+  padding: v.$space-8 v.$space-4;
+  border: 2px dashed v.$border-strong;
+  border-radius: v.$radius;
   background: v.$surface-sunken;
-  cursor: pointer;
   text-align: center;
+  cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+    border-color v.$transition-base,
+    background v.$transition-base;
 
-  &:hover {
+  &:hover,
+  &:focus-within {
     border-color: v.$navy-800;
-    background: #f4f6fc;
+    background: v.$blue-soft;
   }
 }
+
 .dropIcon {
-  color: #9aa3b8;
+  color: v.$slate-light;
 
   svg {
-    width: 34px;
-    height: 34px;
+    width: v.$space-8;
+    height: v.$space-8;
   }
 }
+
 .dropText {
-  font-size: 14.5px;
-  font-weight: 500;
+  @include t.body-sm;
   color: v.$slate;
+  font-weight: v.$font-weight-medium;
 }
+
+.fileRule {
+  @include t.caption;
+  color: v.$slate-light;
+}
+
 .fileInput {
   position: absolute;
   width: 1px;
   height: 1px;
-  padding: 0;
+  padding: v.$space-0;
   margin: -1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
@@ -138,206 +152,434 @@
   border: 0;
 }
 
-/* ── 서류 발급 안내 ── */
-.guide {
-  background: v.$lavender;
+.selectedFile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: v.$space-2 v.$space-3;
+  min-height: 176px;
+  padding: v.$space-6;
+  border: 1px solid v.$border-strong;
   border-radius: v.$radius;
-  padding: 30px 28px;
+  background: v.$surface-sunken;
+  align-content: center;
+
+  button {
+    @include t.button-text-sm;
+    grid-column: 1 / -1;
+    justify-self: start;
+    padding: v.$space-2 v.$space-3;
+    border: 1px solid v.$border-strong;
+    border-radius: v.$radius-sm;
+    background: v.$surface;
+    color: v.$navy-800;
+    cursor: pointer;
+  }
 }
+
+.selectedFileName {
+  @include t.body-sm;
+  overflow: hidden;
+  color: v.$ink;
+  font-weight: v.$font-weight-semibold;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectedFileSize {
+  @include t.caption;
+  color: v.$slate;
+}
+
+.validationError,
+.progressText {
+  @include t.body-sm;
+  margin: calc(-1 * v.$space-3) v.$space-0 v.$space-0;
+}
+
+.validationError {
+  color: v.$red;
+}
+
+.progressText {
+  color: v.$slate;
+  text-align: center;
+}
+
+.analyzeButton,
+.rawToggle {
+  @include t.button-text;
+  border: 0;
+  border-radius: v.$radius-md;
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+  cursor: pointer;
+  transition:
+    background v.$transition-base,
+    opacity v.$transition-base;
+
+  &:hover:not(:disabled) {
+    background: v.$navy-hover;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.analyzeButton {
+  width: 100%;
+  padding: v.$space-4 v.$space-6;
+  box-shadow: v.$shadow-btn-primary;
+}
+
+.guide {
+  padding: v.$space-7;
+  border-radius: v.$radius;
+  background: v.$lavender;
+}
+
 .guideTitle {
-  margin: 0 0 22px;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  @include t.h3;
+  margin: v.$space-0 v.$space-0 v.$space-5;
   color: v.$ink;
 }
+
 .guideGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 22px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: v.$space-5;
 }
+
 .guideItem {
   display: flex;
-  gap: 14px;
+  gap: v.$space-3;
 
   h3 {
-    margin: 2px 0 6px;
-    font-size: 16px;
-    font-weight: 700;
+    @include t.subtitle;
+    margin: v.$space-0 v.$space-0 v.$space-1;
     color: v.$ink;
   }
+
   p {
-    margin: 0;
-    font-size: 14px;
-    line-height: 1.6;
+    @include t.body-sm;
+    margin: v.$space-0;
     color: v.$slate;
   }
 }
+
 .guideNum {
-  flex-shrink: 0;
+  @include t.button-text-sm;
   display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: #dbe1f4;
+  flex-shrink: 0;
+  width: v.$space-8;
+  height: v.$space-8;
+  border-radius: v.$radius-sm;
+  background: v.$pill;
   color: v.$navy-800;
-  font-size: 15px;
-  font-weight: 700;
+  place-items: center;
 }
 
-/* ── 위험 점수 카드 ── */
 .scoreCard {
-  background: v.$surface;
-  border: 1px solid v.$border-card;
-  border-radius: v.$radius;
-  padding: 28px 26px 24px;
-  box-shadow: 0 1px 2px rgba(15, 26, 53, 0.04);
-}
-.scoreTitle {
-  margin: 0 0 18px;
   text-align: center;
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+}
+
+.scoreTitle {
+  @include t.title;
+  margin: v.$space-0 v.$space-0 v.$space-6;
   color: v.$ink;
 }
-.gauge {
-  position: relative;
-  width: 100%;
-  max-width: 260px;
-  margin: 4px auto 0;
+
+.statusIcon {
+  display: grid;
+  width: v.$space-16;
+  height: v.$space-16;
+  margin: v.$space-0 auto;
+  border-radius: v.$radius-pill;
+  background: v.$blue-soft;
+  color: v.$navy-800;
+  place-items: center;
 
   svg {
-    width: 100%;
-    height: auto;
-    display: block;
-    overflow: visible;
+    width: v.$space-8;
+    height: v.$space-8;
   }
 }
-.gaugeTrack {
-  fill: none;
-  stroke: #eceff5;
-  stroke-width: 16;
-  stroke-linecap: round;
-}
-.gaugeArc {
-  fill: none;
-  stroke: url(#riskArc);
-  stroke-width: 16;
-  stroke-linecap: round;
-}
-.gaugeNeedle {
-  stroke: v.$ink;
-  stroke-width: 4;
-  stroke-linecap: round;
-}
-.gaugeHub {
-  fill: v.$navy-800;
-}
+
 .gaugeStatus {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 4px;
-  text-align: center;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  @include t.h3;
+  margin: v.$space-4 v.$space-0 v.$space-0;
   color: v.$green;
 }
+
 .gaugeHelp {
-  margin: 14px 0 0;
-  text-align: center;
-  font-size: 14.5px;
+  @include t.body-sm;
+  margin: v.$space-2 v.$space-0 v.$space-0;
   color: v.$slate;
 }
+
 .metrics {
-  margin: 24px 0 0;
   display: grid;
-  gap: 0;
+  margin: v.$space-6 v.$space-0 v.$space-0;
 }
+
 .metricRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 15px 2px;
-  border-top: 1px solid #eceff4;
+  padding: v.$space-3 v.$space-0;
+  border-top: 1px solid v.$border-subtle;
 
-  &:first-child {
-    border-top: none;
-  }
-  dt {
-    font-size: 15px;
-    font-weight: 600;
-    color: v.$ink;
-  }
+  dt,
   dd {
-    margin: 0;
-    font-size: 14.5px;
-    font-weight: 600;
+    @include t.body-sm;
+  }
+
+  dt {
+    color: v.$ink;
+    font-weight: v.$font-weight-semibold;
+  }
+
+  dd {
+    margin: v.$space-0;
     color: v.$slate;
     font-variant-numeric: tabular-nums;
   }
 }
 
-/* ── 안전 보장 카드 ── */
 .assureCard {
   position: relative;
   overflow: hidden;
+  padding: v.$space-6;
+  border-radius: v.$radius;
   background: v.$navy-900;
   color: v.$text-on-dark;
-  border-radius: v.$radius;
-  padding: 26px 26px 24px;
 
   h3 {
-    margin: 0 0 12px;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    @include t.subtitle;
+    margin: v.$space-0 v.$space-0 v.$space-3;
   }
+
   p {
-    margin: 0;
-    font-size: 14px;
-    line-height: 1.65;
-    color: #aab4cf;
+    @include t.body-sm;
     max-width: 26rem;
+    margin: v.$space-0;
+    color: v.$text-on-dark-muted;
   }
-}
-.assureLink {
-  display: inline-block;
-  margin-top: 18px;
-  font-size: 14px;
-  font-weight: 700;
-  color: v.$text-on-dark;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.assureMark {
-  position: absolute;
-  right: -6px;
-  bottom: -10px;
-  width: 84px;
-  height: 84px;
-  color: rgba(255, 255, 255, 0.12);
 }
 
-/* ── 반응형 ── */
-@media (max-width: 960px) {
+.assureLink {
+  @include t.button-text-sm;
+  display: inline-block;
+  margin-top: v.$space-4;
+  color: v.$text-on-dark;
+  text-decoration: underline;
+  text-underline-offset: v.$space-1;
+}
+
+.assureMark {
+  position: absolute;
+  right: calc(-1 * v.$space-1);
+  bottom: calc(-1 * v.$space-2);
+  width: v.$space-20;
+  height: v.$space-20;
+  color: v.$navy-700;
+}
+
+.resultSummary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: v.$space-2;
+  margin-bottom: v.$space-4;
+
+  div {
+    display: grid;
+    gap: v.$space-1;
+    padding: v.$space-3;
+    border-radius: v.$radius-sm;
+    background: v.$blue-soft;
+    text-align: center;
+  }
+
+  span {
+    @include t.caption;
+  }
+
+  strong {
+    @include t.subtitle;
+    color: v.$navy-800;
+  }
+}
+
+.reviewNotice,
+.missingNotice,
+.registryError {
+  @include t.body-sm;
+  padding: v.$space-3;
+  border-radius: v.$radius-sm;
+}
+
+.reviewNotice,
+.missingNotice {
+  background: v.$amber-soft;
+  color: v.$ink;
+}
+
+.registryError {
+  background: v.$red-soft;
+  color: v.$red;
+}
+
+.documentList {
+  display: grid;
+  gap: v.$space-4;
+  margin-top: v.$space-4;
+}
+
+.documentResult {
+  overflow: hidden;
+  border: 1px solid v.$border-default;
+  border-radius: v.$radius;
+
+  > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: v.$space-3;
+    padding: v.$space-3 v.$space-4;
+    background: v.$surface-sunken;
+
+    h3 {
+      @include t.subtitle;
+      margin: v.$space-0;
+      color: v.$ink;
+    }
+
+    span {
+      @include t.caption;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+}
+
+.fieldList {
+  margin: v.$space-0;
+}
+
+.fieldRow,
+.fieldReview {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.7fr) minmax(0, 1.3fr);
+  gap: v.$space-3;
+  padding: v.$space-3 v.$space-4;
+  border-top: 1px solid v.$border-subtle;
+
+  dt {
+    @include t.body-sm;
+    color: v.$slate;
+  }
+
+  dd {
+    @include t.body-sm;
+    display: grid;
+    gap: v.$space-1;
+    min-width: 0;
+    margin: v.$space-0;
+    color: v.$ink;
+    overflow-wrap: anywhere;
+  }
+
+  small,
+  em {
+    @include t.caption;
+  }
+
+  small {
+    color: v.$slate-light;
+  }
+
+  em {
+    color: v.$slate;
+    font-style: normal;
+  }
+}
+
+.fieldReview {
+  background: v.$amber-soft;
+
+  small {
+    color: v.$orange;
+    font-weight: v.$font-weight-semibold;
+  }
+}
+
+.rawToggle {
+  width: 100%;
+  margin-top: v.$space-5;
+  padding: v.$space-3 v.$space-4;
+}
+
+.rawPages {
+  display: grid;
+  gap: v.$space-4;
+  margin-top: v.$space-4;
+
+  h3 {
+    @include t.subtitle;
+    margin: v.$space-0 v.$space-0 v.$space-2;
+  }
+}
+
+.rawPage {
+  display: grid;
+  gap: v.$space-2;
+  margin-top: v.$space-2;
+
+  strong {
+    @include t.caption;
+  }
+
+  pre {
+    @include t.code;
+    max-height: 240px;
+    margin: v.$space-0;
+    padding: v.$space-3;
+    overflow: auto;
+    border: 1px solid v.$border-default;
+    border-radius: v.$radius-sm;
+    background: v.$surface-sunken;
+    color: v.$ink;
+    white-space: pre-wrap;
+  }
+}
+
+@media (max-width: v.$bp-xl) {
   .grid {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 560px) {
-  .uploads {
-    grid-template-columns: 1fr;
+
+@media (max-width: v.$bp-md) {
+  .inner {
+    padding-inline: v.$space-4;
   }
+
+  .uploads,
   .guideGrid {
     grid-template-columns: 1fr;
   }
+
+  .fieldRow,
+  .fieldReview {
+    grid-template-columns: 1fr;
+    gap: v.$space-1;
+  }
 }
+
 @media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
+  .dropzone,
+  .analyzeButton,
+  .rawToggle {
+    transition: none;
   }
 }

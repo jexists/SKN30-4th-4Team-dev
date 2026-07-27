@@ -56,6 +56,9 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 | `SUPABASE_KEY` | service role 키 |
 | `SUPABASE_JWT_SECRET` | HS256(레거시) 검증용. 비대칭키 프로젝트면 불필요 |
 | `OPENAI_API_KEY` | LLM 호출용 |
+| `OCR_WORKER_URL` | OCR worker 주소 (로컬 기본 `http://localhost:8100`) |
+| `OCR_WORKER_PROCESS_TIMEOUT_SECONDS` | 문서 OCR 요청 제한 시간(초) |
+| `OCR_MAX_FILE_MB` | 업로드 파일당 최대 용량(MB) |
 
 걸리기 쉬운 것 넷:
 
