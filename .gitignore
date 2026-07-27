@@ -35,6 +35,8 @@ desktop.ini
 
 # ===== 로컬 OCR 모델·중간 산출물 (대용량/개인정보) =====
 models/
+!backend/app/models/
+!backend/app/models/*.py
 .ocr-cache/
 .ocr-output/
 

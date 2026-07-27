@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import RequireUser
+from app.api.deps import RequireMember
 from app.core.exceptions import AppError
 from app.db.session import get_app_db
 from app.models.chat import ChatMessage, ChatRoom, monotonic_utcnow
@@ -165,7 +165,7 @@ def _decode_cursor(raw: str | None) -> tuple[datetime, uuid.UUID] | None:
 
 @router.get("/chat/rooms", response_model=ApiResponse[Page[ChatRoomOut]])
 def list_rooms(
-    user: RequireUser, db: AppDb, limit: Limit = 30, cursor: str | None = None
+    user: RequireMember, db: AppDb, limit: Limit = 30, cursor: str | None = None
 ) -> ApiResponse[Page[ChatRoomOut]]:
     """내 채팅방 목록 (최신순, 커서 페이지네이션). 아래로 갈수록 오래된 방."""
     uid = _uid(user)
@@ -196,7 +196,7 @@ def list_rooms(
 
 
 @router.post("/chat/rooms", response_model=ApiResponse[ChatRoomOut])
-def create_room(body: CreateRoomIn, user: RequireUser, db: AppDb) -> ApiResponse[ChatRoomOut]:
+def create_room(body: CreateRoomIn, user: RequireMember, db: AppDb) -> ApiResponse[ChatRoomOut]:
     """새 채팅방 생성 (user_id = 내 sub)."""
     uid = _uid(user)
     room = ChatRoom(user_id=uid, title=body.title)
@@ -208,7 +208,7 @@ def create_room(body: CreateRoomIn, user: RequireUser, db: AppDb) -> ApiResponse
 
 @router.get("/chat/rooms/{room_id}/messages", response_model=ApiResponse[Page[ChatMessageOut]])
 def list_messages(
-    room_id: str, user: RequireUser, db: AppDb, limit: Limit = 30, cursor: str | None = None
+    room_id: str, user: RequireMember, db: AppDb, limit: Limit = 30, cursor: str | None = None
 ) -> ApiResponse[Page[ChatMessageOut]]:
     """특정 방의 메시지 (최신부터 페이지네이션). 방 소유권을 먼저 확인한다.
 
@@ -251,7 +251,7 @@ def list_messages(
 
 @router.post("/chat/rooms/{room_id}/messages", response_model=ApiResponse[ChatMessageOut])
 def add_message(
-    room_id: str, body: AddMessageIn, user: RequireUser, db: AppDb
+    room_id: str, body: AddMessageIn, user: RequireMember, db: AppDb
 ) -> ApiResponse[ChatMessageOut]:
     """메시지 저장 + 방 last_chat_at/updated_at 갱신. 소유권 확인 후 진행."""
     uid = _uid(user)
@@ -277,7 +277,7 @@ def add_message(
 
 @router.put("/chat/rooms/{room_id}/title", response_model=ApiResponse[ChatRoomOut])
 def update_room_title(
-    room_id: str, body: UpdateRoomTitleIn, user: RequireUser, db: AppDb
+    room_id: str, body: UpdateRoomTitleIn, user: RequireMember, db: AppDb
 ) -> ApiResponse[ChatRoomOut]:
     """방 제목 수정. last_chat_at 은 건드리지 않으므로 목록 순서는 그대로 유지된다."""
     uid = _uid(user)
@@ -293,7 +293,7 @@ def update_room_title(
 
 
 @router.delete("/chat/rooms/{room_id}", response_model=ApiResponse[ChatRoomOut])
-def delete_room(room_id: str, user: RequireUser, db: AppDb) -> ApiResponse[ChatRoomOut]:
+def delete_room(room_id: str, user: RequireMember, db: AppDb) -> ApiResponse[ChatRoomOut]:
     """방 soft delete — deleted_at 만 찍는다. 행도 메시지도 DB 에서 지우지 않는다.
 
     목록·메시지 조회가 이미 deleted_at IS NULL 로 걸러내므로 이후 접근은 전부 404 가 된다.

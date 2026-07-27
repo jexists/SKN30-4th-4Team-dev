@@ -1,9 +1,13 @@
+import uuid
 from typing import Annotated
 
 from fastapi import Depends, Header
+from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
 from app.core.security import AUTH_EXPIRED, AUTH_UNAVAILABLE, verify_token_with_reason
+from app.db.session import get_app_db
+from app.repositories.auth import AuthRepository
 
 # Authorization 헤더가 아예 없거나 Bearer 형식이 아닐 때의 사유.
 AUTH_MISSING = "missing"
@@ -66,6 +70,28 @@ def require_user(
     raise AppError("로그인 필요", "로그인이 필요합니다.", 401)
 
 
+def require_member(
+    user: Annotated[dict, Depends(require_user)],
+    db: Annotated[Session, Depends(get_app_db)],
+) -> dict:
+    """JWT가 유효하고 app_user 가입까지 완료된 사용자만 허용한다."""
+    try:
+        user_id = uuid.UUID(str(user.get("sub", "")))
+    except ValueError as exc:
+        raise AppError(
+            "로그인 필요", "사용자 식별에 실패했습니다. 다시 로그인해 주세요.", 401
+        ) from exc
+
+    if not AuthRepository(db).is_registered(user_id):
+        raise AppError(
+            "회원가입 필요",
+            "서비스 이용약관에 동의하고 회원가입을 완료해 주세요.",
+            403,
+        )
+    return user
+
+
 # 라우트 시그니처에서 바로 쓰는 별칭.
 CurrentUser = Annotated[dict | None, Depends(get_current_user)]  # 선택 인증
 RequireUser = Annotated[dict, Depends(require_user)]  # 필수 인증
+RequireMember = Annotated[dict, Depends(require_member)]  # 인증 + 앱 회원가입 완료

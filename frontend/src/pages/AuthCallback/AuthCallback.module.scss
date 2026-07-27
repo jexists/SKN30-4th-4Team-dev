@@ -1,0 +1,86 @@
+@use '../../styles/variables' as v;
+
+.page {
+  display: grid;
+  min-height: 50vh;
+  place-items: center;
+  padding: v.$space-6;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  color: v.$slate;
+  font-size: v.$font-size-base;
+
+  p {
+    margin: 0;
+  }
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid v.$border-strong;
+  border-top-color: v.$navy-800;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.promptMessage {
+  margin: 0;
+  color: v.$slate;
+  font-size: v.$font-size-base;
+  line-height: v.$line-height-relaxed;
+}
+
+.promptActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: v.$space-3;
+  margin-top: v.$space-6;
+}
+
+.cancelButton,
+.confirmButton {
+  min-width: 96px;
+  padding: v.$space-3 v.$space-5;
+  border-radius: v.$radius-md;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+.cancelButton {
+  border: 1px solid v.$border-strong;
+  background: v.$surface;
+  color: v.$slate;
+}
+
+.confirmButton {
+  border: 1px solid v.$navy-800;
+  background: v.$navy-800;
+  color: v.$white;
+
+  &:hover:not(:disabled) {
+    background: v.$navy-hover;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
