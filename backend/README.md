@@ -56,6 +56,18 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 | `SUPABASE_KEY` | service role 키 |
 | `SUPABASE_JWT_SECRET` | HS256(레거시) 검증용. 비대칭키 프로젝트면 불필요 |
 | `OPENAI_API_KEY` | LLM 호출용 |
+| `OCR_WORKER_URL` | 로컬 OCR worker 주소. 로컬 직접 실행 시 `http://127.0.0.1:8100` |
+| `OCR_WORKER_PROCESS_TIMEOUT_SECONDS` | 계약서 OCR 요청 제한 시간(초) |
+| `CONTRACT_MAX_FILE_MB` | 업로드 가능한 계약서 최대 크기 |
+| `CONTRACT_ANALYSIS_MODEL` | 개인정보 치환 텍스트를 분석할 LLM 모델 |
+
+## 계약서 분석 API
+
+`POST /api/v1/documents/analyze`는 인증이 필요한 multipart 업로드 API입니다.
+백엔드는 계약서를 OCR worker에 전달하고, worker가 만든 개인정보 치환 텍스트만
+LLM에 보냅니다. 원본 OCR 텍스트와 마스킹 PDF는 LLM 입력에 포함되지 않습니다.
+현재 응답의 마스킹 PDF는 PoC용 base64이며 운영 저장 방식은 private Storage로
+교체해야 합니다.
 
 걸리기 쉬운 것 넷:
 

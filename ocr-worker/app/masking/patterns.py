@@ -6,6 +6,8 @@ class PiiType(StrEnum):
     PHONE_NUMBER = "phone_number"
     EMAIL = "email"
     BANK_ACCOUNT = "bank_account"
+    NAME = "name"
+    ADDRESS = "address"
 
 
 PATTERNS: dict[PiiType, str] = {
