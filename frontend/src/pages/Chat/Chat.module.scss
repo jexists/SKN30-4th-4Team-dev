@@ -1034,6 +1034,22 @@
   }
 }
 
+/* 대화를 못 불러온 자리 — 첫 화면(.empty)과 같은 자리를 채우므로 같은 규칙으로 세운다.
+   여기서도 justify-content: center 는 쓰지 않는다(아래 .empty 의 주석 참고). */
+.conversationError {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: v.$space-10 v.$space-6;
+
+  > * {
+    margin-block: auto; // .empty 와 같은, 스크롤을 깨지 않는 세로 중앙 정렬
+  }
+}
+
 /* ══════════════ 엠티스테이트(첫 진입) ══════════════ */
 .empty {
   flex: 1;
@@ -1173,7 +1189,8 @@
     padding-top: v.$space-14;
   }
   // 첫 화면도 같은 값으로 — 버튼 아래 끝(12 + 38 = 50px)보다 짧으면 Hero 를 덮는다.
-  .empty {
+  .empty,
+  .conversationError {
     padding-top: v.$space-14;
   }
 }

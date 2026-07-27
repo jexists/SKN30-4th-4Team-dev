@@ -36,7 +36,8 @@
 - **API 실패를 Empty State 로 그리지 않는다.** "대화가 없습니다" 는 `success: true` 인데 데이터가 0건일 때만 쓴다. 실패했는데 빈 목록을 그리면 서버 장애가 "데이터 없음"으로 보인다.
 - **화면에서 `showError(...)` 를 직접 부르지 않는다.** 성공 토스트 문구도 서버 `message` 가 소유하므로 `showToast(...)` 를 중복해서 심지 않는다(로그인 폼 검증처럼 API 와 무관한 클라이언트 알림은 예외).
 - **401 은 아무것도 띄우지 않는다.** `client.ts` 가 토큰 갱신 1회 → 실패 시 로그아웃·로그인 화면 이동까지 처리한다.
-- 화면이 실패를 직접 표현해야 하는 소수 예외(`sendChat` 의 오류 말풍선, health 폴링)만 `{ silent: true }` 로 공통 처리를 끈다.
+- 화면이 실패를 직접 표현해야 하는 소수 예외(`sendChat` 의 오류 말풍선, health 폴링, `listMessages` 의 대화 열기)만 `{ silent: true }` 로 공통 처리를 끈다. **대화 열기처럼 `<ErrorState />` 가 화면을 가득 채우는 자리는 모달이 중복**이므로, 모달을 끄고 서버 문구(`ApiError.message`)를 `<ErrorState variant="plain">` 에 넘긴다. 문구 소유권은 여전히 서버에 있다.
+- **재시도가 없는 오류 화면은 막다른 길이 되지 않게 한다.** 404 처럼 `isRetryable` 이 false 인 실패에는 `<ErrorState action={{ label, onClick }} />` 으로 빠져나갈 행동을 준다(예: "새 대화 시작").
 - 디자인 토큰은 `styles/_variables.scss` 에서, 타이포 믹스인은 `styles/_typography.scss` 에서 관리하고 `@use` 로 참조.
 
 ## 디자인 시스템 (필수)
