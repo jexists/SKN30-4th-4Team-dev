@@ -400,12 +400,18 @@ const isMobile = useIsMobile()
 | `HealthStatus` | `components/HealthStatus/` | 백엔드 헬스 체크 칩 (dev only) |
 | `RequireAuth` | `components/RequireAuth/` | 라우트 가드 |
 | `ErrorModal` | `components/ErrorModal/` | 글로벌 에러 모달 (store 기반). 모든 API 실패가 여기로 모인다 |
-| `ErrorState` | `components/ErrorState/` | 데이터를 못 불러온 영역의 자리표시 + 다시 시도 |
+| `ErrorState` | `components/ErrorState/` | 데이터를 못 불러온 영역의 자리표시 + 다시 시도. `action` 으로 대체 행동(예: "새 대화 시작"), `variant="plain"` 으로 테두리 없는 형태 |
 | `icons` | `components/icons.tsx` | stroke 아이콘 |
 
 > **API 실패는 Empty State 로 그리지 않는다.** "데이터가 없습니다" 는 성공 응답의 0건 전용이고,
-> 실패한 영역에는 `<ErrorState />` 를 놓는다(원인 안내는 `ErrorModal` 이 맡음). 자세한 규칙은
+> 실패한 영역에는 `<ErrorState />` 를 놓는다(원인 안내는 보통 `ErrorModal` 이 맡음). 자세한 규칙은
 > `frontend/CLAUDE.md` 의 「API 에러 처리」 참고.
+>
+> **화면 전체가 실패로 덮이는 자리에서는 모달을 끈다.** 대화 열기처럼 `<ErrorState />` 가 화면을
+> 가득 채우면 모달은 같은 말을 두 번 하는 꼴이고, 닫고 나면 아무 안내도 남지 않는다. 이럴 땐
+> `{ silent: true }` 로 모달을 끄고 서버 문구(`ApiError.message`)를 `<ErrorState variant="plain">`
+> 에 그대로 넘긴다. 재시도가 없는 실패(404 등)는 `action` 으로 빠져나갈 길을 함께 준다 —
+> 버튼 없는 오류 화면은 막다른 길이다.
 
 관련 훅 (`frontend/src/hooks/*`):
 

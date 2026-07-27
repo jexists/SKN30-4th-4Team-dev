@@ -48,10 +48,14 @@ const toMessage = (r: { id: string; role: string; content: string }): Message =>
 /**
  * 대화 영역을 막는 이유.
  * - `unavailable` — API 실패가 아니라 로그인/저장소 미설정. 다시 시도해도 결과가 같다.
- * - `failed` — 조회 실패. 원인 안내는 공통 오류 모달이 이미 했고, 여기선 재시도만 준다
- *   (재시도를 보일지는 공통 isRetryable 이 정한다).
+ * - `failed` — 조회 실패. 이 화면은 대화 영역 전체가 실패로 덮이므로 공통 오류 모달을 끄고
+ *   (`{ silent: true }`) 이 자리에서만 알린다 — 모달까지 띄우면 같은 말을 두 번 하고,
+ *   닫고 나면 아무 안내도 남지 않는다. 재시도를 보일지는 공통 isRetryable 이 정한다.
  */
 type ConversationBlock = { reason: 'unavailable' } | { reason: 'failed'; error: unknown } | null
+
+/** 응답 자체를 못 받았을 때(ApiError 아님)만 쓰는 문구 — 그 밖엔 서버가 준 문구를 그대로 쓴다. */
+const CONVERSATION_NETWORK_ERROR = '대화를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'
 
 export function Chat() {
   const { isAuthed } = useAuth()
@@ -218,7 +222,8 @@ export function Chat() {
     }
 
     setOpeningRoom(true)
-    void listMessages(activeRoomId)
+    // 실패하면 아래 ErrorState 가 서버 문구 그대로 알린다 — 공통 모달은 중복이라 끈다.
+    void listMessages(activeRoomId, null, { silent: true })
       .then((page) => {
         if (cancelled) return
         setMessages((prev) => {
@@ -586,12 +591,24 @@ export function Chat() {
 
           {conversationBlock?.reason === 'unavailable' ? (
             // API 실패가 아니라 로그인·저장소 설정 문제다 — 다시 시도해도 결과가 같다.
-            <ErrorState message="로그인 상태와 채팅 저장소 설정을 확인해 주세요." />
+            <div className={styles.conversationError}>
+              <ErrorState variant="plain" message="로그인 상태와 채팅 저장소 설정을 확인해 주세요." />
+            </div>
           ) : conversationBlock ? (
-            <ErrorState
-              message="대화를 불러오지 못했습니다."
-              onRetry={isRetryable(conversationBlock.error) ? retryLoadMessages : undefined}
-            />
+            <div className={styles.conversationError}>
+              <ErrorState
+                variant="plain"
+                message={
+                  conversationBlock.error instanceof ApiError
+                    ? conversationBlock.error.message
+                    : CONVERSATION_NETWORK_ERROR
+                }
+                onRetry={isRetryable(conversationBlock.error) ? retryLoadMessages : undefined}
+                // 재시도가 없는 실패(삭제됐거나 내 대화가 아닌 방)면 입력창도 숨겨져 있어
+                // 이 버튼이 없으면 오른쪽 영역에서 빠져나갈 길이 없다.
+                action={{ label: '새 대화 시작', onClick: newChat }}
+              />
+            </div>
           ) : showEmpty ? (
             <EmptyState
               topic={topicById(topicId)}

@@ -270,7 +270,7 @@ describe('Chat URL routing', () => {
     renderChat('/chat/room-a')
 
     expect(await screen.findByText('room-a 질문')).toBeInTheDocument()
-    expect(api.listMessages).toHaveBeenCalledWith('room-a')
+    expect(api.listMessages).toHaveBeenCalledWith('room-a', null, { silent: true })
     expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-a')
     expect(screen.getByRole('button', { name: /첫 번째 대화/ })).toHaveAttribute(
       'aria-current',
@@ -317,30 +317,42 @@ describe('Chat URL routing', () => {
     expect(api.listMessages).not.toHaveBeenCalled()
   })
 
-  // 실패의 "원인"은 공통 오류 모달이 알린다(api/client.test.ts 가 검증).
-  // 이 화면이 책임지는 건 두 가지다 — Empty State 로 위장하지 않을 것, 재시도를 줄 것.
+  // 대화 조회 실패는 대화 영역 전체가 실패로 덮이므로 공통 오류 모달을 끄고(silent) 이 자리에서만
+  // 알린다. 그래서 이 화면이 책임지는 건 셋이다 — Empty State 로 위장하지 않을 것, 서버가 준
+  // 문구를 그대로 보일 것, 그리고 재시도가 없는 실패에서 빠져나갈 길을 줄 것.
 
-  it('존재하지 않는 chatId는 재시도를 권하지 않는다', async () => {
+  it('존재하지 않는 chatId는 서버 문구를 그대로 보이고 재시도를 권하지 않는다', async () => {
+    const user = userEvent.setup()
     api.listMessages.mockRejectedValueOnce(
       new ApiError('대화를 찾을 수 없습니다', '이미 삭제되었거나 존재하지 않는 대화입니다.', 404),
     )
     renderChat('/chat/missing-room')
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('대화를 불러오지 못했습니다.')
+    expect(alert).toHaveTextContent('이미 삭제되었거나 존재하지 않는 대화입니다.')
+    // 같은 말을 모달로 한 번 더 하지 않는다.
+    expect(api.listMessages).toHaveBeenCalledWith('missing-room', null, { silent: true })
     // 다시 눌러도 결과가 같으므로 재시도 버튼은 내지 않는다.
     expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/chat/missing-room')
+
+    // 입력창도 없는 화면이라 이 버튼이 유일한 출구다.
+    await user.click(within(alert).getByRole('button', { name: '새 대화 시작' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/chat')
   })
 
-  it('권한이 없는 대화도 재시도를 권하지 않는다', async () => {
+  it('내 대화가 아니어도 같은 안내를 보인다(존재 여부를 알려주지 않는다)', async () => {
+    // 백엔드는 남의 방·없는 방·잘못된 UUID 를 모두 같은 404 문구로 묶는다.
     api.listMessages.mockRejectedValueOnce(
-      new ApiError('권한 없음', '이 대화를 볼 수 있는 권한이 없습니다.', 403),
+      new ApiError('대화를 찾을 수 없습니다', '이미 삭제되었거나 존재하지 않는 대화입니다.', 404),
     )
-    renderChat('/chat/room-a')
+    renderChat('/chat/someone-elses-room')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('대화를 불러오지 못했습니다.')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '이미 삭제되었거나 존재하지 않는 대화입니다.',
+    )
     expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '새 대화 시작' })).toBeInTheDocument()
   })
 
   it('대화 조회가 500이면 다시 시도 버튼으로 같은 대화를 재조회한다', async () => {
@@ -351,6 +363,7 @@ describe('Chat URL routing', () => {
     renderChat('/chat/room-a')
 
     const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('잠시 후 다시 시도해 주세요.')
     await user.click(within(alert).getByRole('button', { name: '다시 시도' }))
 
     expect(await screen.findByText('room-a 질문')).toBeInTheDocument()

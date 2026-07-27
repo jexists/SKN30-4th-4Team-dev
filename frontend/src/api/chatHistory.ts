@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost, apiPut } from './client'
+import { apiDelete, apiGet, apiPost, apiPut, type ApiOptions } from './client'
 
 /**
  * 채팅 기록(chat_room / chat_message) 접근 — 백엔드 API 경유.
@@ -67,9 +67,19 @@ export function deleteRoom(roomId: string): Promise<ChatRoom> {
 /**
  * 특정 방의 메시지 한 페이지. cursor 없으면 최신 30개(오름차순), cursor 로 더 과거를 가져온다.
  * next_cursor 는 "이보다 과거가 더 있음"을 뜻한다.
+ *
+ * 대화를 처음 여는 호출은 실패해도 화면 전체가 그 사실을 이미 말하고 있으므로,
+ * `{ silent: true }` 로 공통 오류 모달을 끌 수 있다(Chat 화면이 그렇게 쓴다).
  */
-export function listMessages(roomId: string, cursor?: string | null): Promise<Page<ChatMessageRow>> {
-  return apiGet<Page<ChatMessageRow>>(withCursor(`/api/v1/chat/rooms/${roomId}/messages`, cursor))
+export function listMessages(
+  roomId: string,
+  cursor?: string | null,
+  options?: ApiOptions,
+): Promise<Page<ChatMessageRow>> {
+  return apiGet<Page<ChatMessageRow>>(
+    withCursor(`/api/v1/chat/rooms/${roomId}/messages`, cursor),
+    options,
+  )
 }
 
 /** 메시지 저장. 방 last_chat_at/updated_at 갱신은 백엔드가 함께 처리한다. */

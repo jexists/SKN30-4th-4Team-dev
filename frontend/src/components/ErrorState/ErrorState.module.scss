@@ -19,6 +19,22 @@
   color: v.$slate;
 }
 
+/* 화면 한가운데를 통째로 채우는 자리 — 테두리·배경이 있으면 허공에 뜬 띠처럼 보인다.
+   자리를 알아볼 수 있게 하는 건 그 자리를 감싼 레이아웃의 몫이므로 여백도 넘긴다. */
+.plain {
+  border: none;
+  padding: 0;
+  background: none;
+}
+
+// 버튼이 둘까지 올 수 있다 — 좁은 화면에서는 줄바꿈으로 받는다.
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: v.$space-2;
+}
+
 .action {
   @include t.button-text-sm;
   padding: v.$space-2 v.$space-4;
