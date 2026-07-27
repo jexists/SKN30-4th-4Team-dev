@@ -553,18 +553,11 @@ export function Chat() {
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
-        {/* ── 대화 기록: 넓으면 사이드바, 좁으면 FAB → 드로어 ── */}
+        {/* ── 대화 기록: 넓으면 사이드바, 좁으면 FAB(아래 .chatBody 안) → 드로어 ── */}
         {isMobile ? (
-          <>
-            <ChatMobileActions
-              hidden={actionsHidden}
-              onOpenHistory={() => setHistoryOpen(true)}
-              onNewChat={newChat}
-            />
-            <Drawer open={historyOpen} onClose={closeHistory} title="대화기록">
-              {historyPanel}
-            </Drawer>
-          </>
+          <Drawer open={historyOpen} onClose={closeHistory} title="대화기록">
+            {historyPanel}
+          </Drawer>
         ) : (
           <aside className={styles.sidebar}>{historyPanel}</aside>
         )}
@@ -589,59 +582,71 @@ export function Chat() {
             </div>
           )}
 
-          {conversationBlock?.reason === 'unavailable' ? (
-            // API 실패가 아니라 로그인·저장소 설정 문제다 — 다시 시도해도 결과가 같다.
-            <div className={styles.conversationError}>
-              <ErrorState variant="plain" message="로그인 상태와 채팅 저장소 설정을 확인해 주세요." />
-            </div>
-          ) : conversationBlock ? (
-            <div className={styles.conversationError}>
-              <ErrorState
-                variant="plain"
-                message={
-                  conversationBlock.error instanceof ApiError
-                    ? conversationBlock.error.message
-                    : CONVERSATION_NETWORK_ERROR
-                }
-                onRetry={isRetryable(conversationBlock.error) ? retryLoadMessages : undefined}
-                // 재시도가 없는 실패(삭제됐거나 내 대화가 아닌 방)면 입력창도 숨겨져 있어
-                // 이 버튼이 없으면 오른쪽 영역에서 빠져나갈 길이 없다.
-                action={{ label: '새 대화 시작', onClick: newChat }}
+          {/* 고지 바 '아래'에서 시작하는 본문 — 떠 있는 액션이 이 박스를 기준으로 뜬다.
+              그래서 고지를 닫으면 본문이 올라오면서 버튼도 함께 따라 올라온다. */}
+          <div className={styles.chatBody}>
+            {isMobile && (
+              <ChatMobileActions
+                hidden={actionsHidden}
+                onOpenHistory={() => setHistoryOpen(true)}
+                onNewChat={newChat}
               />
-            </div>
-          ) : showEmpty ? (
-            <EmptyState
-              topic={topicById(topicId)}
-              disabled={busyElsewhere}
-              onExample={(q) => void submitQuestion(q)}
-              onScroll={isMobile ? onThreadScroll : undefined}
-            />
-          ) : (
-            <MessageList
-              key={activeRoomId ?? 'new'}
-              messages={messages}
-              sending={sending}
-              isLoading={openingRoom}
-              isLoadingOlder={loadingOlder}
-              hasMoreOlder={messagesCursor !== null}
-              followLatestRequest={followLatestRequest}
-              onLoadOlder={loadOlder}
-              onStreamingDone={onStreamingDone}
-              onRegenerate={regenerate}
-              onScroll={isMobile ? onThreadScroll : undefined}
-            />
-          )}
+            )}
 
-          {!conversationBlock && (
-            <ChatComposer
-              value={input}
-              onChange={setInput}
-              onSubmit={() => void submitQuestion(input)}
-              disabled={sending || openingRoom || busyElsewhere}
-              notice={busyElsewhere ? BUSY_ELSEWHERE_NOTICE : undefined}
-              maxLength={MAX_LEN}
-            />
-          )}
+            {conversationBlock?.reason === 'unavailable' ? (
+              // API 실패가 아니라 로그인·저장소 설정 문제다 — 다시 시도해도 결과가 같다.
+              <div className={styles.conversationError}>
+                <ErrorState variant="plain" message="로그인 상태와 채팅 저장소 설정을 확인해 주세요." />
+              </div>
+            ) : conversationBlock ? (
+              <div className={styles.conversationError}>
+                <ErrorState
+                  variant="plain"
+                  message={
+                    conversationBlock.error instanceof ApiError
+                      ? conversationBlock.error.message
+                      : CONVERSATION_NETWORK_ERROR
+                  }
+                  onRetry={isRetryable(conversationBlock.error) ? retryLoadMessages : undefined}
+                  // 재시도가 없는 실패(삭제됐거나 내 대화가 아닌 방)면 입력창도 숨겨져 있어
+                  // 이 버튼이 없으면 오른쪽 영역에서 빠져나갈 길이 없다.
+                  action={{ label: '새 대화 시작', onClick: newChat }}
+                />
+              </div>
+            ) : showEmpty ? (
+              <EmptyState
+                topic={topicById(topicId)}
+                disabled={busyElsewhere}
+                onExample={(q) => void submitQuestion(q)}
+                onScroll={isMobile ? onThreadScroll : undefined}
+              />
+            ) : (
+              <MessageList
+                key={activeRoomId ?? 'new'}
+                messages={messages}
+                sending={sending}
+                isLoading={openingRoom}
+                isLoadingOlder={loadingOlder}
+                hasMoreOlder={messagesCursor !== null}
+                followLatestRequest={followLatestRequest}
+                onLoadOlder={loadOlder}
+                onStreamingDone={onStreamingDone}
+                onRegenerate={regenerate}
+                onScroll={isMobile ? onThreadScroll : undefined}
+              />
+            )}
+
+            {!conversationBlock && (
+              <ChatComposer
+                value={input}
+                onChange={setInput}
+                onSubmit={() => void submitQuestion(input)}
+                disabled={sending || openingRoom || busyElsewhere}
+                notice={busyElsewhere ? BUSY_ELSEWHERE_NOTICE : undefined}
+                maxLength={MAX_LEN}
+              />
+            )}
+          </div>
         </section>
       </div>
 

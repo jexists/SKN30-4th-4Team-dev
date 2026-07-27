@@ -710,6 +710,19 @@ describe('Chat 모바일 대화기록', () => {
     expect(screen.queryByRole('button', { name: '첫 번째 대화' })).not.toBeInTheDocument()
   })
 
+  // 액션은 고지 바를 기준으로 밀어내는 게 아니라 그 '아래' 박스를 기준으로 뜬다. 문서 순서가
+  // 뒤집히면(액션이 고지보다 앞) 다시 고지 위에 겹쳐 뜨고, 고지를 닫아도 제자리에 남는다.
+  it('떠 있는 액션은 법적 고지보다 뒤에 온다', async () => {
+    renderChat('/chat/room-a') // 고지는 대화를 보고 있을 때만 뜬다
+
+    const actions = (await screen.findByRole('button', { name: '대화기록' }))
+      .parentElement as HTMLElement
+    const notice = screen.getByRole('note')
+
+    expect(notice).toHaveTextContent('법적 고지')
+    expect(notice.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('대화기록을 누르면 데스크탑과 같은 목록이 드로어에 담긴다', async () => {
     const user = userEvent.setup()
     renderChat('/chat')

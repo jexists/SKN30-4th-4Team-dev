@@ -8,8 +8,6 @@
   display: flex;
   flex-direction: column;
   color: v.$ink;
-  // 모바일 FAB 이 이 박스를 기준으로 떠 있는다.
-  position: relative;
 }
 
 .initialLoading {
@@ -511,6 +509,17 @@
 .chat {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 법적 고지 '아래'의 본문. 모바일 떠 있는 액션(.mobileActions)이 이 박스를 기준으로 뜬다 —
+   고지 높이를 재서 버튼을 밀지 않고 기준 자체를 아래로 옮기는 방식이라, 고지를 닫으면
+   이 박스가 올라오면서 버튼도 함께 따라 올라온다(고지는 폭에 따라 2~3줄을 오간다). */
+.chatBody {
+  position: relative;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1181,11 +1190,8 @@
   }
   // 떠 있는 액션은 자리를 예약하지 않고 겹쳐 뜬다. 대신 스크롤 컨테이너 '안쪽'에 여백을 줘,
   // 맨 위에서는 첫 메시지가 가리지 않고 내려가면 그 아래로 자연스럽게 지나가게 한다.
+  // 고지 바에는 이 여백이 없다 — 액션은 고지가 아니라 그 아래 .chatBody 를 기준으로 뜬다.
   .thread {
-    padding-top: v.$space-14;
-  }
-  // 고지 바가 있으면 액션이 그 위에 겹친다 — 문구가 가리지 않도록 아래로 내린다.
-  .notice {
     padding-top: v.$space-14;
   }
   // 첫 화면도 같은 값으로 — 버튼 아래 끝(12 + 38 = 50px)보다 짧으면 Hero 를 덮는다.
