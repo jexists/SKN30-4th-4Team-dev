@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client'
+import { apiDelete, apiGet, apiPost } from './client'
 
 export type RegistrationStatus = 'authenticated' | 'signup_required'
 
@@ -27,6 +27,10 @@ export function kakaoLogin(): Promise<KakaoAuthResult> {
 
 export function getRegistration(): Promise<{ status: RegistrationStatus }> {
   return apiGet<{ status: RegistrationStatus }>('/api/v1/auth/registration')
+}
+
+export function abandonKakaoSignup(): Promise<{ deleted: boolean }> {
+  return apiDelete<{ deleted: boolean }>('/api/v1/auth/kakao/pending')
 }
 
 export function completeKakaoSignup(body: KakaoSignUpRequest): Promise<KakaoAuthResult> {

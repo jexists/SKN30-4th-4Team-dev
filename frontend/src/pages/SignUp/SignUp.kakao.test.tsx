@@ -4,16 +4,27 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const completeKakaoSignup = vi.hoisted(() => vi.fn())
+const abandonKakaoSignup = vi.hoisted(() => vi.fn())
 const showToast = vi.hoisted(() => vi.fn())
+const signOut = vi.hoisted(() => vi.fn())
+const blocker = vi.hoisted(() => ({
+  state: 'unblocked' as 'unblocked' | 'blocked',
+  proceed: vi.fn(),
+  reset: vi.fn(),
+}))
 
-vi.mock('../../api/kakaoAuth', () => ({ completeKakaoSignup }))
+vi.mock('../../api/kakaoAuth', () => ({ abandonKakaoSignup, completeKakaoSignup }))
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  useBlocker: () => blocker,
+}))
 vi.mock('../../components/Toast/toastStore', () => ({ showToast }))
 vi.mock('../../config/supabase', () => ({
   supabase: { auth: {} },
   isAuthConfigured: true,
 }))
 vi.mock('../../hooks/useAuth', () => ({
-  useAuth: () => ({ isAuthed: true, signIn: vi.fn() }),
+  useAuth: () => ({ isAuthed: true, signIn: vi.fn(), signOut }),
 }))
 
 import { SignUp } from './SignUp'
@@ -32,7 +43,13 @@ function renderKakaoSignup() {
 describe('SignUp kakao mode', () => {
   beforeEach(() => {
     completeKakaoSignup.mockReset()
+    abandonKakaoSignup.mockReset()
     showToast.mockReset()
+    signOut.mockReset()
+    blocker.state = 'unblocked'
+    blocker.proceed.mockReset()
+    blocker.reset.mockReset()
+    abandonKakaoSignup.mockResolvedValue({ deleted: true })
     completeKakaoSignup.mockResolvedValue({
       status: 'authenticated',
       user: { id: 'u1', email: null, nickname: '새회원', profile_image: null },
@@ -57,6 +74,26 @@ describe('SignUp kakao mode', () => {
     expect(showToast).toHaveBeenCalledWith('필수 약관에 동의해주세요.', 'error')
   })
 
+  it('가입을 완료하지 않고 다른 화면으로 이동하면 임시 계정을 삭제하고 로그아웃한다', async () => {
+    blocker.state = 'blocked'
+    renderKakaoSignup()
+
+    await waitFor(() => expect(abandonKakaoSignup).toHaveBeenCalledTimes(1))
+    expect(signOut).toHaveBeenCalledTimes(1)
+    expect(blocker.proceed).toHaveBeenCalledTimes(1)
+  })
+
+  it('임시 계정 삭제에 실패하면 로그아웃하거나 화면을 이탈하지 않는다', async () => {
+    blocker.state = 'blocked'
+    abandonKakaoSignup.mockRejectedValue(new Error('delete failed'))
+    renderKakaoSignup()
+
+    await waitFor(() => expect(blocker.reset).toHaveBeenCalledTimes(1))
+    expect(signOut).not.toHaveBeenCalled()
+    expect(blocker.proceed).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '회원가입' })).toBeEnabled()
+  })
+
   it('동의한 신규 회원 정보를 백엔드에 저장하고 마이페이지로 이동한다', async () => {
     const user = userEvent.setup()
     renderKakaoSignup()
@@ -76,5 +113,7 @@ describe('SignUp kakao mode', () => {
       }),
     )
     expect(await screen.findByText('마이페이지')).toBeInTheDocument()
+    expect(abandonKakaoSignup).not.toHaveBeenCalled()
+    expect(signOut).not.toHaveBeenCalled()
   })
 })

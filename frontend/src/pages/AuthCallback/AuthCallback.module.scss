@@ -2,44 +2,85 @@
 
 .page {
   display: grid;
-  min-height: 70vh;
+  min-height: 50vh;
   place-items: center;
-  padding: 2rem;
+  padding: v.$space-6;
 }
 
-.card {
-  display: grid;
-  max-width: 28rem;
-  justify-items: center;
-  gap: 0.75rem;
-  padding: 2.5rem;
-  border: 1px solid v.$border-default;
-  border-radius: 1.25rem;
-  background: v.$white;
-  text-align: center;
-  box-shadow: v.$shadow-md;
+.status {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  color: v.$slate;
+  font-size: v.$font-size-base;
 
-  h1,
   p {
     margin: 0;
   }
+}
 
-  p {
-    color: v.$slate;
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid v.$border-strong;
+  border-top-color: v.$navy-800;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.promptMessage {
+  margin: 0;
+  color: v.$slate;
+  font-size: v.$font-size-base;
+  line-height: v.$line-height-relaxed;
+}
+
+.promptActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: v.$space-3;
+  margin-top: v.$space-6;
+}
+
+.cancelButton,
+.confirmButton {
+  min-width: 96px;
+  padding: v.$space-3 v.$space-5;
+  border-radius: v.$radius-md;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }
 
-.badge {
-  display: grid;
-  width: 3rem;
-  height: 3rem;
-  place-items: center;
-  border-radius: 50%;
-  background: v.$pill;
-  color: v.$navy-800;
+.cancelButton {
+  border: 1px solid v.$border-strong;
+  background: v.$surface;
+  color: v.$slate;
 }
 
-.mark {
-  width: 1.5rem;
-  height: 1.5rem;
+.confirmButton {
+  border: 1px solid v.$navy-800;
+  background: v.$navy-800;
+  color: v.$white;
+
+  &:hover:not(:disabled) {
+    background: v.$navy-hover;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

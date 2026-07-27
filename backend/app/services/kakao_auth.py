@@ -7,17 +7,16 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
-from app.repositories.auth import AuthRepository
+from app.repositories.auth import AGREEMENT_VERSION, AuthRepository
 from app.schemas.kakao_auth import (
     AuthUserInfo,
     KakaoAuthResponse,
     KakaoSignUpRequest,
+    PendingKakaoDeletionResponse,
     RegistrationResponse,
 )
 
 logger = logging.getLogger(__name__)
-
-AGREEMENT_VERSION = "v1"
 
 
 def _user_id(claims: dict) -> uuid.UUID:
@@ -38,6 +37,14 @@ def _is_kakao(claims: dict) -> bool:
     provider = metadata.get("provider")
     providers = metadata.get("providers")
     return provider == "kakao" or (isinstance(providers, list) and "kakao" in providers)
+
+
+def _is_kakao_only(claims: dict) -> bool:
+    metadata = claims.get("app_metadata")
+    if not isinstance(metadata, dict) or metadata.get("provider") != "kakao":
+        return False
+    providers = metadata.get("providers")
+    return not isinstance(providers, list) or set(providers) == {"kakao"}
 
 
 def _metadata(claims: dict) -> dict:
@@ -133,6 +140,56 @@ def process_kakao_login(
         status="authenticated" if registered else "signup_required",
         user=_user_info(claims, repo),
     )
+
+
+def abandon_pending_kakao_signup(
+    claims: dict,
+    db: Session,
+) -> PendingKakaoDeletionResponse:
+    if not _is_kakao(claims):
+        raise AppError(
+            "카카오 인증 오류",
+            "카카오로 인증된 세션이 아닙니다. 다시 로그인해 주세요.",
+            403,
+        )
+    if not _is_kakao_only(claims):
+        raise AppError(
+            "가입 취소 불가",
+            "다른 로그인 방식과 연결된 계정은 자동 삭제할 수 없습니다.",
+            409,
+        )
+
+    user_id = _user_id(claims)
+    repo = AuthRepository(db)
+    if repo.is_registered(user_id):
+        raise AppError(
+            "가입 취소 불가",
+            "이미 가입이 완료된 계정은 삭제할 수 없습니다.",
+            409,
+        )
+
+    try:
+        deleted = repo.delete_pending_auth_user(user_id)
+        if not deleted and repo.is_registered(user_id):
+            raise AppError(
+                "가입 취소 불가",
+                "이미 가입이 완료된 계정은 삭제할 수 없습니다.",
+                409,
+            )
+        db.commit()
+    except AppError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("미완료 카카오 인증 계정 삭제 실패")
+        raise AppError(
+            "가입 취소 실패",
+            "임시 회원 정보를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            500,
+        ) from exc
+
+    return PendingKakaoDeletionResponse(deleted=deleted)
 
 
 def complete_kakao_signup(

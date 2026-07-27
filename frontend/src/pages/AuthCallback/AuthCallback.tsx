@@ -1,13 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import { kakaoLogin } from '../../api/kakaoAuth'
+import { abandonKakaoSignup, kakaoLogin } from '../../api/kakaoAuth'
 import { consumeKakaoReturnTo, setKakaoReturnTo } from '../../auth/kakaoOAuth'
-import { Shield } from '../../components/icons'
+import { Modal } from '../../components/Modal/Modal'
 import { showToast } from '../../components/Toast/toastStore'
-import { BRAND } from '../../config/env'
 import { supabase } from '../../config/supabase'
-import { signIn } from '../../hooks/useAuth'
+import { signIn, signOut } from '../../hooks/useAuth'
 import styles from './AuthCallback.module.scss'
 
 type ExchangeResult = Awaited<
@@ -40,6 +39,9 @@ function callbackError(search: string, hash: string): string | null {
 export function AuthCallback() {
   const { search, hash } = useLocation()
   const navigate = useNavigate()
+  const [signupPromptOpen, setSignupPromptOpen] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const signupButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     let active = true
@@ -66,7 +68,7 @@ export function AuthCallback() {
         const returnTo = consumeKakaoReturnTo()
         if (result.status === 'signup_required') {
           setKakaoReturnTo(returnTo)
-          void navigate('/signup?mode=kakao', { replace: true })
+          setSignupPromptOpen(true)
           return
         }
         void navigate(returnTo, { replace: true })
@@ -87,15 +89,61 @@ export function AuthCallback() {
     }
   }, [hash, navigate, search])
 
+  function continueSignup() {
+    setSignupPromptOpen(false)
+    void navigate('/signup?mode=kakao', { replace: true })
+  }
+
+  async function cancelSignup() {
+    if (cancelling) return
+
+    setCancelling(true)
+    try {
+      await abandonKakaoSignup()
+      consumeKakaoReturnTo()
+      signOut()
+      void navigate('/login', { replace: true })
+    } catch {
+      setCancelling(false)
+    }
+  }
+
   return (
     <main className={styles.page}>
-      <div className={styles.card} role="status" aria-live="polite">
-        <span className={styles.badge}>
-          <Shield className={styles.mark} />
-        </span>
-        <h1>{BRAND.nameKo} 로그인 처리 중</h1>
-        <p>카카오 인증 정보를 안전하게 확인하고 있습니다.</p>
+      <div className={styles.status} role="status" aria-live="polite">
+        <span className={styles.spinner} aria-hidden="true" />
+        <p>로그인 정보를 확인하고 있어요.</p>
       </div>
+
+      <Modal
+        open={signupPromptOpen}
+        onClose={() => void cancelSignup()}
+        title="회원가입 안내"
+        initialFocusRef={signupButtonRef}
+      >
+        <p className={styles.promptMessage}>
+          회원가입이 되어 있지 않습니다. 회원가입하시겠습니까?
+        </p>
+        <div className={styles.promptActions}>
+          <button
+            type="button"
+            className={styles.cancelButton}
+            onClick={() => void cancelSignup()}
+            disabled={cancelling}
+          >
+            {cancelling ? '처리 중…' : '취소'}
+          </button>
+          <button
+            ref={signupButtonRef}
+            type="button"
+            className={styles.confirmButton}
+            onClick={continueSignup}
+            disabled={cancelling}
+          >
+            회원가입
+          </button>
+        </div>
+      </Modal>
     </main>
   )
 }

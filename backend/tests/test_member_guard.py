@@ -12,7 +12,7 @@ from app.api.deps import require_user
 from app.db.base import Base
 from app.db.session import get_app_db
 from app.main import app
-from app.models.auth import AppUser
+from app.models.auth import AppUser, UserAgreement
 
 
 @pytest.fixture()
@@ -50,6 +50,22 @@ def test_registered_user_can_use_member_api(guarded_client):
     client, SessionLocal, user_id = guarded_client
     with SessionLocal() as db:
         db.add(AppUser(id=user_id))
+        db.add_all(
+            [
+                UserAgreement(
+                    user_id=user_id,
+                    agreement_type="terms",
+                    version="v1",
+                    is_agreed=True,
+                ),
+                UserAgreement(
+                    user_id=user_id,
+                    agreement_type="privacy",
+                    version="v1",
+                    is_agreed=True,
+                ),
+            ]
+        )
         db.commit()
 
     response = client.get("/api/v1/chat/rooms")

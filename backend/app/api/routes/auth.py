@@ -11,9 +11,11 @@ from app.schemas.common import ApiResponse, success_response
 from app.schemas.kakao_auth import (
     KakaoAuthResponse,
     KakaoSignUpRequest,
+    PendingKakaoDeletionResponse,
     RegistrationResponse,
 )
 from app.services.kakao_auth import (
+    abandon_pending_kakao_signup,
     complete_kakao_signup,
     process_kakao_login,
     registration_status,
@@ -56,6 +58,17 @@ def kakao_login(
         device=_device(request),
     )
     return success_response(result)
+
+
+@router.delete(
+    "/kakao/pending",
+    response_model=ApiResponse[PendingKakaoDeletionResponse],
+)
+def abandon_kakao_signup(
+    user: RequireUser,
+    db: AppDb,
+) -> ApiResponse[PendingKakaoDeletionResponse]:
+    return success_response(abandon_pending_kakao_signup(user, db))
 
 
 @router.post(

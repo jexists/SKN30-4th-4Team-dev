@@ -74,6 +74,26 @@ def test_repository_creates_complete_member_graph(db: Session):
     assert history.login_at is not None
 
 
+def test_app_user_without_required_agreements_is_not_registered(db: Session):
+    user_id = uuid.uuid4()
+    repo = AuthRepository(db)
+    repo.add_app_user(user_id)
+    db.commit()
+
+    assert repo.is_registered(user_id) is False
+
+
+def test_member_requires_both_current_required_agreements(db: Session):
+    user_id = uuid.uuid4()
+    repo = AuthRepository(db)
+    repo.add_app_user(user_id)
+    repo.set_agreement(user_id, "terms", "v1", True)
+    repo.set_agreement(user_id, "privacy", "v1", False)
+    db.commit()
+
+    assert repo.is_registered(user_id) is False
+
+
 def test_profile_and_agreement_are_idempotent_upserts(db: Session):
     user_id = uuid.uuid4()
     repo = AuthRepository(db)

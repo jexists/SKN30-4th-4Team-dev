@@ -17,7 +17,13 @@ import { ENV } from './env'
 export const supabase: SupabaseClient | null =
   ENV.supabaseUrl && ENV.supabaseAnonKey
     ? createClient(ENV.supabaseUrl, ENV.supabaseAnonKey, {
-        auth: { storage: authStorage, flowType: 'pkce' },
+        auth: {
+          storage: authStorage,
+          flowType: 'pkce',
+          // /auth/callback이 exchangeCodeForSession을 직접 호출하므로 자동 교환을 끈다.
+          // 둘 다 켜면 먼저 실행된 쪽이 verifier를 소비해 "PKCE code verifier not found"가 난다.
+          detectSessionInUrl: false,
+        },
       })
     : null
 

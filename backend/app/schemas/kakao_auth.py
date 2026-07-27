@@ -23,6 +23,10 @@ class KakaoAuthResponse(BaseModel):
     user: AuthUserInfo
 
 
+class PendingKakaoDeletionResponse(BaseModel):
+    deleted: bool
+
+
 class KakaoSignUpRequest(BaseModel):
     nickname: str | None = Field(default=None, max_length=20)
     agree_terms: Literal[True]

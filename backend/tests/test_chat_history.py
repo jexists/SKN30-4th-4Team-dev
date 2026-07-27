@@ -17,7 +17,7 @@ from app.db import session as db_session
 from app.db.base import Base
 from app.db.session import get_app_db
 from app.main import app
-from app.models.auth import AppUser
+from app.models.auth import AppUser, UserAgreement
 from app.models.chat import ChatMessage, ChatRoom
 
 USER_A = str(uuid.uuid4())
@@ -33,7 +33,20 @@ def history_client():
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(bind=engine)
     with TestingSessionLocal() as db:
-        db.add_all([AppUser(id=uuid.UUID(USER_A)), AppUser(id=uuid.UUID(USER_B))])
+        user_ids = [uuid.UUID(USER_A), uuid.UUID(USER_B)]
+        db.add_all([AppUser(id=user_id) for user_id in user_ids])
+        db.add_all(
+            [
+                UserAgreement(
+                    user_id=user_id,
+                    agreement_type=agreement_type,
+                    version="v1",
+                    is_agreed=True,
+                )
+                for user_id in user_ids
+                for agreement_type in ("terms", "privacy")
+            ]
+        )
         db.commit()
 
     def override_get_app_db():

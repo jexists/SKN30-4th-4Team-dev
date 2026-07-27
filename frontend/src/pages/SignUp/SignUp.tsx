@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, Navigate, useBlocker, useLocation, useNavigate } from 'react-router-dom'
 
-import { completeKakaoSignup } from '../../api/kakaoAuth'
+import { abandonKakaoSignup, completeKakaoSignup } from '../../api/kakaoAuth'
 import { consumeKakaoReturnTo, startKakaoOAuth } from '../../auth/kakaoOAuth'
 import { Chat, Shield } from '../../components/icons'
 import { LegalDocView } from '../../components/LegalDoc/LegalDoc'
@@ -16,7 +16,7 @@ import styles from './SignUp.module.scss'
 const SOON = '아직 준비 중인 기능입니다.'
 
 export function SignUp() {
-  const { isAuthed, signIn } = useAuth()
+  const { isAuthed, signIn, signOut } = useAuth()
   const navigate = useNavigate()
   const { search } = useLocation()
   const isKakao = new URLSearchParams(search).get('mode') === 'kakao'
@@ -30,6 +30,34 @@ export function SignUp() {
   const [openDoc, setOpenDoc] = useState<'terms' | 'privacy' | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  const signupCompleted = useRef(false)
+  const abandonmentStarted = useRef(false)
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isKakao &&
+      !signupCompleted.current &&
+      (currentLocation.pathname !== nextLocation.pathname ||
+        currentLocation.search !== nextLocation.search),
+  )
+
+  useEffect(() => {
+    if (blocker.state !== 'blocked' || abandonmentStarted.current) return
+
+    abandonmentStarted.current = true
+    setSubmitting(true)
+    void abandonKakaoSignup()
+      .then(() => {
+        signupCompleted.current = true
+        signOut()
+        blocker.proceed()
+      })
+      .catch(() => {
+        abandonmentStarted.current = false
+        setSubmitting(false)
+        blocker.reset()
+      })
+  }, [blocker, signOut])
 
   const pwValid = password.length >= 8
   const pwMatch = confirm.length > 0 && password === confirm
@@ -65,6 +93,7 @@ export function SignUp() {
           agree_privacy: true,
           agree_marketing: agreeMarketing,
         })
+        signupCompleted.current = true
         setDone(true)
         void navigate(consumeKakaoReturnTo(), { replace: true })
       } catch {

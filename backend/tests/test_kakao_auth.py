@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -40,6 +40,13 @@ def kakao_client():
             "avatar_url": "https://example.com/kakao.png",
         },
     }
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS auth")
+        connection.exec_driver_sql("CREATE TABLE auth.users (id TEXT PRIMARY KEY)")
+        connection.execute(
+            text("INSERT INTO auth.users (id) VALUES (:user_id)"),
+            {"user_id": str(user_id)},
+        )
 
     app.dependency_overrides[get_app_db] = override_get_app_db
     app.dependency_overrides[require_user] = lambda: claims
@@ -81,6 +88,8 @@ def test_kakao_login_existing_member_records_history(kakao_client):
         repo = AuthRepository(db)
         repo.add_app_user(user_id)
         repo.upsert_profile(user_id, nickname="가입닉", profile_image=None)
+        repo.set_agreement(user_id, "terms", "v1", True)
+        repo.set_agreement(user_id, "privacy", "v1", True)
         db.commit()
 
     response = client.post(
@@ -103,6 +112,60 @@ def test_kakao_login_rejects_non_kakao_provider(kakao_client):
 
     assert response.status_code == 403
     assert response.json()["error"]["title"] == "카카오 인증 오류"
+
+
+def test_abandon_pending_kakao_signup_deletes_auth_identity(kakao_client):
+    client, SessionLocal, claims = kakao_client
+
+    response = client.delete("/api/v1/auth/kakao/pending")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"deleted": True}
+    with SessionLocal() as db:
+        remaining = db.execute(
+            text("SELECT id FROM auth.users WHERE id = :user_id"),
+            {"user_id": claims["sub"]},
+        ).scalar_one_or_none()
+        assert remaining is None
+
+
+def test_abandon_never_deletes_completed_member(kakao_client):
+    client, SessionLocal, claims = kakao_client
+    user_id = uuid.UUID(claims["sub"])
+    with SessionLocal() as db:
+        repo = AuthRepository(db)
+        repo.add_app_user(user_id)
+        repo.set_agreement(user_id, "terms", "v1", True)
+        repo.set_agreement(user_id, "privacy", "v1", True)
+        db.commit()
+
+    response = client.delete("/api/v1/auth/kakao/pending")
+
+    assert response.status_code == 409
+    with SessionLocal() as db:
+        remaining = db.execute(
+            text("SELECT id FROM auth.users WHERE id = :user_id"),
+            {"user_id": claims["sub"]},
+        ).scalar_one()
+        assert remaining == claims["sub"]
+
+
+def test_abandon_never_deletes_identity_linked_to_another_provider(kakao_client):
+    client, SessionLocal, claims = kakao_client
+    claims["app_metadata"] = {
+        "provider": "kakao",
+        "providers": ["email", "kakao"],
+    }
+
+    response = client.delete("/api/v1/auth/kakao/pending")
+
+    assert response.status_code == 409
+    with SessionLocal() as db:
+        remaining = db.execute(
+            text("SELECT id FROM auth.users WHERE id = :user_id"),
+            {"user_id": claims["sub"]},
+        ).scalar_one()
+        assert remaining == claims["sub"]
 
 
 def test_signup_requires_both_required_agreements(kakao_client):
