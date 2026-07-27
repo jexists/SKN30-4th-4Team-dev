@@ -8,6 +8,7 @@ from app.inference.engine import DocumentOcrEngine
 from app.masking.coordinate_mapper import MaskRegion, map_match_to_region
 from app.masking.detector import PiiDetector
 from app.masking.renderer import MaskRenderer
+from app.masking.sanitizer import sanitize_text
 from app.masking.validator import has_remaining_pii
 
 
@@ -17,6 +18,9 @@ class ProcessingResult:
     mask_count: int
     coarse_mask_count: int
     review_required: bool
+    sanitized_text: str
+    redaction_counts: dict[str, int]
+    text_safe_for_analysis: bool
 
 
 class ContractProcessingPipeline:
@@ -31,21 +35,36 @@ class ContractProcessingPipeline:
         pages = [preprocess_page(page) for page in rendered_pages]
         all_regions: list[MaskRegion] = []
         masked_pages: list[Path] = []
+        sanitized_pages: list[str] = []
+        redaction_counts: dict[str, int] = {}
 
         for page in pages:
             spotted = self.engine.spot_page(page.path, page.index)
             page_regions: list[MaskRegion] = []
+            sanitized_regions: list[str] = []
             for region in spotted.regions:
-                for match in self.detector.detect(region.text):
+                matches = self.detector.detect(region.text)
+                for match in matches:
                     page_regions.append(map_match_to_region(region, match))
+                sanitized = sanitize_text(region.text, matches)
+                sanitized_regions.append(sanitized.text)
+                for pii_type, count in sanitized.redaction_counts.items():
+                    redaction_counts[pii_type] = redaction_counts.get(pii_type, 0) + count
                 if region.label.lower() == "seal":
                     page_regions.append(MaskRegion(page.index, region.bbox, "seal", coarse=True))
             target = work_dir / f"masked_{page.index + 1:03d}.png"
             self.mask_renderer.render_page(page, page_regions, target)
             masked_pages.append(target)
             all_regions.extend(page_regions)
+            sanitized_pages.append(f"[페이지 {page.index + 1}]\n" + "\n".join(sanitized_regions))
 
         self.mask_renderer.build_flattened_pdf(masked_pages, output_path)
+
+        sanitized_text = "\n\n".join(sanitized_pages).strip()
+        text_safe_for_analysis = not self.detector.detect(sanitized_text)
+        if not text_safe_for_analysis:
+            # 지원하는 개인정보 패턴이 남으면 원문을 Worker 밖으로 내보내지 않는다.
+            raise ValueError("LLM 전달용 텍스트에 개인정보 패턴이 남아 있습니다.")
 
         # 마스킹된 이미지 자체를 다시 Spotting하여 잔존 개인정보를 확인한다.
         validation_pages = [
@@ -59,4 +78,7 @@ class ContractProcessingPipeline:
             coarse_mask_count=coarse_count,
             # 글자 단위 좌표가 확정되기 전 coarse 마스킹은 검토 대상으로 둔다.
             review_required=remaining or coarse_count > 0,
+            sanitized_text=sanitized_text,
+            redaction_counts=redaction_counts,
+            text_safe_for_analysis=text_safe_for_analysis,
         )

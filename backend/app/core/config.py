@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # 사용자 계약서 OCR/마스킹은 별도 worker에서 실행한다.
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
+    OCR_WORKER_PROCESS_TIMEOUT_SECONDS: float = 1200.0
+    CONTRACT_MAX_FILE_MB: int = 20
+    CONTRACT_ANALYSIS_MODEL: str = "gpt-4.1-mini"
+    CONTRACT_ANALYSIS_MAX_CHARS: int = 50_000
+    OPENAI_API_KEY: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
