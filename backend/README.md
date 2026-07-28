@@ -86,7 +86,7 @@ LLM에 보냅니다. 원본 OCR 텍스트와 마스킹 PDF는 LLM 입력에 포�
 
 전체 예산은 접속 사용자 수가 아니라 **백엔드 프로세스 수** 기준입니다:
 
-```
+```text
 (운영 replica × worker 수 + 실행 중인 로컬 백엔드 수) × 7  ≤  Max Pooler Clients × 50%
 ```
 
