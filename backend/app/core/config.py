@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +37,24 @@ class Settings(BaseSettings):
     # 둘 다 Postgres 가 아니면 검색이 조용히 꺼진다(빈 결과 → 근거 없는 답변).
     RAG_DB_URL: str = ""
 
+    # ── DB 커넥션 풀 ────────────────────────────────────────────────
+    # Supabase pooler 는 클라이언트 슬롯이 한정돼 있고, 팀원 여러 명이 각자 로컬 서버를 띄워
+    # 같은 DB 에 붙는다. 연결 예산은 "동시 접속 사용자 수" 가 아니라 "백엔드 프로세스 수" 기준이다.
+    #   프로세스당 최대 = (DB_POOL_SIZE + DB_MAX_OVERFLOW) + RAG_POOL_MAX_SIZE
+    # 기본값 3+2+2=7. 전체(replica×worker + 로컬 프로세스) × 7 이 Max Pooler Clients 의
+    # 절반을 넘지 않게 유지한다.
+    DB_POOL_SIZE: int = Field(default=3, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=2, ge=0)
+    DB_POOL_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
+    # pooler 가 조용히 끊은 커넥션을 오래 들고 있지 않도록 주기적으로 폐기한다.
+    DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, gt=0)
+    DB_CONNECT_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
+
+    # RAG 벡터 검색(psycopg 직접)이 쓰는 별도 풀. SQLAlchemy 풀과 합산해서 예산을 잡는다.
+    RAG_POOL_MAX_SIZE: int = Field(default=2, ge=1)
+    RAG_POOL_MAX_IDLE_SECONDS: int = Field(default=300, gt=0)
+    RAG_POOL_MAX_LIFETIME_SECONDS: int = Field(default=1800, gt=0)
+
     # 기동 시 임베딩 모델(KURE-v1 ~2GB)과 챗봇 엔진을 백그라운드 데몬 스레드로 미리 로드한다.
     # 끄면 첫 /api/v1/chat 요청이 그 로드를 대신 물어 10~20초 걸린다. 워밍업은 기동을 막지
     # 않고, 실패해도 서버는 그대로 뜬다(검색만 빈 결과로 우회).
@@ -56,6 +75,11 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
+    def is_sqlite(self) -> bool:
+        """SQLite 폴백 여부. 풀 옵션·기동 DDL 분기의 단일 기준점."""
+        return self.APP_DB_URL.startswith("sqlite")
+
+    @property
     def _app_pg_url(self) -> str:
         """앱 데이터(chat history 등)가 있는 Postgres URL 원본.
 
@@ -63,7 +87,7 @@ class Settings(BaseSettings):
         (RAG_DB_URL) 와 뒤섞으면 chat_room/chat_message 테이블이 만들어진 DB 와 조회하는 DB 가
         갈려 "관계 없음" 실패가 난다. APP_DB_URL 이 SQLite 면 빈 문자열 → 로컬 개발에서
         app_engine 은 비활성(get_app_db 가 503) — 스켈레톤(SessionLocal) 은 별개다."""
-        return "" if self.APP_DB_URL.startswith("sqlite") else self.APP_DB_URL
+        return "" if self.is_sqlite else self.APP_DB_URL
 
     @property
     def vector_db_dsn(self) -> str:

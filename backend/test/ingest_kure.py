@@ -4,13 +4,15 @@ data/02_processed/api_text/*.jsonl 의 법령·판례·해석 문서를 읽어
   1) 청킹(recursive char split) →
   2) KURE-v1(nlpai-lab/KURE-v1, 1024차원) 임베딩 →
   3) Supabase Postgres(pgvector) 벡터 스토어에 적재
-한다. 백엔드의 RAG 검색(services/retrieval)이 읽는 것과 같은 DB(RAG_DB_URL)에 저장한다.
+한다. 백엔드의 RAG 검색(services/retrieval)이 읽는 것과 **같은 DB** 에 저장한다.
 
 ── 실행 (backend/ 에서) ──────────────────────────────────────────────
     uv sync --group ingest                       # 의존성(sentence-transformers·torch) 설치
-    # .env 의 RAG_DB_URL 을 Postgres 연결 문자열로 설정해야 함 (sqlite 불가).
-    # 비워 두면 APP_DB_URL 을 재사용한다.
-    #   예) RAG_DB_URL=postgresql://USER:PW@HOST:5432/postgres
+    # .env 의 INGEST_DATABASE_URL 을 Postgres 연결 문자열로 설정해야 함 (sqlite 불가).
+    # ⚠️ 런타임(RAG_DB_URL/APP_DB_URL)으로 fallback 하지 않는다 — 런타임은 transaction
+    #    pooler(:6543) 라 DDL·대량 배치에 부적합하다. 색인은 Direct connection(권장) 또는
+    #    Session pooler URI 를 쓴다. 가리키는 DB 자체는 런타임과 같아야 한다.
+    #   예) INGEST_DATABASE_URL=postgresql://USER:PW@HOST:5432/postgres
 
     uv run --group ingest python -m test.ingest_kure --dry-run     # 청킹 통계만 확인
     uv run --group ingest python -m test.ingest_kure --limit 20    # 파일당 20건 소량 시험
@@ -52,6 +54,7 @@ DEFAULT_DATA_DIR = "data/02_processed/api_text"
 DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 150
 MIN_CHUNK_CHARS = 30  # 이보다 짧은 조각은 버린다
+_BACKEND_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
 # metadata 에서 뽑아 인덱스 컬럼으로 평탄화할 키
 FLAT_KEYS = ("source_type", "doc_title", "authority", "issue", "source_id")
@@ -212,25 +215,34 @@ def to_libpq_dsn(url: str) -> str:
 
 
 def resolve_database_url(cli_url: str | None) -> str:
-    """우선순위: --database-url > INGEST_DATABASE_URL > app 설정(vector_db_dsn).
+    """우선순위: --database-url > INGEST_DATABASE_URL > 종료.
 
-    app 설정으로 떨어질 때는 RAG 벡터 스토어(vector_db_dsn = RAG_DB_URL, 없으면 앱 DB)를
-    쓴다 — 색인이 쓰는 곳과 services/retrieval/search.py 가 읽는 곳이 반드시 같아야 한다.
+    ⚠️ 런타임 설정(RAG_DB_URL·APP_DB_URL)으로 **조용히 fallback 하지 않는다.** 런타임 URI 는
+    Supavisor transaction pooler(:6543) 라, 그걸로 DDL 과 대량 색인을 돌리면 세션 단위
+    보장이 없고 pooler 슬롯도 배치가 통째로 먹는다. 색인은 direct 또는 session URI 를
+    INGEST_DATABASE_URL 로 명시해서 쓴다.
+
+    색인이 쓰는 DB 와 services/retrieval/search.py 가 읽는 DB 는 여전히 **같아야** 한다.
+    다른 건 연결 경로(URI)일 뿐 대상 DB 가 아니다.
     """
     url = cli_url or os.getenv("INGEST_DATABASE_URL")
     if not url:
-        try:
-            from app.core.config import settings  # backend/ 를 pythonpath 로 실행 시 가능
+        # uv run은 .env를 자동으로 os.environ에 올리지 않으므로 색인 전용 키를 직접 읽는다.
+        # 다른 비밀값은 프로세스 환경으로 복사하지 않는다.
+        from dotenv import dotenv_values
 
-            url = settings.vector_db_dsn
-        except Exception:
-            url = os.getenv("RAG_DB_URL") or os.getenv("APP_DB_URL", "")
+        url = dotenv_values(_BACKEND_ENV_PATH).get("INGEST_DATABASE_URL") or ""
     if not url:
-        sys.exit("❌ RAG_DB_URL 이 없습니다. .env 또는 --database-url 로 지정하세요.")
+        sys.exit(
+            "❌ INGEST_DATABASE_URL 이 없습니다. .env 또는 --database-url 로 지정하세요.\n"
+            "   색인은 런타임(RAG_DB_URL/APP_DB_URL)과 분리된 연결을 씁니다 —\n"
+            "   Supabase Dashboard 의 Direct connection(권장) 또는 Session pooler URI 를 쓰세요.\n"
+            "   예) INGEST_DATABASE_URL=postgresql://USER:PW@HOST:5432/postgres"
+        )
     if url.startswith("sqlite"):
         sys.exit(
             "❌ pgvector 는 Postgres 가 필요합니다.\n"
-            "   RAG_DB_URL(또는 APP_DB_URL) 을 Supabase/Postgres 연결 문자열로 설정하세요.\n"
+            "   INGEST_DATABASE_URL 을 Supabase/Postgres 연결 문자열로 설정하세요.\n"
             "   예) postgresql+psycopg://USER:PW@HOST:5432/postgres"
         )
     return to_libpq_dsn(url)
@@ -241,7 +253,9 @@ def connect(dsn: str):
         import psycopg
     except ImportError:
         sys.exit("❌ psycopg 가 필요합니다. (백엔드 기본 의존성) uv sync 를 실행하세요.")
-    return psycopg.connect(dsn)
+    # prepare_threshold: URI 가 나중에 transaction pooler 로 바뀌어도 깨지지 않도록 명시.
+    # connect_timeout: DB 가 포화됐을 때 배치가 무한정 매달리지 않게 한다.
+    return psycopg.connect(dsn, connect_timeout=10, prepare_threshold=None)
 
 
 def ensure_schema(conn, table: str, recreate: bool) -> None:
@@ -403,11 +417,13 @@ def main() -> None:
     if total == 0:
         sys.exit("❌ 적재할 청크가 없습니다.")
 
+    # DB 설정 누락을 KURE 모델(~2GB) 다운로드·적재보다 먼저 실패시킨다.
+    dsn = resolve_database_url(args.database_url)
+
     # ── 3) 임베딩 ──
     model = load_model(args.device)
 
     # ── 4) 적재 준비 ──
-    dsn = resolve_database_url(args.database_url)
     conn = connect(dsn)
     try:
         ensure_schema(conn, args.table, args.recreate)
