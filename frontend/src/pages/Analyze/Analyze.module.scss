@@ -33,26 +33,15 @@
   color: v.$slate;
 }
 
-/* ── 2단 레이아웃 ── */
-.grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
 .left {
   display: grid;
   gap: 24px;
-}
-.right {
-  display: grid;
-  gap: 20px;
 }
 
 /* ── 업로드 카드 ── */
 .uploads {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 .uploadCard {
@@ -91,6 +80,39 @@
   font-size: 14px;
   font-style: italic;
   color: v.$slate;
+}
+.diagnoseBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+
+  svg {
+    width: 17px;
+    height: 17px;
+  }
+  &:hover {
+    background: v.$navy-hover;
+  }
+  &:active {
+    transform: translateY(1px);
+  }
+  &:disabled {
+    background: v.$slate-light;
+    cursor: not-allowed;
+  }
 }
 .dropzone {
   display: flex;
@@ -138,6 +160,54 @@
   border: 0;
 }
 
+/* ── 업로드 상태 바 ── */
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 24px;
+  background: v.$surface;
+  border: 1px solid v.$border-default;
+  border-radius: v.$radius;
+}
+.statusLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.statusIcon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid v.$border-strong;
+  color: v.$slate;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+.statusIconDone {
+  border-color: v.$green;
+  background: v.$green-soft;
+  color: v.$green;
+}
+.statusTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: v.$ink;
+}
+.statusSub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: v.$slate;
+}
+
 /* ── 서류 발급 안내 ── */
 .guide {
   background: v.$lavender;
@@ -153,7 +223,7 @@
 }
 .guideGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 22px;
 }
 .guideItem {
@@ -184,101 +254,6 @@
   color: v.$navy-800;
   font-size: 15px;
   font-weight: 700;
-}
-
-/* ── 위험 점수 카드 ── */
-.scoreCard {
-  background: v.$surface;
-  border: 1px solid v.$border-card;
-  border-radius: v.$radius;
-  padding: 28px 26px 24px;
-  box-shadow: 0 1px 2px rgba(15, 26, 53, 0.04);
-}
-.scoreTitle {
-  margin: 0 0 18px;
-  text-align: center;
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: v.$ink;
-}
-.gauge {
-  position: relative;
-  width: 100%;
-  max-width: 260px;
-  margin: 4px auto 0;
-
-  svg {
-    width: 100%;
-    height: auto;
-    display: block;
-    overflow: visible;
-  }
-}
-.gaugeTrack {
-  fill: none;
-  stroke: #eceff5;
-  stroke-width: 16;
-  stroke-linecap: round;
-}
-.gaugeArc {
-  fill: none;
-  stroke: url(#riskArc);
-  stroke-width: 16;
-  stroke-linecap: round;
-}
-.gaugeNeedle {
-  stroke: v.$ink;
-  stroke-width: 4;
-  stroke-linecap: round;
-}
-.gaugeHub {
-  fill: v.$navy-800;
-}
-.gaugeStatus {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 4px;
-  text-align: center;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: v.$green;
-}
-.gaugeHelp {
-  margin: 14px 0 0;
-  text-align: center;
-  font-size: 14.5px;
-  color: v.$slate;
-}
-.metrics {
-  margin: 24px 0 0;
-  display: grid;
-  gap: 0;
-}
-.metricRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 15px 2px;
-  border-top: 1px solid #eceff4;
-
-  &:first-child {
-    border-top: none;
-  }
-  dt {
-    font-size: 15px;
-    font-weight: 600;
-    color: v.$ink;
-  }
-  dd {
-    margin: 0;
-    font-size: 14.5px;
-    font-weight: 600;
-    color: v.$slate;
-    font-variant-numeric: tabular-nums;
-  }
 }
 
 /* ── 안전 보장 카드 ── */
@@ -323,9 +298,10 @@
 }
 
 /* ── 반응형 ── */
-@media (max-width: 960px) {
-  .grid {
-    grid-template-columns: 1fr;
+@media (max-width: 1100px) {
+  .uploads,
+  .guideGrid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 @media (max-width: 560px) {

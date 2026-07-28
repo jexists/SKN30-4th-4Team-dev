@@ -221,12 +221,6 @@ export function RiskReport() {
               <Pin className={styles.visualArtIcon} />
             </div>
             <span className={styles.visualBadge}>위치 정보 분석</span>
-            <div className={styles.visualNote}>
-              <p className={styles.visualNoteTitle}>주변 환경 안전성</p>
-              <p className={styles.visualNoteDesc}>
-                낮은 범죄율 및 역세권(300m 이내) 위치로 보증금 회수를 위한 환금성이 우수합니다.
-              </p>
-            </div>
           </div>
         </div>
       </div>

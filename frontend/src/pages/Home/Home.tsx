@@ -43,16 +43,6 @@ export function Home() {
                 <Refresh /> AI 챗봇 상담
               </Link>
             </div>
-            <div className={styles.social}>
-              <span className={styles.avatars} aria-hidden>
-                <i />
-                <i />
-                <i />
-              </span>
-              <p>
-                최근 한 달간 <strong>2,030명의 임차인</strong>이 선택했습니다.
-              </p>
-            </div>
           </div>
 
           {/* 히어로 목업 카드 (사진 대신 CSS/SVG 목업) */}
@@ -254,9 +244,6 @@ export function Home() {
           <div className={styles.finalActions}>
             <Link to="/analyze" className={styles.btnPrimary}>
               지금 바로 계약서 점검하기
-            </Link>
-            <Link to="/chat" className={styles.btnOutline}>
-              데모 보기
             </Link>
           </div>
         </div>

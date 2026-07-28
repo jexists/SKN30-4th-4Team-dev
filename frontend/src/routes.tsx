@@ -2,8 +2,6 @@ import { createBrowserRouter } from 'react-router-dom'
 
 import App from './App'
 import { RequireAuth } from './components/RequireAuth/RequireAuth'
-import { AccountSettings } from './pages/AccountSettings/AccountSettings'
-import { AddCard } from './pages/AddCard/AddCard'
 import { Analyze } from './pages/Analyze/Analyze'
 import { AnalyzeResult } from './pages/AnalyzeResult/AnalyzeResult'
 import { AuthCallback } from './pages/AuthCallback/AuthCallback'
@@ -40,8 +38,6 @@ export const router = createBrowserRouter([
           { path: 'analyze/:id', element: <AnalyzeResult /> },
           { path: 'chat/:chatId?', element: <Chat /> },
           { path: 'mypage', element: <MyPage /> },
-          { path: 'account', element: <AccountSettings /> },
-          { path: 'account/cards/new', element: <AddCard /> },
           { path: 'risk-report', element: <RiskReport /> },
         ],
       },

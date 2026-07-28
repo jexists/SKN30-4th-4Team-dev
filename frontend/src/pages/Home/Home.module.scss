@@ -62,47 +62,9 @@
   gap: 12px;
   margin-top: 30px;
 }
-.social {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 30px;
-
-  p {
-    margin: 0;
-    font-size: 14px;
-    color: v.$slate;
-  }
-  strong {
-    color: v.$ink;
-    font-weight: 700;
-  }
-}
-.avatars {
-  display: inline-flex;
-
-  i {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 2px solid v.$white;
-    margin-left: -8px;
-    background: linear-gradient(135deg, #c7d0e8, #93a2c8);
-
-    &:first-child {
-      margin-left: 0;
-      background: linear-gradient(135deg, #dbe2f2, #aab6d6);
-    }
-    &:last-child {
-      background: linear-gradient(135deg, #b6c1de, #7f8fb8);
-    }
-  }
-}
-
 // 버튼 공통
 .btnPrimary,
-.btnGhost,
-.btnOutline {
+.btnGhost {
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -144,16 +106,6 @@
     background: v.$page-bg;
   }
 }
-.btnOutline {
-  background: transparent;
-  color: v.$navy-800;
-  border: 1px solid #c7cddd;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.6);
-  }
-}
-
 /* 히어로 목업 카드 */
 .heroRight {
   display: flex;
