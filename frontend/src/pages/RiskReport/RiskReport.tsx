@@ -273,13 +273,7 @@ export function RiskReport() {
             <div className={`${styles.visualArt} ${styles.visualArtMap}`}>
               <Pin className={styles.visualArtIcon} />
             </div>
-            <span className={styles.visualBadge}>추가 확인 사항</span>
-            <div className={styles.visualNote}>
-              <p className={styles.visualNoteTitle}>계약 전 확인 목록</p>
-              <p className={styles.visualNoteDesc}>
-                {analysis?.missing_information.join(', ') || '등기부등본과 실제 권리관계를 별도로 확인하세요.'}
-              </p>
-            </div>
+            <span className={styles.visualBadge}>위치 정보 분석</span>
           </div>
         </div>
       </div>

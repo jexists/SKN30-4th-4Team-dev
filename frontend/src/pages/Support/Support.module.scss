@@ -272,7 +272,6 @@
   flex-wrap: wrap;
   gap: 12px;
 }
-.btnPrimary,
 .btnOutline {
   display: inline-flex;
   align-items: center;
@@ -291,17 +290,6 @@
     width: 17px;
     height: 17px;
   }
-}
-.btnPrimary {
-  background: v.$navy-800;
-  color: v.$text-on-dark;
-  border: none;
-
-  &:hover {
-    box-shadow: 0 8px 18px rgba(15, 26, 53, 0.22);
-  }
-}
-.btnOutline {
   background: v.$surface;
   color: v.$navy-800;
   border: 1px solid v.$border-strong;

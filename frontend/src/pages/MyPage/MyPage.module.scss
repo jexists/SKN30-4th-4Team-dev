@@ -40,6 +40,23 @@
   height: 44px;
   color: v.$text-on-dark;
 }
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.avatarInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .avatarEdit {
   position: absolute;
   right: 2px;
@@ -97,6 +114,35 @@
   font-size: 15px;
   line-height: 1.6;
   color: v.$slate;
+}
+
+/* ══════════════ 계정 정보 ══════════════ */
+.infoList {
+  display: flex;
+  flex-direction: column;
+}
+.infoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+
+  & + & {
+    border-top: 1px solid #f2f3f7;
+  }
+}
+.infoLabel {
+  margin: 0 0 3px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: v.$slate;
+}
+.infoValue {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: v.$ink;
 }
 
 /* ══════════════ 섹션 공통 ══════════════ */
@@ -292,6 +338,122 @@
   }
   &:hover svg {
     transform: translateX(3px);
+  }
+}
+
+/* ══════════════ 보안 및 알림 설정 ══════════════ */
+.card {
+  background: v.$surface;
+  border: 1px solid v.$border-default;
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  & + & {
+    padding-top: 20px;
+    border-top: 1px solid v.$border-subtle;
+  }
+}
+.cardTitle {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  color: v.$navy-900;
+}
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+
+  & + & {
+    border-top: 1px solid #f2f3f7;
+  }
+}
+.settingLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settingIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: v.$slate;
+}
+.settingLabel {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: v.$ink;
+}
+.settingSub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: v.$slate;
+}
+.toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  background: #c4c6cf;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.toggleOn {
+  background: v.$navy-800;
+}
+.toggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: v.$surface;
+  box-shadow: 0 1px 3px rgba(15, 26, 53, 0.3);
+  transition: transform 0.15s ease;
+}
+.toggleOn .toggleThumb {
+  transform: translateX(18px);
+}
+
+/* ══════════════ 로그아웃 ══════════════ */
+.signOutRow {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+.signOutBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: v.$slate;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+  &:hover {
+    color: v.$ink;
+    text-decoration: underline;
   }
 }
 
