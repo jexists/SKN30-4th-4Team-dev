@@ -242,7 +242,8 @@ describe('Chat URL routing', () => {
       expect(api.createRoom).toHaveBeenCalledWith(question)
     })
     expect(api.addMessage).toHaveBeenCalledWith('room-new', 'USER', question)
-    expect(api.sendChat).toHaveBeenCalledWith(question, [])
+    // 세 번째 인자는 첨부 계약서 맥락(document_context) — 첨부가 없으면 undefined.
+    expect(api.sendChat).toHaveBeenCalledWith(question, [], undefined)
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-new')
     })

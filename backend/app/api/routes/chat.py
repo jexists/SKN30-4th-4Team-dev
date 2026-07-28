@@ -90,7 +90,7 @@ def chat(req: ChatRequest) -> ApiResponse[ChatResponse]:
     history = [t.model_dump() for t in req.history]
     started = time.perf_counter()
     try:
-        answer = run_turn(req.message, history)
+        answer = run_turn(req.message, history, req.document_context)
     except AppError:
         raise
     except Exception as e:

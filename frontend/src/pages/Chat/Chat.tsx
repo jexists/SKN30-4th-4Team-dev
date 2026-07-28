@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/client'
 import { sendChat, type ChatTurn } from '../../api/chat'
+import { analyzeContract, type DocumentAnalysis } from '../../api/documents'
 import { addMessage, createRoom, listMessages, listRooms, type ChatRoom } from '../../api/chatHistory'
 import { isRetryable } from '../../api/apiErrorHandler'
 import { Drawer } from '../../components/Drawer/Drawer'
@@ -38,6 +39,40 @@ const BUSY_ELSEWHERE_NOTICE = '다른 대화에서 답변을 생성 중입니다
 
 let _id = 0
 const newId = () => `m${Date.now()}-${_id++}`
+
+const SEVERITY_LABEL: Record<DocumentAnalysis['analysis']['risks'][number]['severity'], string> = {
+  HIGH: '높음',
+  MEDIUM: '중간',
+  LOW: '낮음',
+}
+
+/** 계약서 분석 결과를 대화창에 띄울 안내 말풍선(마크다운)으로 요약한다. */
+function formatContractSummary(name: string, doc: DocumentAnalysis): string {
+  const a = doc.analysis
+  const t = a.terms
+  const lines: string[] = [`📄 **${name}** 계약서를 읽었어요.`, '', a.summary]
+
+  const terms: string[] = []
+  if (t.property_type) terms.push(`- 유형: ${t.property_type}`)
+  if (t.deposit) terms.push(`- 보증금: ${t.deposit}`)
+  if (t.monthly_rent) terms.push(`- 차임(월세): ${t.monthly_rent}`)
+  if (t.contract_start || t.contract_end)
+    terms.push(`- 계약기간: ${t.contract_start ?? '?'} ~ ${t.contract_end ?? '?'}`)
+  if (t.special_terms.length) terms.push(`- 특약: ${t.special_terms.join('; ')}`)
+  if (terms.length) lines.push('', '**주요 조건**', ...terms)
+
+  if (a.risks.length) {
+    lines.push('', '**살펴볼 점**')
+    for (const r of a.risks) lines.push(`- [${SEVERITY_LABEL[r.severity]}] ${r.title} — ${r.reason}`)
+  }
+  if (a.missing_information.length)
+    lines.push('', `계약서에서 확인되지 않는 항목: ${a.missing_information.join(', ')}`)
+  if (doc.review_required)
+    lines.push('', '> ⚠️ 개인정보 마스킹에 검토가 필요한 부분이 있어 일부가 가려졌을 수 있어요.')
+
+  lines.push('', '계약서 관련해 궁금한 점을 물어보세요.')
+  return lines.join('\n')
+}
 
 const toMessage = (r: { id: string; role: string; content: string }): Message => ({
   id: r.id,
@@ -93,6 +128,12 @@ export function Chat() {
   const [followLatestRequest, setFollowLatestRequest] = useState(0)
 
   const [input, setInput] = useState('')
+  // 첨부한 계약서(OCR 익명화 + LLM 분석 결과). 붙어 있는 동안 매 질문에 맥락으로 함께 보낸다.
+  // 방을 옮기거나 새 대화를 시작하면 비운다 — 첨부는 지금 보는 대화 세션에만 유효하다.
+  const [contract, setContract] = useState<{ name: string; analysis: DocumentAnalysis } | null>(
+    null,
+  )
+  const [attaching, setAttaching] = useState(false)
   // 답변 생성이 진행 중인 방들. 전역 boolean 이면 답변을 기다리는 도중 다른 방으로 옮겼을 때
   // 그 방에도 '작성중' 이 뜨고 입력창까지 잠긴다 — 대기 상태는 방에 묶여 있어야 한다.
   const [pendingRooms, setPendingRooms] = useState<ReadonlySet<string>>(() => new Set())
@@ -209,6 +250,7 @@ export function Chat() {
 
     lastQuestion.current = ''
     setMessages([])
+    setContract(null) // 첨부는 대화 세션 단위 — 방을 옮기면 비운다.
 
     if (!activeRoomId) {
       setOpeningRoom(false)
@@ -301,6 +343,7 @@ export function Chat() {
     setMessages([])
     setMessagesCursor(null)
     setConversationBlock(null)
+    setContract(null)
     lastQuestion.current = ''
   }
 
@@ -392,6 +435,29 @@ export function Chat() {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, streaming: false } : m)))
   }, [])
 
+  /**
+   * 계약서 첨부: 파일을 백엔드 /documents/analyze 로 보내 OCR 익명화 + 분석 결과를 받는다.
+   * 성공하면 결과 요약을 대화창에 안내 말풍선으로 띄우고, 익명화 전문을 이후 질문 맥락으로 붙든다.
+   * 실패(개인정보 잔존·OCR 오류 등)는 공통 client 가 오류 모달로 처리하므로 여기선 상태만 되돌린다.
+   */
+  async function handleAttach(file: File) {
+    if (attaching || sending) return
+    setAttaching(true)
+    try {
+      const analysis = await analyzeContract(file)
+      setContract({ name: file.name, analysis })
+      setSuggestOpen(false)
+      setMessages((m) => [
+        ...m,
+        { id: newId(), role: 'assistant', content: formatContractSummary(file.name, analysis) },
+      ])
+    } catch {
+      // 오류 문구·모달은 client.ts 가 이미 처리했다. 첨부는 붙지 않은 상태로 남긴다.
+    } finally {
+      setAttaching(false)
+    }
+  }
+
   async function submitQuestion(text: string, regenerate = false) {
     const q = text.trim()
     // 어느 방이든 생성 중이면 보내지 않는다(방을 옮겨도 마찬가지). 막힌 이유는 입력창이 안내한다.
@@ -451,7 +517,7 @@ export function Chat() {
         setPending(NEW_CHAT_KEY, false)
       }
 
-      const res = await sendChat(q, history)
+      const res = await sendChat(q, history, contract?.analysis.sanitized_text)
       if (!persistent || activeRoomIdRef.current === roomId) {
         setMessages((m) => [
           ...dropTrailingError(m),
@@ -644,6 +710,10 @@ export function Chat() {
                 disabled={sending || openingRoom || busyElsewhere}
                 notice={busyElsewhere ? BUSY_ELSEWHERE_NOTICE : undefined}
                 maxLength={MAX_LEN}
+                onAttach={(file) => void handleAttach(file)}
+                attaching={attaching}
+                attachedName={contract?.name ?? null}
+                onRemoveAttach={() => setContract(null)}
               />
             )}
           </div>

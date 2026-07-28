@@ -1,7 +1,10 @@
 import { useLayoutEffect, useRef } from 'react'
 
-import { Info, Paperclip, Send } from '../../components/icons'
+import { Close, FileLines, Info, Paperclip, Send } from '../../components/icons'
 import styles from './Chat.module.scss'
+
+/** OCR worker 가 처리 가능한 계약서 형식. */
+const ACCEPT = '.pdf,.png,.jpg,.jpeg'
 
 interface Props {
   value: string
@@ -15,6 +18,14 @@ interface Props {
    */
   notice?: string
   maxLength: number
+  /** 계약서 파일 첨부. 선택 즉시 분석을 시작한다(Chat 이 처리). */
+  onAttach: (file: File) => void
+  /** 분석 중(첨부 버튼 잠금 + 스피너 표기). */
+  attaching?: boolean
+  /** 첨부된 계약서 파일명(있을 때만 칩 표시). */
+  attachedName?: string | null
+  /** 첨부 해제. */
+  onRemoveAttach?: () => void
 }
 
 const PLACEHOLDER = '법률적인 상황을 설명해주세요...'
@@ -24,8 +35,20 @@ const MAX_HEIGHT = 200 // px — 이 높이까지 늘고 그 뒤엔 내부 스�
  * 하단 고정 입력창. Enter 전송 / Shift+Enter 줄바꿈, 내용이 길어지면 높이만 증가(상한 후 내부 스크롤),
  * 전송 중엔 비활성. 기존 .composer 마크업/스타일을 그대로 사용한다.
  */
-export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxLength }: Props) {
+export function ChatComposer({
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  notice,
+  maxLength,
+  onAttach,
+  attaching = false,
+  attachedName,
+  onRemoveAttach,
+}: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   // 내용에 맞춰 높이 자동 조절(레이아웃은 안 밀리게 상한 적용).
   useLayoutEffect(() => {
@@ -39,6 +62,13 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxL
     if (!disabled && value.trim()) onSubmit()
   }
 
+  function onFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // 같은 파일을 다시 골라도 change 가 발생하도록 값을 비운다.
+    e.target.value = ''
+    if (file) onAttach(file)
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -48,6 +78,24 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxL
 
   return (
     <div className={styles.composer}>
+      {(attachedName || attaching) && (
+        <div className={styles.attachChip}>
+          <FileLines className={styles.attachChipIcon} aria-hidden />
+          <span className={styles.attachChipName}>
+            {attaching ? '계약서 분석 중…' : attachedName}
+          </span>
+          {!attaching && onRemoveAttach && (
+            <button
+              type="button"
+              className={styles.attachChipRemove}
+              aria-label="첨부 계약서 제거"
+              onClick={onRemoveAttach}
+            >
+              <Close />
+            </button>
+          )}
+        </div>
+      )}
       <form
         className={styles.inputBar}
         onSubmit={(e) => {
@@ -55,7 +103,23 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxL
           submit()
         }}
       >
-        <button type="button" className={styles.attachBtn} aria-label="파일 첨부">
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPT}
+          className={styles.fileInput}
+          onChange={onFilePick}
+          tabIndex={-1}
+          aria-hidden
+        />
+        <button
+          type="button"
+          className={styles.attachBtn}
+          aria-label="계약서 첨부"
+          title="계약서 첨부 (PDF·이미지)"
+          onClick={() => fileRef.current?.click()}
+          disabled={disabled || attaching}
+        >
           <Paperclip />
         </button>
         <textarea

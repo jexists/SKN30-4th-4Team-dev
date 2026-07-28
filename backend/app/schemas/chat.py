@@ -16,6 +16,11 @@ class ChatRequest(BaseModel):
 
     message: str = Field(min_length=1, max_length=2000, description="사용자 발화")
     history: list[ChatTurn] = Field(default_factory=list, description="최근 대화 맥락")
+    # 첨부 계약서의 개인정보 치환 텍스트(documents/analyze 의 sanitized_text). 첨부가 붙어 있는
+    # 동안 프론트가 매 턴 함께 보내 계약서 관련 질문에 답할 수 있게 한다. 없으면 일반 RAG.
+    document_context: str | None = Field(
+        default=None, max_length=20000, description="첨부 계약서 익명화 텍스트"
+    )
 
 
 class ChatResponse(BaseModel):

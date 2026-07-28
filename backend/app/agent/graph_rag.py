@@ -54,6 +54,9 @@ MAX_RETRIEVAL_ATTEMPTS = 1  # 쿼리 재작성 최대 1회
 GRADE_STRONG = 0.45  # top-1 이 이 이상이면 충분 → 바로 생성
 GRADE_WEAK = 0.35  # top-1 이 이 미만이면 부족 → (남은 횟수 내) 재작성
 
+# 첨부 계약서 텍스트를 프롬프트에 넣을 때의 상한(문자). 긴 계약서로 컨텍스트가 넘치지 않게 한다.
+CONTRACT_CONTEXT_CHARS = 6000
+
 
 def _history_text(state: ChatState, n: int = 12) -> str:
     """최근 대화 n개를 프롬프트용 텍스트로. 법적 고지 꼬리는 제거해 노이즈 감소."""
@@ -95,6 +98,7 @@ class ChatState(TypedDict, total=False):
     retrieval_attempts: int
     answer: str
     _last_query: str  # 직전 검색 쿼리 (동일 쿼리 재검색 스킵용)
+    document_context: str  # 첨부 계약서 익명화 텍스트 (있을 때만)
 
 
 # ══════════════════════════════════════════════
@@ -171,6 +175,17 @@ def generate(state: ChatState) -> dict:
         # source_type 별 출처 표기(_cite): 법령→법령명·조항, 판례→법원·사건번호, 사례→문서명
         return "\n".join(f"- {_cite(h)}: {h.get('content', '')[:200]}" for h in hs) or "(없음)"
 
+    # 사용자가 첨부한 계약서(개인정보 치환 완료). 있으면 프롬프트에 넣고 규칙을 한 줄 덧붙인다.
+    contract = (state.get("document_context") or "").strip()[:CONTRACT_CONTEXT_CHARS]
+    contract_block = f"\n[첨부 계약서]\n{contract}\n" if contract else ""
+    contract_rule = (
+        "7) [첨부 계약서]가 있으면 그 계약서의 실제 조건(보증금·차임·기간·특약 등)에 대한 질문은 "
+        "그 내용을 근거로 답하고, 법적 판단은 [법령·판례]와 함께 설명하라. 계약서에 없는 항목은 "
+        "'계약서에서 확인되지 않는다'고 밝혀라.\n"
+        if contract
+        else ""
+    )
+
     prompt = (
         "너는 세입자를 돕는 법률 상담봇이다. 아래 근거만 사용해 답하라.\n"
         "규칙:\n"
@@ -183,8 +198,10 @@ def generate(state: ChatState) -> dict:
         "5) [사례]는 '이런 경우 이렇게 판단된 적 있다'는 참고로만. "
         "근거에 없는 내용은 절대 단정하지 마라. 근거 밖 사실을 추가하지 마라.\n"
         "6) 이전 대화가 있으면 이어지는 대화처럼 답하라. 앞에서 이미 설명한 내용은 반복하지 말고 "
-        "새로 묻는 부분에 집중하라. 면책 문구·인사말은 넣지 마라.\n\n"
-        f"[대화 맥락]\n{_history_text(state)}\n\n"
+        "새로 묻는 부분에 집중하라. 면책 문구·인사말은 넣지 마라.\n"
+        f"{contract_rule}\n"
+        f"[대화 맥락]\n{_history_text(state)}\n"
+        f"{contract_block}\n"
         f"[법령·판례]\n{fmt(binding)}\n\n[사례]\n{fmt(persuasive)}\n\n[실무 참고]\n{fmt(ref)}\n\n"
         f"질문: {state.get('question', '')}"
     )
@@ -224,7 +241,11 @@ app = build_app()
 # ──────────────────────────────────────────────
 # 대화 맥락은 호출자가 넘긴 history 로 주입한다(DB 가 기록의 원본).
 # MemorySaver 는 그래프 컴파일 요건이라 남겨두되, 매 호출 새 thread_id 로 격리한다.
-def run_turn(question: str, history: list[dict] | None = None) -> str:
+def run_turn(
+    question: str,
+    history: list[dict] | None = None,
+    document_context: str | None = None,
+) -> str:
     import uuid
 
     msgs = []
@@ -245,6 +266,8 @@ def run_turn(question: str, history: list[dict] | None = None) -> str:
             "query": question,  # 이번 턴 검색어 (재작성 전 초기값)
             "retrieval_attempts": 0,  # 턴마다 재작성 예산 초기화
             "messages": msgs,
+            # 첨부 계약서 맥락(있으면). generate 프롬프트가 [첨부 계약서] 로 활용한다.
+            "document_context": (document_context or "").strip(),
         },
         config={"configurable": {"thread_id": uuid.uuid4().hex}},
     )

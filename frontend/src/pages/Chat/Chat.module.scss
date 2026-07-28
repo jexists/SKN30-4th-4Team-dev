@@ -818,8 +818,61 @@
     width: 20px;
     height: 20px;
   }
-  &:hover {
+  &:hover:not(:disabled) {
     background: v.$page-bg;
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+// 숨긴 파일 입력 — 첨부 버튼이 대신 클릭을 트리거한다.
+.fileInput {
+  display: none;
+}
+// 첨부된 계약서 표시(입력창 위). 분석 중엔 파일명 자리에 '분석 중…'.
+.attachChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid v.$border-strong;
+  border-radius: 10px;
+  background: v.$page-bg;
+  color: v.$slate;
+  font-size: 13px;
+}
+.attachChipIcon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.attachChipName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachChipRemove {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: v.$slate;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+  &:hover {
+    background: v.$surface;
+    color: v.$ink;
   }
 }
 .input {
