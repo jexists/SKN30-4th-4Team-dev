@@ -44,15 +44,22 @@ def test_postgres_uses_single_engine(reload_session):
 
 
 def test_postgres_pool_budget_is_explicit(reload_session):
-    """풀 상한이 SQLAlchemy 기본값(5+10)이 아니라 설정값으로 묶여 있어야 한다."""
+    """풀 상한이 SQLAlchemy 기본값(5+10)이 아니라 설정값으로 묶여 있어야 한다.
+
+    검증 대상은 create_engine 에 넘기는 인자(_pool_kwargs)다. SQLAlchemy 내부 속성
+    (pool._max_overflow 등)은 비공개라 버전이 올라가면 조용히 깨진다.
+    """
     m = reload_session(PG_URL)
-    pool = m.engine.pool
-    assert isinstance(pool, QueuePool)
-    assert pool.size() == settings.DB_POOL_SIZE
-    assert pool._max_overflow == settings.DB_MAX_OVERFLOW
-    assert pool._timeout == settings.DB_POOL_TIMEOUT_SECONDS
-    assert pool._recycle == settings.DB_POOL_RECYCLE_SECONDS
-    assert pool._pre_ping is True
+    assert m._pool_kwargs == {
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_POOL_TIMEOUT_SECONDS,
+        "pool_recycle": settings.DB_POOL_RECYCLE_SECONDS,
+        "pool_pre_ping": True,
+    }
+    # 인자가 실제 엔진에 반영됐는지는 공개 API 로 확인한다.
+    assert isinstance(m.engine.pool, QueuePool)
+    assert m.engine.pool.size() == settings.DB_POOL_SIZE
     # 프로세스당 상한 = pool_size + max_overflow. 예산 계산의 근거값.
     assert settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW <= 10
 

@@ -5,6 +5,7 @@ CodeRabbit·모니터링에서도 애플리케이션 버그와 구분되지 않�
 테이블까지 503 으로 숨기면 진짜 버그를 못 본다. 그 경계를 여기서 고정한다.
 """
 
+import asyncio
 from typing import Annotated
 
 import psycopg
@@ -22,6 +23,15 @@ EMAXCONNSESSION = (
     "connection failed: FATAL:  (EMAXCONNSESSION) max clients reached in session mode "
     "- max clients are limited to pool_size: 15"
 )
+
+# 요청 경로를 로그에 남기는 핸들러 전부 — 하나라도 raw scope["path"] 를 쓰면 위조가 가능해진다.
+FORGEABLE_LOG_EXCEPTIONS = [
+    SATimeoutError("QueuePool limit reached"),
+    PoolTimeout("couldn't get a connection"),
+    OperationalError("SELECT 1", None, psycopg.OperationalError(EMAXCONNSESSION)),
+    ProgrammingError("SELECT 1", None, psycopg.ProgrammingError("boom")),
+    RuntimeError("unhandled"),
+]
 
 
 @pytest.fixture()
@@ -44,6 +54,17 @@ def client():
 def _get(client: TestClient, exc: Exception):
     client.app.state.exc = exc
     return client.get("/boom")
+
+
+def _lookup_handler(app: FastAPI, exc: Exception):
+    """Starlette 과 같은 방식으로 예외 클래스의 MRO 를 타고 핸들러를 찾는다.
+
+    OperationalError 는 DBAPIError 핸들러가, RuntimeError 는 catch-all 이 받는다.
+    """
+    for cls in type(exc).__mro__:
+        if cls in app.exception_handlers:
+            return app.exception_handlers[cls]
+    raise AssertionError(f"핸들러 없음: {type(exc).__name__}")
 
 
 def test_connection_refused_is_503(client):
@@ -89,6 +110,47 @@ def test_queuepool_timeout_is_503(client):
 def test_psycopg_pool_timeout_is_503(client):
     exc = PoolTimeout("couldn't get a connection after 10.00 sec")
     assert _get(client, exc).status_code == 503
+
+
+@pytest.mark.parametrize("exc", FORGEABLE_LOG_EXCEPTIONS)
+def test_handler_logs_contain_no_newline(exc, caplog):
+    """핸들러가 남기는 로그 줄에 CR/LF 가 들어가면 안 된다(로그 위조 방지).
+
+    `/x/%0A...` 로 요청하면 ASGI scope["path"] 에는 개행이 그대로 들어오지만,
+    Starlette 이 URL 을 재구성하며 거치는 urlsplit 이 CPython 3.10+ 에서 CR/LF 를 제거한다.
+    그래서 핸들러에 별도 sanitize 를 두지 않는다.
+
+    라우터를 태우지 않고 핸들러를 직접 부르는 이유: `:path` 변환기의 정규식이 개행에서
+    멈춰 위조 경로가 라우팅 단계에서 404 로 걸러진다 — 그러면 핸들러 코드를 검증할 수 없다.
+    """
+    app = FastAPI()
+    register_exception_handlers(app)
+    handler = _lookup_handler(app, exc)
+
+    forged = '/api/v1/rooms\r\n2026-01-01 | ERROR | app.core | fake="injected"'
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": forged,
+            "root_path": "",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "app": app,
+        }
+    )
+    assert "\n" in forged  # 공격자가 넣은 개행은 scope 까지는 들어온다
+
+    with caplog.at_level("WARNING"):
+        asyncio.run(handler(request, exc))
+
+    assert caplog.records, "핸들러가 로그를 남기지 않았다"
+    for record in caplog.records:
+        message = record.getMessage()
+        assert "\n" not in message and "\r" not in message
+        assert "fake" in message  # 경로 내용 자체는 보존된다
 
 
 def test_programming_error_stays_500(client):
