@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import {
   Building,
@@ -10,6 +10,7 @@ import {
   Share,
   Warn,
 } from '../../components/icons'
+import type { DocumentAnalysisResult, RiskSeverity } from '../../types/document'
 import styles from './RiskReport.module.scss'
 
 type ClauseTone = 'risk' | 'safe' | 'neutral'
@@ -22,46 +23,27 @@ type Clause = {
   detail: string
 }
 
-const CLAUSES: Clause[] = [
+const SAMPLE_CLAUSES: Clause[] = [
   {
     tone: 'risk',
     title: '수선 및 유지보수 책임',
     quote: '임차인은 임대차 기간 중 구조적 문제를 포함한 모든 유지보수 및 수리 책임을 진다.',
     verdict: '불리',
-    detail:
-      '주요 구조물에 대한 수선 의무는 임대인에게 있다는 민법 원칙에서 벗어난 조항입니다. 예상치 못한 큰 비용이 발생할 수 있습니다.',
+    detail: '주요 구조물에 대한 수선 의무를 임차인에게 전가하는 조항인지 확인해야 합니다.',
   },
   {
     tone: 'safe',
     title: '선순위 권리 유지',
-    quote:
-      '임대인은 임차인이 입주하고 전입신고를 마친 다음 날까지 추가적인 근저당권이나 담보권을 설정하지 않는다.',
+    quote: '임차인의 대항력 취득 전까지 추가 담보권을 설정하지 않는다.',
     verdict: '유리',
-    detail:
-      '임차인의 대항력 확보 및 보증금 변제 우선순위를 보호하는 조항입니다. 매우 권장되는 방어적 특약입니다.',
-  },
-  {
-    tone: 'neutral',
-    title: '계약 갱신 및 해지',
-    quote: '임차인은 1회에 한하여 계약갱신요구권을 행사할 수 있으며, 이 경우 임대차 기간은 2년 연장된다.',
-    verdict: '표준',
-    detail: '주택임대차보호법의 내용과 부합합니다. 별도의 조치는 필요하지 않습니다.',
+    detail: '임차인의 보증금 변제 우선순위를 보호하는 조항입니다.',
   },
 ]
 
-const ACTIONS = [
-  {
-    title: '특약 4번 협상',
-    desc: '구조물이나 주요 설비를 제외한 "소모성 자재"로 수선 책임을 한정하도록 임대인과 협상하십시오.',
-  },
-  {
-    title: '체납 사실 확인',
-    desc: '국세 및 지방세 완납증명서를 요청하여 숨겨진 조세채권 리스크가 없는지 반드시 확인하십시오.',
-  },
-  {
-    title: 'HUG 전세보증보험',
-    desc: '높은 전세가율(84%)을 고려할 때, 입주 즉시 HUG 전세보증금 반환보증 가입을 강력히 권장합니다.',
-  },
+const SAMPLE_ACTIONS = [
+  { title: '특약 협상', desc: '불리한 수선 책임 조항의 범위를 임대인과 다시 협의하세요.' },
+  { title: '체납 사실 확인', desc: '국세 및 지방세 완납증명서를 요청하세요.' },
+  { title: '보증보험 확인', desc: '전세보증금 반환보증 가입 가능 여부를 확인하세요.' },
 ]
 
 const TONE_ICON: Record<ClauseTone, typeof Warn> = {
@@ -70,7 +52,71 @@ const TONE_ICON: Record<ClauseTone, typeof Warn> = {
   neutral: Info,
 }
 
+const SEVERITY_TONE: Record<RiskSeverity, ClauseTone> = {
+  HIGH: 'risk',
+  MEDIUM: 'risk',
+  LOW: 'safe',
+}
+
+type ReportLocationState = { documentAnalysis?: DocumentAnalysisResult }
+
+function downloadMaskedPdf(result: DocumentAnalysisResult) {
+  const binary = window.atob(result.masked_pdf_base64)
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  const url = URL.createObjectURL(new Blob([bytes], { type: result.masked_pdf_media_type }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = 'masked-contract.pdf'
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
 export function RiskReport() {
+  const location = useLocation()
+  const result = (location.state as ReportLocationState | null)?.documentAnalysis
+  const analysis = result?.analysis
+  const terms = analysis?.terms
+
+  const analyzedClauses: Clause[] =
+    analysis?.risks.map((risk) => ({
+      tone: SEVERITY_TONE[risk.severity],
+      title: risk.title,
+      quote: risk.clause || '계약서 전체 문맥을 기준으로 검토한 항목입니다.',
+      verdict:
+        risk.severity === 'HIGH' ? '고위험' : risk.severity === 'MEDIUM' ? '주의' : '낮음',
+      detail: risk.reason,
+    })) ?? []
+  const clauses = analyzedClauses.length
+    ? analyzedClauses
+    : result
+      ? [
+          {
+            tone: 'safe' as const,
+            title: '명시적인 고위험 조항 없음',
+            quote: '자동 분석에서 즉시 경고할 계약 조항을 찾지 못했습니다.',
+            verdict: '확인',
+            detail: '등기부등본과 실제 권리관계는 별도로 확인해야 합니다.',
+          },
+        ]
+      : SAMPLE_CLAUSES
+  const actions = analysis
+    ? analysis.risks.length
+      ? analysis.risks.map((risk) => ({ title: risk.title, desc: risk.recommendation }))
+      : [
+          {
+            title: '권리관계 별도 확인',
+            desc: '자동 분석에서 고위험 조항은 없었지만 최신 등기부등본과 체납 여부를 확인하세요.',
+          },
+        ]
+    : SAMPLE_ACTIONS
+  const highCount = analysis?.risks.filter((risk) => risk.severity === 'HIGH').length ?? 1
+  const mediumCount = analysis?.risks.filter((risk) => risk.severity === 'MEDIUM').length ?? 1
+  const lowCount = analysis?.risks.filter((risk) => risk.severity === 'LOW').length ?? 0
+  const score = result ? Math.max(20, 100 - highCount * 25 - mediumCount * 12 - lowCount * 4) : 72
+  const scoreLabel = score >= 80 ? '안전' : score >= 60 ? '주의' : '위험'
+  const riskPercent = 100 - score
+  const period = [terms?.contract_start, terms?.contract_end].filter(Boolean).join(' ~ ') || '미확인'
+
   return (
     <div className={styles.page}>
       <div className={styles.container}>
@@ -78,94 +124,105 @@ export function RiskReport() {
           <div>
             <h1 className={styles.title}>종합 리스크 리포트</h1>
             <p className={styles.subtitle}>
-              매물 정보: 서울특별시 서초구 서초동 1303-34, 럭셔리하이츠 402호
+              {analysis
+                ? `계약 유형: ${terms?.property_type || '주택 임대차계약서'}`
+                : '계약서를 업로드하면 실제 분석 결과가 이 화면에 표시됩니다.'}
             </p>
           </div>
           <div className={styles.headerActions}>
-            <button type="button" className={styles.btnOutline}>
+            <button
+              type="button"
+              className={styles.btnOutline}
+              disabled={!result}
+              onClick={() => result && downloadMaskedPdf(result)}
+            >
               <Download /> PDF 다운로드
             </button>
-            <button type="button" className={styles.btnPrimary}>
+            <button
+              type="button"
+              className={styles.btnPrimary}
+              onClick={() => {
+                const text = analysis?.summary || '종합 리스크 리포트'
+                if (navigator.share) void navigator.share({ title: '종합 리스크 리포트', text })
+                else void navigator.clipboard.writeText(text)
+              }}
+            >
               <Share /> 리포트 공유
             </button>
           </div>
         </header>
 
         <div className={styles.bento}>
-          {/* 종합 안전 점수 */}
           <section className={styles.scoreCard}>
             <h3 className={styles.cardTitle}>종합 안전 점수</h3>
             <div className={styles.gauge}>
               <svg className={styles.gaugeSvg} viewBox="0 0 100 100">
                 <circle className={styles.gaugeTrack} cx="50" cy="50" r="45" />
-                <circle className={styles.gaugeFill} cx="50" cy="50" r="45" strokeDasharray="283" strokeDashoffset="80" />
+                <circle
+                  className={styles.gaugeFill}
+                  cx="50"
+                  cy="50"
+                  r="45"
+                  strokeDasharray="283"
+                  strokeDashoffset={283 * (1 - score / 100)}
+                />
               </svg>
               <div className={styles.gaugeText}>
-                <span className={styles.gaugeNum}>72</span>
-                <span className={styles.gaugeLabel}>주의</span>
+                <span className={styles.gaugeNum}>{score}</span>
+                <span className={styles.gaugeLabel}>{scoreLabel}</span>
               </div>
             </div>
             <p className={styles.scoreDesc}>
-              본 매물은 시장가 대비 높은 전세가율로 인해 <b>주의 단계</b>의 리스크를 보유하고
-              있습니다.
+              {analysis?.summary || '계약서를 업로드하면 OCR로 인식한 조항을 기준으로 분석합니다.'}
             </p>
           </section>
 
-          {/* 재무 건전성 분석 */}
           <section className={styles.financeCard}>
             <div className={styles.cardHead}>
-              <h3 className={styles.cardTitle}>재무 건전성 분석</h3>
-              <span className={styles.warnPill}>고위험 전세가율 주의</span>
+              <h3 className={styles.cardTitle}>주요 계약 조건</h3>
+              <span className={styles.warnPill}>{analysis ? `${highCount}개 고위험 항목` : '분석 전'}</span>
             </div>
             <div className={styles.financeGrid}>
               <div className={styles.financeStat}>
-                <p className={styles.financeLabel}>매매 시세 (추정)</p>
-                <p className={styles.financeValue}>₩850,000,000</p>
+                <p className={styles.financeLabel}>보증금</p>
+                <p className={styles.financeValue}>{terms?.deposit || '미확인'}</p>
               </div>
               <div className={styles.financeStat}>
-                <p className={styles.financeLabel}>선순위 채권</p>
-                <p className={styles.financeValue}>₩240,000,000</p>
+                <p className={styles.financeLabel}>월세</p>
+                <p className={styles.financeValue}>{terms?.monthly_rent || '미확인'}</p>
               </div>
               <div className={`${styles.financeStat} ${styles.financeStatWarn}`}>
-                <p className={styles.financeLabel}>부채비율 (전세가율)</p>
-                <p className={styles.financeValueWarn}>84.2%</p>
+                <p className={styles.financeLabel}>계약 기간</p>
+                <p className={styles.financeValueWarn}>{period}</p>
               </div>
             </div>
             <div className={styles.ltvBar}>
-              <div className={styles.ltvBarFill} style={{ width: '84.2%' }} />
+              <div className={styles.ltvBarFill} style={{ width: `${riskPercent}%` }} />
             </div>
             <div className={styles.ltvScale}>
-              <span>안전 (70% 미만)</span>
-              <span>보통 (70-80%)</span>
-              <span className={styles.ltvScaleWarn}>주의 (80% 초과)</span>
+              <span>낮은 위험</span>
+              <span>주의</span>
+              <span className={styles.ltvScaleWarn}>높은 위험</span>
             </div>
             <div className={styles.infoNote}>
               <Info className={styles.infoNoteIcon} />
-              <p>
-                보증금과 선순위 채권의 합계액이 매매 시세의 80%를 초과합니다. 경매 진행 시 보증금
-                전액 회수가 어려울 수 있는 위험이 있습니다.
-              </p>
+              <p>{analysis?.summary || '계약서 분석을 시작하려면 분석 화면에서 파일을 선택하세요.'}</p>
             </div>
           </section>
 
-          {/* 계약 특약 사항 분석 */}
           <section className={styles.clauseCol}>
             <div className={styles.clauseHead}>
               <h3 className={styles.cardTitle}>계약 특약 사항 분석</h3>
               <div className={styles.legend}>
-                <span className={styles.legendSafe}>
-                  <i /> 유리
-                </span>
-                <span className={styles.legendRisk}>
-                  <i /> 주의
-                </span>
+                <span className={styles.legendSafe}><i /> 낮음</span>
+                <span className={styles.legendRisk}><i /> 주의</span>
               </div>
             </div>
-            {CLAUSES.map((clause) => {
+            {clauses.map((clause) => {
               const ToneIcon = TONE_ICON[clause.tone]
               return (
                 <article
-                  key={clause.title}
+                  key={`${clause.title}-${clause.quote}`}
                   className={`${styles.clauseCard} ${styles[`clause_${clause.tone}`]}`}
                 >
                   <div className={styles.clauseTop}>
@@ -181,15 +238,12 @@ export function RiskReport() {
             })}
           </section>
 
-          {/* 권장 조치 사항 */}
           <aside className={styles.actionCard}>
-            <h3 className={styles.actionTitle}>
-              <ClipboardCheck /> 권장 조치 사항
-            </h3>
+            <h3 className={styles.actionTitle}><ClipboardCheck /> 권장 조치 사항</h3>
             <ul className={styles.actionList}>
-              {ACTIONS.map((action, i) => (
-                <li key={action.title}>
-                  <span className={styles.actionNum}>{i + 1}</span>
+              {actions.map((action, index) => (
+                <li key={`${action.title}-${index}`}>
+                  <span className={styles.actionNum}>{index + 1}</span>
                   <div>
                     <p className={styles.actionItemTitle}>{action.title}</p>
                     <p className={styles.actionItemDesc}>{action.desc}</p>
@@ -197,22 +251,21 @@ export function RiskReport() {
                 </li>
               ))}
             </ul>
-            <Link to="/chat" className={styles.actionCta}>
-              AI 어시스턴트에게 조언 구하기
-            </Link>
+            <Link to="/chat" className={styles.actionCta}>AI 어시스턴트에게 조언 구하기</Link>
           </aside>
         </div>
 
-        {/* 시각적 컨텍스트 */}
         <div className={styles.visualGrid}>
           <div className={styles.visualCard}>
             <div className={`${styles.visualArt} ${styles.visualArtBuilding}`}>
               <Building className={styles.visualArtIcon} />
             </div>
             <div className={styles.visualOverlay}>
-              <p className={styles.visualOverlayTitle}>건물 상태 정보</p>
+              <p className={styles.visualOverlayTitle}>개인정보 보호 결과</p>
               <p className={styles.visualOverlayDesc}>
-                2019년 준공된 고급 주거 단지입니다. 건축물대장상 위반 건축물 내역이 없습니다.
+                {result
+                  ? `개인정보 ${result.mask_count}개를 마스킹했습니다.${result.review_required ? ' 결과를 사람이 한 번 더 확인하는 것을 권장합니다.' : ''}`
+                  : '분석 시 개인정보를 마스킹한 PDF를 함께 생성합니다.'}
               </p>
             </div>
           </div>
@@ -220,11 +273,11 @@ export function RiskReport() {
             <div className={`${styles.visualArt} ${styles.visualArtMap}`}>
               <Pin className={styles.visualArtIcon} />
             </div>
-            <span className={styles.visualBadge}>위치 정보 분석</span>
+            <span className={styles.visualBadge}>추가 확인 사항</span>
             <div className={styles.visualNote}>
-              <p className={styles.visualNoteTitle}>주변 환경 안전성</p>
+              <p className={styles.visualNoteTitle}>계약 전 확인 목록</p>
               <p className={styles.visualNoteDesc}>
-                낮은 범죄율 및 역세권(300m 이내) 위치로 보증금 회수를 위한 환금성이 우수합니다.
+                {analysis?.missing_information.join(', ') || '등기부등본과 실제 권리관계를 별도로 확인하세요.'}
               </p>
             </div>
           </div>

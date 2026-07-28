@@ -41,7 +41,21 @@ Dashboard 가 주는 전체 URI 를 쓰세요.
 프로세스 하나가 잡는 커넥션 상한은 기본 **7개**입니다. 자세한 예산 계산은
 [`backend/README.md`](../backend/README.md) 의 "커넥션 예산" 참고.
 
-## 2. 실행 (개발) — 터미널 2개
+## 2. 실행 (개발) — 터미널 3개
+
+OCR worker(계약서 분석 시 필요):
+```bash
+cd ocr-worker
+uv sync
+cp .env.example .env  # 최초 한 번만
+# OCR_VL_MODEL_DIR를 내려받은 PaddleOCR-VL-1.6 폴더로 지정
+# 로컬 CPU 실행은 OCR_VL_BACKEND, OCR_VL_SERVER_URL을 비워 둔다.
+# 빠른 시연은 OCR_PROVIDER=tesseract (시스템에 kor 언어팩 필요),
+# PaddleOCR-VL 정확도 확인은 OCR_PROVIDER=paddle_vl
+uv run uvicorn app.main:app --reload --port 8100
+```
+
+모델은 첫 계약서 요청에서 한 번 로드됩니다. `/health`는 모델 파일을 로드하지 않습니다.
 
 백엔드:
 ```bash
@@ -53,6 +67,9 @@ uv run uvicorn app.main:app --reload --port 8000
 첫 실행에서는 임베딩 모델(KURE-v1, 약 2GB)을 백그라운드로 내려받아 워밍업하므로 준비에
 시간이 걸릴 수 있지만 서버와 헬스체크는 즉시 응답합니다. 백엔드 저장이 잦은 개발 중에는
 `.env`의 `WARMUP_ON_STARTUP=false`로 워밍업을 끌 수 있습니다.
+
+`OPENAI_API_KEY`가 없으면 계약서 보고서는 로컬 규칙 분석으로 생성됩니다. 키를 설정하면
+기존 구조화 LLM 분석을 우선 사용합니다.
 
 프론트엔드:
 ```bash
@@ -70,6 +87,7 @@ docker compose up --build
 ## 4. 테스트 / 린트
 ```bash
 cd backend  && uv run pytest         # 백엔드 테스트
+cd ocr-worker && uv run pytest       # OCR worker 테스트
 cd frontend && npm run test          # 프론트 테스트
 cd frontend && npm run lint          # 프론트 린트
 ```

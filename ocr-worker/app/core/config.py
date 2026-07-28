@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     OCR_MODEL_NAME: str = "PaddlePaddle/PaddleOCR-VL-1.6"
+    OCR_PROVIDER: Literal["paddle_vl", "tesseract"] = "paddle_vl"
     OCR_PIPELINE_VERSION: str = "v1.6"
     OCR_ENGINE: Literal["paddle", "transformers"] = "transformers"
     OCR_DEVICE: str = "cpu"
@@ -34,6 +35,8 @@ class Settings(BaseSettings):
     OCR_MAX_PAGES: int = 20
     OCR_RENDER_DPI: int = 250
     OCR_MASK_MARGIN_PX: int = 4
+    OCR_TESSERACT_LANG: str = "kor+eng"
+    OCR_TESSERACT_PSM: int = 6
 
 
 @lru_cache

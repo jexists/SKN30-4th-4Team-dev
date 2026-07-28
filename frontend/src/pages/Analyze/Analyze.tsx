@@ -1,5 +1,7 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 
+import { analyzeContract } from '../../api/documents'
 import { Doc, FileLines, Gavel, Shield, Upload } from '../../components/icons'
 import { BRAND } from '../../config/env'
 import styles from './Analyze.module.scss'
@@ -24,6 +26,21 @@ const METRICS = [
 ]
 
 export function Analyze() {
+  const navigate = useNavigate()
+  const [contractName, setContractName] = useState('')
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+
+  const handleContract = async (file: File) => {
+    setContractName(file.name)
+    setIsAnalyzing(true)
+    try {
+      const result = await analyzeContract(file)
+      navigate('/risk-report', { state: { documentAnalysis: result } })
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.main}>
@@ -53,6 +70,9 @@ export function Analyze() {
                   icon={<Gavel />}
                   dropIcon={<FileLines />}
                   inputId="upload-contract"
+                  filename={contractName}
+                  loading={isAnalyzing}
+                  onFile={handleContract}
                 />
               </div>
 
@@ -130,9 +150,21 @@ type UploadCardProps = {
   icon: React.ReactNode
   dropIcon: React.ReactNode
   inputId: string
+  filename?: string
+  loading?: boolean
+  onFile?: (file: File) => void
 }
 
-function UploadCard({ title, hint, icon, dropIcon, inputId }: UploadCardProps) {
+function UploadCard({
+  title,
+  hint,
+  icon,
+  dropIcon,
+  inputId,
+  filename,
+  loading = false,
+  onFile,
+}: UploadCardProps) {
   return (
     <div className={styles.uploadCard}>
       <div className={styles.uploadHead}>
@@ -140,10 +172,32 @@ function UploadCard({ title, hint, icon, dropIcon, inputId }: UploadCardProps) {
         <span className={styles.uploadIcon}>{icon}</span>
       </div>
       <p className={styles.uploadHint}>{hint}</p>
-      <label htmlFor={inputId} className={styles.dropzone}>
+      <label
+        htmlFor={inputId}
+        className={styles.dropzone}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault()
+          const file = event.dataTransfer.files?.[0]
+          if (file && onFile && !loading) void onFile(file)
+        }}
+      >
         <span className={styles.dropIcon}>{dropIcon}</span>
-        <span className={styles.dropText}>파일을 드래그하거나 클릭하여 업로드</span>
-        <input id={inputId} type="file" accept=".pdf,image/*" className={styles.fileInput} />
+        <span className={styles.dropText}>
+          {loading ? '계약서를 분석하고 있습니다...' : filename || '파일을 드래그하거나 클릭하여 업로드'}
+        </span>
+        <input
+          id={inputId}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg"
+          className={styles.fileInput}
+          disabled={loading}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0]
+            event.currentTarget.value = ''
+            if (file && onFile) void onFile(file)
+          }}
+        />
       </label>
     </div>
   )

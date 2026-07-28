@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     CONTRACT_MAX_FILE_MB: int = 20
     CONTRACT_ANALYSIS_MODEL: str = "gpt-4.1-mini"
     CONTRACT_ANALYSIS_MAX_CHARS: int = 50_000
+    # 로컬 시연에서 API 키가 없으면 기본 계약 조건과 위험 키워드를 규칙으로 분석한다.
+    CONTRACT_ANALYSIS_LOCAL_FALLBACK: bool = True
     OPENAI_API_KEY: str = ""
 
     @property
