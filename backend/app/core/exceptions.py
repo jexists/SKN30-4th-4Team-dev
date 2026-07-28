@@ -92,17 +92,32 @@ def register_exception_handlers(app: FastAPI) -> None:
     # ── DB 커넥션 계열 → 503 ────────────────────────────────────────
     # Starlette 은 예외 클래스의 MRO 를 타고 핸들러를 찾으므로 아래 catch-all 보다 우선한다.
     # 라우트 본문뿐 아니라 의존성(require_member 등)에서 터진 예외도 같은 경로로 잡힌다.
+    #
+    # 로그에 넣는 request.url.path 는 별도 sanitize 가 필요 없다 — Starlette 이 URL 을
+    # 재구성하며 urlsplit 을 거치는데, CPython 3.10+ urlsplit 이 CR/LF 를 제거하기 때문이다
+    # (`/x/%0A...` → 개행 없이 기록). 단, raw scope["path"] 나 request.url 전체를 그대로
+    # 찍으면 개행이 살아 있어 로그 위조가 가능하다. test_log_path_has_no_newline 이 고정한다.
 
     @app.exception_handler(SATimeoutError)
     async def _pool_timeout(request: Request, exc: SATimeoutError) -> JSONResponse:
         """QueuePool 체크아웃 타임아웃 — OperationalError 의 서브클래스가 아니라 별도 등록."""
-        logger.warning("DB 커넥션 풀 대기 초과: %s %s", request.method, request.url.path)
+        logger.warning(
+            "DB 커넥션 풀 대기 초과: %s %s",
+            request.method,
+            request.url.path,
+            exc_info=True,
+        )
         return _json(503, _DB_BUSY_TITLE, _DB_BUSY_MESSAGE)
 
     @app.exception_handler(PoolTimeout)
     async def _psycopg_pool_timeout(request: Request, exc: PoolTimeout) -> JSONResponse:
         """psycopg 풀(RAG 검색) 대기 초과. search.py 가 삼키므로 보통은 도달하지 않는다."""
-        logger.warning("psycopg 풀 대기 초과: %s %s", request.method, request.url.path)
+        logger.warning(
+            "psycopg 풀 대기 초과: %s %s",
+            request.method,
+            request.url.path,
+            exc_info=True,
+        )
         return _json(503, _DB_BUSY_TITLE, _DB_BUSY_MESSAGE)
 
     @app.exception_handler(DBAPIError)
@@ -111,7 +126,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         if not _is_connection_error(exc):
             logger.exception("DB 오류: %s %s", request.method, request.url.path)
             return _json(500, "서버 오류", "잠시 후 다시 시도해 주세요.")
-        logger.warning("DB 연결 실패: %s %s — %s", request.method, request.url.path, exc.orig)
+        logger.warning(
+            "DB 연결 실패: %s %s — %s",
+            request.method,
+            request.url.path,
+            exc.orig,
+            exc_info=True,
+        )
         return _json(503, _DB_BUSY_TITLE, _DB_BUSY_MESSAGE)
 
     @app.exception_handler(Exception)
