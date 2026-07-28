@@ -4,15 +4,13 @@ data/02_processed/api_text/*.jsonl 의 법령·판례·해석 문서를 읽어
   1) 청킹(recursive char split) →
   2) KURE-v1(nlpai-lab/KURE-v1, 1024차원) 임베딩 →
   3) Supabase Postgres(pgvector) 벡터 스토어에 적재
-한다. 백엔드의 RAG 검색(services/retrieval)이 읽는 것과 **같은 DB** 에 저장한다.
+한다. 백엔드의 RAG 검색(services/retrieval)이 읽는 것과 같은 DB(RAG_DB_URL)에 저장한다.
 
 ── 실행 (backend/ 에서) ──────────────────────────────────────────────
     uv sync --group ingest                       # 의존성(sentence-transformers·torch) 설치
-    # .env 의 INGEST_DATABASE_URL 을 Postgres 연결 문자열로 설정해야 함 (sqlite 불가).
-    # ⚠️ 런타임(RAG_DB_URL/APP_DB_URL)으로 fallback 하지 않는다 — 런타임은 transaction
-    #    pooler(:6543) 라 DDL·대량 배치에 부적합하다. 색인은 Direct connection(권장) 또는
-    #    Session pooler URI 를 쓴다. 가리키는 DB 자체는 런타임과 같아야 한다.
-    #   예) INGEST_DATABASE_URL=postgresql://USER:PW@HOST:5432/postgres
+    # 접속 DB 는 .env 의 DB_URL 을 그대로 쓴다(별도 RAG_DB_URL 불필요, sqlite 불가).
+    #   예) DB_URL=postgresql://USER:PW@HOST:5432/postgres
+    #   우선순위: --database-url > DB_URL > (하위호환) RAG_DB_URL·APP_DB_URL
 
     uv run --group ingest python -m test.ingest_kure --dry-run     # 청킹 통계만 확인
     uv run --group ingest python -m test.ingest_kure --limit 20    # 파일당 20건 소량 시험
@@ -54,7 +52,6 @@ DEFAULT_DATA_DIR = "data/02_processed/api_text"
 DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 150
 MIN_CHUNK_CHARS = 30  # 이보다 짧은 조각은 버린다
-_BACKEND_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
 # metadata 에서 뽑아 인덱스 컬럼으로 평탄화할 키
 FLAT_KEYS = ("source_type", "doc_title", "authority", "issue", "source_id")
@@ -214,36 +211,62 @@ def to_libpq_dsn(url: str) -> str:
     return url
 
 
+def _find_dotenv() -> Path | None:
+    """cwd·이 파일의 상위 경로에서 첫 .env 를 찾는다(backend/ 실행·repo 루트 모두 대응)."""
+    here = Path(__file__).resolve()
+    for base in [Path.cwd(), *here.parents]:
+        cand = base / ".env"
+        if cand.is_file():
+            return cand
+    return None
+
+
+def read_dotenv_value(key: str) -> str | None:
+    """의존성 없이 .env 를 직접 파싱해 KEY 값을 읽는다(따옴표·주석 처리)."""
+    path = _find_dotenv()
+    if path is None:
+        return None
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        if k.strip() != key:
+            continue
+        v = v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1]
+        return v or None
+    return None
+
+
 def resolve_database_url(cli_url: str | None) -> str:
-    """우선순위: --database-url > INGEST_DATABASE_URL > 종료.
+    """우선순위: --database-url > INGEST_DATABASE_URL > 환경변수·.env 의 DB_URL
+    > app 설정(vector_db_dsn) > RAG_DB_URL·APP_DB_URL.
 
-    ⚠️ 런타임 설정(RAG_DB_URL·APP_DB_URL)으로 **조용히 fallback 하지 않는다.** 런타임 URI 는
-    Supavisor transaction pooler(:6543) 라, 그걸로 DDL 과 대량 색인을 돌리면 세션 단위
-    보장이 없고 pooler 슬롯도 배치가 통째로 먹는다. 색인은 direct 또는 session URI 를
-    INGEST_DATABASE_URL 로 명시해서 쓴다.
-
-    색인이 쓰는 DB 와 services/retrieval/search.py 가 읽는 DB 는 여전히 **같아야** 한다.
-    다른 건 연결 경로(URI)일 뿐 대상 DB 가 아니다.
+    .env 의 DB_URL(Supabase Postgres) 을 그대로 쓴다 — 별도 RAG_DB_URL 을 요구하지 않는다.
+    색인이 쓰는 곳과 services/retrieval/search.py 가 읽는 곳이 반드시 같아야 한다.
     """
-    url = cli_url or os.getenv("INGEST_DATABASE_URL")
+    url = (
+        cli_url
+        or os.getenv("INGEST_DATABASE_URL")
+        or os.getenv("DB_URL")
+        or read_dotenv_value("DB_URL")
+    )
     if not url:
-        # uv run은 .env를 자동으로 os.environ에 올리지 않으므로 색인 전용 키를 직접 읽는다.
-        # 다른 비밀값은 프로세스 환경으로 복사하지 않는다.
-        from dotenv import dotenv_values
+        try:
+            from app.core.config import settings  # backend/ 를 pythonpath 로 실행 시 가능
 
-        url = dotenv_values(_BACKEND_ENV_PATH).get("INGEST_DATABASE_URL") or ""
+            url = settings.vector_db_dsn
+        except Exception:
+            url = os.getenv("RAG_DB_URL") or os.getenv("APP_DB_URL", "")
     if not url:
-        sys.exit(
-            "❌ INGEST_DATABASE_URL 이 없습니다. .env 또는 --database-url 로 지정하세요.\n"
-            "   색인은 런타임(RAG_DB_URL/APP_DB_URL)과 분리된 연결을 씁니다 —\n"
-            "   Supabase Dashboard 의 Direct connection(권장) 또는 Session pooler URI 를 쓰세요.\n"
-            "   예) INGEST_DATABASE_URL=postgresql://USER:PW@HOST:5432/postgres"
-        )
+        sys.exit("❌ DB_URL 이 없습니다. .env 또는 --database-url 로 지정하세요.")
     if url.startswith("sqlite"):
         sys.exit(
             "❌ pgvector 는 Postgres 가 필요합니다.\n"
-            "   INGEST_DATABASE_URL 을 Supabase/Postgres 연결 문자열로 설정하세요.\n"
-            "   예) postgresql+psycopg://USER:PW@HOST:5432/postgres"
+            "   .env 의 DB_URL 을 Supabase/Postgres 연결 문자열로 설정하세요.\n"
+            "   예) postgresql://USER:PW@HOST:5432/postgres"
         )
     return to_libpq_dsn(url)
 

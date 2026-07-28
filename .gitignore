@@ -8,6 +8,7 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.venv-eval/
 # 로컬 개발 SQLite 폴백 DB
 *.db
 
@@ -42,3 +43,4 @@ models/
 
 # ===== Playwright MCP 산출물 (스냅샷·콘솔 로그·스크린샷) =====
 .playwright-mcp/
+
