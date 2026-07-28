@@ -5,8 +5,17 @@
 ## 스택
 - FastAPI · uv · Python 3.12
 - DB: **Supabase Postgres + pgvector** (하이브리드 — Supabase=호스팅, **SQLAlchemy=ORM**). `supabase-py` 클라이언트는 쓰지 않음.
-- DB 연결은 둘로 나뉜다: **`APP_DB_URL`**(앱 데이터 — `chat_room`·`chat_message`, SQLAlchemy ORM)과 **`RAG_DB_URL`**(pgvector 벡터 스토어 — `legal_chunks`, psycopg 직접). `RAG_DB_URL` 을 비우면 `APP_DB_URL` 을 재사용한다.
+- DB 연결은 셋으로 나뉜다: **`APP_DB_URL`**(런타임 앱 데이터 — `chat_room`·`chat_message`, SQLAlchemy ORM), **`RAG_DB_URL`**(pgvector 벡터 스토어 — `legal_chunks`, psycopg 직접. 비우면 `APP_DB_URL` 재사용), **`INGEST_DATABASE_URL`**(색인·DDL 전용). 셋 다 같은 Supabase DB 를 가리키되 **연결 경로가 다르다**.
+- **런타임은 Supabase Transaction pooler URI(`:6543`)** 를 쓴다. Session pooler(`:5432`)는 클라이언트 수가 Pool Size(기본 15)로 제한돼 팀원 여러 명이 로컬 서버를 띄우면 `EMAXCONNSESSION` 이 난다. 색인은 세션 보장이 필요하므로 Direct 또는 Session pooler 를 쓴다. (로컬 Postgres 의 `:5432` 는 무관하다.)
 - 로컬은 `APP_DB_URL` 미설정 시 SQLite 폴백 — 서버는 뜨지만 대화 기록 API 는 503("대화 기록 사용 불가").
+
+## 커넥션 예산 (반드시 지킬 것)
+
+- **SQLAlchemy 엔진은 하나뿐이다**(`app/db/session.py`). 예전에 스켈레톤용·앱용 엔진을 따로 두었다가 프로세스 하나가 pooler 슬롯을 2배로 먹어 장애가 났다. **새 `create_engine` 을 추가하지 않는다.**
+- **DB 커넥션을 풀 밖에서 열지 않는다.** RAG 검색도 모듈 단위 `psycopg_pool.ConnectionPool`(`services/retrieval/search.py`)에서 빌린다. 새 `psycopg.connect()` 를 런타임 코드에 넣지 않는다.
+- 프로세스당 상한 = `(DB_POOL_SIZE + DB_MAX_OVERFLOW) + RAG_POOL_MAX_SIZE` (기본 3+2+2 = 7). 올리기 전에 `(프로세스 수 × 상한) ≤ Max Pooler Clients × 50%` 를 계산한다.
+- Postgres 에서는 **import 시점 `create_all()` 을 돌리지 않는다**(`main.py` 가 SQLite 일 때만 실행). 새 테이블은 `sql/schema.sql` 에 DDL 을 추가한다.
+- 커넥션 고갈·연결 끊김은 500 이 아니라 **503**("일시적인 접속 지연")으로 나간다(`core/exceptions.py`). 문법 오류·없는 테이블은 그대로 500 이다.
 
 ## 폴더 레이아웃
 - `app/main.py` — 앱 생성, 기동 워밍업(lifespan → 데몬 스레드), CORS·에러핸들러·로깅 등록, 라우터 `/api/v1` prefix

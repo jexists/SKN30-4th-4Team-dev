@@ -22,6 +22,25 @@ npm install
 cp .env.example .env          # Windows(PowerShell): Copy-Item .env.example .env
 ```
 
+### DB 연결 문자열 (backend/.env)
+
+Supabase Dashboard → **Connect** 에서 목적에 맞는 URI 를 복사합니다. 포트만 바꾸지 말고
+Dashboard 가 주는 전체 URI 를 쓰세요.
+
+| 키 | Dashboard 항목 | 용도 |
+| --- | --- | --- |
+| `APP_DB_URL` | **Transaction pooler** (보통 `:6543`) | API 런타임 |
+| `RAG_DB_URL` | — (비워 둠) | `APP_DB_URL` 재사용 |
+| `INGEST_DATABASE_URL` | **Direct connection** (IPv6 불가 시 Session pooler) | 색인·DDL 배치 |
+
+> ⚠️ 런타임에 **Session pooler(`:5432`)** 를 쓰면 안 됩니다. 클라이언트 수가 Pool Size(기본 15)로
+> 제한돼, 팀원 서너 명이 동시에 로컬 서버를 띄우는 것만으로
+> `FATAL: (EMAXCONNSESSION) max clients reached in session mode` 가 납니다.
+> (로컬 Postgres 를 직접 띄워 쓸 때의 `:5432` 는 무관합니다.)
+
+프로세스 하나가 잡는 커넥션 상한은 기본 **7개**입니다. 자세한 예산 계산은
+[`backend/README.md`](../backend/README.md) 의 "커넥션 예산" 참고.
+
 ## 2. 실행 (개발) — 터미널 2개
 
 백엔드:
