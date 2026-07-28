@@ -4,6 +4,6 @@
 graph_rag 의 retrieve 노드가 이 search_similar 를 호출한다.
 """
 
-from app.services.retrieval.search import search_similar
+from app.services.retrieval.search import close_pool, search_similar
 
-__all__ = ["search_similar"]
+__all__ = ["close_pool", "search_similar"]

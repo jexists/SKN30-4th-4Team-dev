@@ -14,6 +14,7 @@ from app.core.logging import setup_logging
 from app.core.security import describe_verification_mode
 from app.db.base import Base
 from app.db.session import engine
+from app.services.retrieval import close_pool as close_retrieval_pool
 
 setup_logging()
 log = logging.getLogger(__name__)
@@ -60,7 +61,13 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         threading.Thread(target=_warmup, name="warmup", daemon=True).start()
     else:
         log.info("기동 워밍업 비활성(WARMUP_ON_STARTUP=false) — 첫 채팅 요청이 모델을 로드한다")
-    yield
+    try:
+        yield
+    finally:
+        # 우리가 잡고 있던 DB 커넥션과 psycopg 워커 스레드를 명시적으로 반납한다.
+        # 없으면 --reload 재시작마다 Supabase pooler 슬롯이 timeout 까지 좀비로 남는다.
+        close_retrieval_pool()
+        engine.dispose()
 
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
@@ -75,8 +82,11 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
-# 뼈대용 — models 가 채워지면 테이블 생성. 실제 ERD 확정 후 Alembic 마이그레이션으로 대체.
-Base.metadata.create_all(bind=engine)
+# 뼈대용 — SQLite 폴백일 때만. Postgres 스키마는 sql/schema.sql 이 소유하며,
+# import 시점 DDL 은 운영 DB 에 리플렉션 커넥션을 상주시킨다(--reload 마다 누적).
+# 새 테이블은 create_all 이 아니라 sql/schema.sql 에 DDL 을 추가해서 반영한다.
+if settings.is_sqlite:
+    Base.metadata.create_all(bind=engine)
 
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")

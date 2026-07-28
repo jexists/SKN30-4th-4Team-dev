@@ -10,7 +10,9 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pyjwt[crypto]>=2.9",
     "sqlalchemy>=2.0",
-    "psycopg[binary]>=3.2",
+    # pool: RAG 검색(services/retrieval)이 쓰는 psycopg_pool. 검색마다 새 커넥션을 열면
+    # SQLAlchemy 풀과 별개로 Supabase pooler 슬롯을 상한 없이 먹는다.
+    "psycopg[binary,pool]>=3.2",
     "numpy>=2.5.1",
     "openai>=2.46.0",
     "sentence-transformers>=5.6.0",
