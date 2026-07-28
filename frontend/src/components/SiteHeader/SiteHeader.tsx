@@ -188,15 +188,6 @@ function UserMenu() {
             마이페이지
           </Link>
 
-          <Link
-            to="/account"
-            role="menuitem"
-            className={styles.menuItem}
-            onClick={() => setOpen(false)}
-          >
-            계정 관리
-          </Link>
-
           <button
             type="button"
             role="menuitem"

@@ -1,6 +1,18 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { ArrowRight, BarChart, Chat, Check, Edit, FileLines, User } from '../../components/icons'
+import {
+  ArrowRight,
+  BarChart,
+  Chat,
+  Check,
+  Edit,
+  FileLines,
+  Lock,
+  LogOut,
+  Shield,
+  User,
+} from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
 import styles from './MyPage.module.scss'
@@ -57,9 +69,40 @@ const LEVEL_LABEL: Record<RiskLevel, string> = {
 }
 
 export function MyPage() {
-  const { token } = useAuth()
+  const { token, signOut } = useAuth()
   // 조회 실패는 client.ts 의 공통 처리가 오류 모달로 알린다 — 여기서 또 띄우지 않는다.
   const { status, data: currentUser } = useCurrentUser(token)
+
+  const [twoFactor, setTwoFactor] = useState(true)
+  const [notifyReport, setNotifyReport] = useState(true)
+  const [notifyChat, setNotifyChat] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  // object URL 은 컴포넌트 생명 주기 동안 해제하지 않으면 메모리에 계속 남는다.
+  useEffect(() => {
+    return () => {
+      if (avatarUrl) URL.revokeObjectURL(avatarUrl)
+    }
+  }, [avatarUrl])
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setAvatarUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
+  }
+
+  function handleSignOut() {
+    signOut()
+    // 보호된 화면(RequireAuth)에서 로그아웃하면 SPA 내 navigate('/') 는 라우터가
+    // 위치를 갱신하기 전에 가드가 먼저 인증 해제를 감지해 /login 으로 보내버리는
+    // 경합이 생긴다. 전체 새로고침으로 이동하면 앱이 처음부터 다시 마운트되며
+    // 이미 지워진 토큰으로 시작하므로 이 경합 자체가 발생하지 않는다.
+    window.location.href = '/'
+  }
 
   return (
     <div className={styles.page}>
@@ -68,11 +111,27 @@ export function MyPage() {
         <section className={styles.profile}>
           <div className={styles.avatarWrap}>
             <div className={styles.avatar}>
-              <User className={styles.avatarIcon} />
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className={styles.avatarImg} />
+              ) : (
+                <User className={styles.avatarIcon} />
+              )}
             </div>
-            <Link to="/account" className={styles.avatarEdit} aria-label="계정 관리로 이동">
+            <button
+              type="button"
+              className={styles.avatarEdit}
+              aria-label="프로필 사진 변경"
+              onClick={() => avatarInputRef.current?.click()}
+            >
               <Edit />
-            </Link>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className={styles.avatarInput}
+              onChange={handleAvatarChange}
+            />
           </div>
           <h1 className={styles.name} aria-live="polite">
             {status === 'loading' ? (
@@ -91,6 +150,30 @@ export function MyPage() {
             <br />
             홈실드가 함께하고 있습니다.
           </p>
+        </section>
+
+        {/* 계정 정보 */}
+        <section className={styles.card}>
+          <div className={styles.infoList}>
+            <div className={styles.infoRow}>
+              <div>
+                <p className={styles.infoLabel}>이메일 주소</p>
+                <p className={styles.infoValue}>chulsoo.kim@example.com</p>
+              </div>
+              <button type="button" className={styles.linkBtn}>
+                수정
+              </button>
+            </div>
+            <div className={styles.infoRow}>
+              <div>
+                <p className={styles.infoLabel}>휴대폰 번호</p>
+                <p className={styles.infoValue}>010-1234-5678</p>
+              </div>
+              <button type="button" className={styles.linkBtn}>
+                수정
+              </button>
+            </div>
+          </div>
         </section>
 
         {/* 최근 진단 내역 */}
@@ -127,10 +210,10 @@ export function MyPage() {
           </div>
         </section>
 
-        {/* 진행 중인 AI 상담 */}
+        {/* 최근 상담 내역 */}
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>
-            <Chat className={styles.sectionTitleIcon} /> 진행 중인 AI 상담
+            <Chat className={styles.sectionTitleIcon} /> 최근 상담 내역
           </h2>
           <div className={styles.consultGrid}>
             {CONSULTATIONS.map((c) => (
@@ -148,11 +231,87 @@ export function MyPage() {
             ))}
           </div>
         </section>
+
+        {/* 보안 및 알림 설정 */}
+        <section className={styles.card}>
+          <div className={styles.cardBody}>
+            <h3 className={styles.cardTitle}>보안 설정</h3>
+            <div className={styles.settingRow}>
+              <div className={styles.settingLeft}>
+                <Lock className={styles.settingIcon} />
+                <div>
+                  <p className={styles.settingLabel}>비밀번호 변경</p>
+                  <p className={styles.settingSub}>마지막 변경: 3개월 전</p>
+                </div>
+              </div>
+              <button type="button" className={styles.linkBtn}>
+                변경
+              </button>
+            </div>
+            <div className={styles.settingRow}>
+              <div className={styles.settingLeft}>
+                <Shield className={styles.settingIcon} />
+                <div>
+                  <p className={styles.settingLabel}>2단계 인증 (2FA)</p>
+                  <p className={styles.settingSub}>로그인 시 추가 보안 확인</p>
+                </div>
+              </div>
+              <Toggle checked={twoFactor} onChange={setTwoFactor} label="2단계 인증" />
+            </div>
+          </div>
+
+          <div className={styles.cardBody}>
+            <h3 className={styles.cardTitle}>알림 설정</h3>
+            <div className={styles.settingRow}>
+              <div>
+                <p className={styles.settingLabel}>위험 보고서 생성 완료</p>
+                <p className={styles.settingSub}>분석 완료 시 즉시 알림</p>
+              </div>
+              <Toggle checked={notifyReport} onChange={setNotifyReport} label="위험 보고서 알림" />
+            </div>
+            <div className={styles.settingRow}>
+              <div>
+                <p className={styles.settingLabel}>AI 챗봇 상담 내역 업데이트</p>
+                <p className={styles.settingSub}>중요한 상담 정보 자동 알림</p>
+              </div>
+              <Toggle checked={notifyChat} onChange={setNotifyChat} label="AI 챗봇 알림" />
+            </div>
+          </div>
+        </section>
+
+        <div className={styles.signOutRow}>
+          <button type="button" className={styles.signOutBtn} onClick={handleSignOut}>
+            <LogOut /> 로그아웃
+          </button>
+        </div>
       </div>
 
       <Link to="/chat" className={styles.fab} aria-label="AI 챗봇 상담 시작하기">
         <Chat />
       </Link>
     </div>
+  )
+}
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: (next: boolean) => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className={checked ? `${styles.toggle} ${styles.toggleOn}` : styles.toggle}
+      onClick={() => onChange(!checked)}
+    >
+      <span className={styles.toggleThumb} />
+    </button>
   )
 }

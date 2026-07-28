@@ -148,14 +148,6 @@ export function Login() {
               <Chat className={styles.socialMark} />
               카카오로 로그인
             </button>
-            <button
-              type="button"
-              className={`${styles.social} ${styles.naver}`}
-              onClick={() => showToast(`네이버 로그인은 ${SOON}`, 'info')}
-            >
-              <span className={styles.naverMark}>N</span>
-              네이버로 로그인
-            </button>
           </div>
 
           <p className={styles.signup}>

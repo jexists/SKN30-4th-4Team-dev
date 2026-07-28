@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import { Chat, ChevronDown, Doc, Lock, Mail, Search, Wallet } from '../../components/icons'
 import styles from './Support.module.scss'
@@ -66,9 +65,9 @@ const CATEGORIES: Category[] = [
   },
   {
     id: 'billing',
-    label: '결제 및 계정',
+    label: '계정',
     icon: Wallet,
-    title: '결제 및 계정 (Billing & Account)',
+    title: '계정 (Account)',
     totalLabel: '총 6개의 도움말',
     faqs: [
       {
@@ -214,9 +213,6 @@ export function Support() {
                 </p>
               </div>
               <div className={styles.contactActions}>
-                <Link to="/chat" className={styles.btnPrimary}>
-                  <Chat /> 1:1 상담 시작하기
-                </Link>
                 <button type="button" className={styles.btnOutline}>
                   <Mail /> 이메일 문의
                 </button>
