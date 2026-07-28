@@ -11,13 +11,18 @@ from fastapi.responses import Response
 
 from app.core.config import settings
 from app.inference.paddle_vl_engine import PaddleVlEngine
+from app.inference.tesseract_engine import TesseractEngine
 from app.masking.patterns import PiiType
 from app.pipeline.contract_pipeline import ContractProcessingPipeline, ProcessingResult
 from app.schemas import AnalysisReadyResponse
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Contract OCR/Masking Worker")
-engine = PaddleVlEngine(settings)
+engine = (
+    TesseractEngine(settings)
+    if settings.OCR_PROVIDER == "tesseract"
+    else PaddleVlEngine(settings)
+)
 processing_lock = Lock()
 
 
@@ -32,6 +37,7 @@ def health() -> dict[str, object]:
     return {
         "status": "ok",
         "model": settings.OCR_MODEL_NAME,
+        "provider": settings.OCR_PROVIDER,
         "model_loaded": engine.is_loaded,
     }
 

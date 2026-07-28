@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
+import { analyzeContract } from '../../api/documents'
 import { Building, Check, Doc, FileLines, Gavel, Search, Shield, Upload } from '../../components/icons'
 import { BRAND } from '../../config/env'
 import styles from './Analyze.module.scss'
@@ -27,6 +28,8 @@ const GUIDE = [
 ]
 
 export function Analyze() {
+  const navigate = useNavigate()
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [files, setFiles] = useState<Record<SlotKey, File | null>>({
     register: null,
     contract: null,
@@ -38,6 +41,18 @@ export function Analyze() {
 
   function setSlotFile(slot: SlotKey, file: File | null) {
     setFiles((prev) => ({ ...prev, [slot]: file }))
+  }
+
+  async function handleDiagnose() {
+    const contract = files.contract
+    if (!contract || isAnalyzing) return
+    setIsAnalyzing(true)
+    try {
+      const result = await analyzeContract(contract)
+      navigate('/risk-report', { state: { documentAnalysis: result } })
+    } finally {
+      setIsAnalyzing(false)
+    }
   }
 
   return (
@@ -100,8 +115,13 @@ export function Analyze() {
                   </p>
                 </div>
               </div>
-              <button type="button" className={styles.diagnoseBtn} disabled={!allUploaded}>
-                <Search /> OCR 진단하기
+              <button
+                type="button"
+                className={styles.diagnoseBtn}
+                disabled={!allUploaded || isAnalyzing}
+                onClick={handleDiagnose}
+              >
+                <Search /> {isAnalyzing ? '진단 중...' : 'OCR 진단하기'}
               </button>
             </div>
 
@@ -155,7 +175,16 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, onFileChange }: Uplo
         <span className={styles.uploadIcon}>{icon}</span>
       </div>
       <p className={styles.uploadHint}>{hint}</p>
-      <label htmlFor={inputId} className={styles.dropzone}>
+      <label
+        htmlFor={inputId}
+        className={styles.dropzone}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault()
+          const file = event.dataTransfer.files?.[0]
+          if (file) onFileChange(file)
+        }}
+      >
         <span className={styles.dropIcon}>{dropIcon}</span>
         <span className={styles.dropText}>파일을 드래그하거나 클릭하여 업로드</span>
         <input

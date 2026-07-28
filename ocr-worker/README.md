@@ -36,6 +36,11 @@ uv run uvicorn app.main:app --reload --port 8100
 모델은 첫 처리 요청에서 한 번만 로딩됩니다. `/health` 호출은 모델을 로드하지
 않습니다.
 
+로컬 CPU 시연에서는 `.env`의 `OCR_PROVIDER=tesseract`로 빠른 한국어 OCR을 사용할
+수 있습니다(`tesseract`와 `kor` 언어팩 필요). `OCR_PROVIDER=paddle_vl`은 기존
+PaddleOCR-VL 모델을 사용하지만 Apple Silicon CPU에서는 페이지 처리에 수분이 걸릴
+수 있습니다. 두 경로 모두 같은 개인정보 탐지·마스킹·재검증 파이프라인을 거칩니다.
+
 ## API
 
 - `POST /v1/process`: 기존 방식. 마스킹된 PDF를 바로 반환합니다.
