@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { BRAND } from '../../config/env'
 import { useAuth } from '../../hooks/useAuth'
+import { useAvatarUrl } from '../../hooks/useAvatar'
 import { Drawer } from '../Drawer/Drawer'
 import { Bell, Clock, Menu, Shield } from '../icons'
 import styles from './SiteHeader.module.scss'
@@ -120,6 +121,7 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
 /** 아바타 클릭 시 열리는 계정 메뉴 (마이페이지·로그아웃). */
 function UserMenu() {
   const { signOut } = useAuth()
+  const avatarUrl = useAvatarUrl()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -175,7 +177,9 @@ function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-      />
+      >
+        {avatarUrl && <img src={avatarUrl} alt="" className={styles.avatarImg} />}
+      </button>
 
       {open && (
         <div className={styles.menu} role="menu">

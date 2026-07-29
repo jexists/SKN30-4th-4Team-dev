@@ -27,9 +27,11 @@
   position: relative;
 }
 .avatar {
+  position: relative;
   width: 96px;
   height: 96px;
   border-radius: 50%;
+  overflow: hidden;
   display: grid;
   place-items: center;
   background: v.$avatar-gradient;
@@ -41,9 +43,10 @@
   color: v.$text-on-dark;
 }
 .avatarImg {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  border-radius: 50%;
   object-fit: cover;
 }
 .avatarInput {
@@ -427,6 +430,80 @@
 }
 .toggleOn .toggleThumb {
   transform: translateX(18px);
+}
+
+/* ══════════════ 정보 수정 모달 ══════════════ */
+.modalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.label {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: v.$slate;
+}
+.input {
+  width: 100%;
+  padding: 13px 16px;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-sm;
+  background: v.$surface-raised;
+  font: inherit;
+  font-size: 15px;
+  color: v.$ink;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &::placeholder {
+    color: v.$text-placeholder;
+  }
+  &:focus {
+    border-color: v.$navy-800;
+    box-shadow: 0 0 0 4px rgba(23, 34, 74, 0.1);
+  }
+}
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+.btnGhost,
+.btnPrimary {
+  padding: 11px 20px;
+  border-radius: v.$radius-sm;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btnGhost {
+  border: 1px solid v.$border-strong;
+  background: v.$surface;
+  color: v.$slate;
+
+  &:hover {
+    background: v.$page-bg;
+  }
+}
+.btnPrimary {
+  border: none;
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+
+  &:hover {
+    background: v.$navy-hover;
+  }
 }
 
 /* ══════════════ 로그아웃 ══════════════ */
