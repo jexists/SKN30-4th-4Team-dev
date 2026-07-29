@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { BRAND } from '../../config/env'
 import { useAuth } from '../../hooks/useAuth'
 import { useAvatarUrl } from '../../hooks/useAvatar'
+import { clearReportAlert, useHasUnreadReportAlert } from '../../hooks/useNotifications'
 import { Drawer } from '../Drawer/Drawer'
 import { Bell, Clock, Menu, Shield } from '../icons'
 import styles from './SiteHeader.module.scss'
@@ -16,6 +17,7 @@ const NAV = [
 
 export function SiteHeader() {
   const { isAuthed } = useAuth()
+  const hasUnreadReportAlert = useHasUnreadReportAlert()
   const [navOpen, setNavOpen] = useState(false)
   // 드로어의 "이동하면 닫기" effect 의존성이 되므로 identity 를 고정한다.
   const closeNav = useCallback(() => setNavOpen(false), [])
@@ -61,7 +63,14 @@ export function SiteHeader() {
               <button className={styles.iconBtn} aria-label="최근 기록">
                 <Clock />
               </button>
-              <button className={styles.iconBtn} aria-label="알림">
+              <button
+                type="button"
+                className={
+                  hasUnreadReportAlert ? `${styles.iconBtn} ${styles.iconBtnAlert}` : styles.iconBtn
+                }
+                aria-label="알림"
+                onClick={clearReportAlert}
+              >
                 <Bell />
               </button>
             </>
