@@ -1,7 +1,6 @@
 """Supabase 카카오 인증 사용자를 앱 회원으로 연결한다."""
 
 import logging
-import uuid
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -15,19 +14,10 @@ from app.schemas.kakao_auth import (
     PendingKakaoDeletionResponse,
     RegistrationResponse,
 )
+from app.services.auth import claims_user_id as _user_id
+from app.services.auth import reject_if_withdrawn
 
 logger = logging.getLogger(__name__)
-
-
-def _user_id(claims: dict) -> uuid.UUID:
-    try:
-        return uuid.UUID(str(claims.get("sub", "")))
-    except ValueError as exc:
-        raise AppError(
-            "로그인 필요",
-            "사용자 식별에 실패했습니다. 다시 로그인해 주세요.",
-            401,
-        ) from exc
 
 
 def _is_kakao(claims: dict) -> bool:
@@ -98,7 +88,12 @@ def _user_info(
 
 
 def registration_status(claims: dict, db: Session) -> RegistrationResponse:
-    registered = AuthRepository(db).is_registered(_user_id(claims))
+    user_id = _user_id(claims)
+    repo = AuthRepository(db)
+    # 탈퇴 회원을 signup_required 로 내려보내면 라우트 가드가 가입 화면으로 보내고,
+    # 가입은 다시 거절당한다 — 그 왕복을 막으려고 여기서 403 으로 끊는다.
+    reject_if_withdrawn(repo, user_id)
+    registered = repo.is_registered(user_id)
     return RegistrationResponse(status="authenticated" if registered else "signup_required")
 
 
@@ -118,6 +113,9 @@ def process_kakao_login(
 
     user_id = _user_id(claims)
     repo = AuthRepository(db)
+    # 탈퇴해도 Supabase auth.users 행은 남아 카카오 인증 자체는 다시 성공한다.
+    # 로그인 불가는 여기서 만든다.
+    reject_if_withdrawn(repo, user_id)
     registered = repo.is_registered(user_id)
     if registered:
         try:
@@ -209,6 +207,9 @@ def complete_kakao_signup(
 
     user_id = _user_id(claims)
     repo = AuthRepository(db)
+    # 탈퇴 계정은 app_user 행이 남아 있어 재가입이 UNIQUE 충돌로 튕긴다. 그 전에
+    # 탈퇴 사실을 알려야 "이미 가입된 회원" 이라는 엉뚱한 안내를 피할 수 있다.
+    reject_if_withdrawn(repo, user_id)
     if repo.is_registered(user_id):
         raise AppError(
             "이미 가입된 회원",

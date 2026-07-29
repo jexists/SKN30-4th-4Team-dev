@@ -262,23 +262,29 @@ def test_me_rejects_bad_token(client, auth_secret):
     assert resp.status_code == 401
 
 
-def test_me_returns_user_with_valid_token(client, auth_secret):
+def test_me_returns_user_with_valid_token(client, auth_secret, register_member):
+    user_id = register_member()
     token = _make_token(
-        sub="user-999",
+        sub=str(user_id),
         email="me@example.com",
         user_metadata={"nickname": "홈실드"},
     )
     resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     data = resp.json()["data"]
-    assert data["id"] == "user-999"
+    assert data["id"] == str(user_id)
     assert data["email"] == "me@example.com"
     assert data["role"] == "authenticated"
     assert data["nickname"] == "홈실드"
 
 
-def test_me_uses_email_name_when_signup_nickname_is_empty(client, auth_secret):
-    token = _make_token(email="fallback@example.com", user_metadata={"nickname": "  "})
+def test_me_uses_email_name_when_signup_nickname_is_empty(client, auth_secret, register_member):
+    user_id = register_member()
+    token = _make_token(
+        sub=str(user_id),
+        email="fallback@example.com",
+        user_metadata={"nickname": "  "},
+    )
     resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 200

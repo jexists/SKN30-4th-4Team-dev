@@ -60,9 +60,9 @@ export function SiteHeader() {
         <div className={styles.headerRight}>
           {isAuthed && (
             <>
-              <button className={styles.iconBtn} aria-label="최근 기록">
+              {/* <button className={styles.iconBtn} aria-label="최근 기록">
                 <Clock />
-              </button>
+              </button> */}
               <button
                 type="button"
                 className={

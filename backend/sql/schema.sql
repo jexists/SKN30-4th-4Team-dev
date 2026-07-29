@@ -14,8 +14,17 @@ CREATE TABLE IF NOT EXISTS app_user (
     username    text UNIQUE,
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),
+    is_deleted  boolean NOT NULL DEFAULT false,
     deleted_at  timestamptz
 );
+
+-- 회원 탈퇴(Soft Delete) 플래그. 기존 DB 에도 붙이고, 이미 deleted_at 이 찍힌 행은 백필한다.
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false;
+UPDATE app_user SET is_deleted = true WHERE deleted_at IS NOT NULL AND NOT is_deleted;
+
+-- TODO: 탈퇴 후 3일이 지난 회원의 chat/contract/notification 등 데이터와 계정을
+--       완전 삭제(Hard Delete)하는 배치가 훑을 인덱스. 배치는 미구현 — docs/회원탈퇴.md 참고.
+CREATE INDEX IF NOT EXISTS idx_app_user_withdrawn ON app_user (deleted_at) WHERE is_deleted;
 
 -- 2. profile — 프로필 (1:1)
 CREATE TABLE IF NOT EXISTS profile (

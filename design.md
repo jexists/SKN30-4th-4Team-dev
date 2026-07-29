@@ -71,7 +71,7 @@
 | 토큰 | 값 | 용도 |
 |---|---|---|
 | `$green` / `$green-soft` | `#16a34a` / `#e8f5ec` | 성공·안전 |
-| `$red` / `$red-soft` | `#dc2626` / `#fdecec` | 에러·위험 |
+| `$red` / `$red-hover` / `$red-soft` | `#dc2626` / `#b91c1c` / `#fdecec` | 에러·위험 (`$red-hover` 는 Danger 버튼 hover) |
 | `$amber` / `$amber-soft` | `#f59e0b` / `#fef3e0` | 경고·주의 |
 | `$orange` / `$orange-soft` | `#ea580c` / `#fdece1` | 위험 리포트 강조 |
 
@@ -316,7 +316,10 @@ const isMobile = useIsMobile()
 - **Primary**: `background: v.$navy-800; color: v.$text-on-dark; box-shadow: v.$shadow-btn-primary;` hover → `v.$navy-hover`.
 - **Ghost**: `background: v.$surface; color: v.$navy-800; border: 1px solid v.$border-strong;` hover → `background: v.$page-bg`.
 - **Outline**: `background: transparent; border: 1px solid v.$border-strong; color: v.$navy-800;`
-- **Danger link**: `color: v.$red` + underline hover.
+- **Danger link**: `color: v.$red` + underline hover (예: MyPage 의 "회원 탈퇴" 진입).
+- **Danger solid**: `background: v.$red; color: v.$text-on-dark;` hover → `v.$red-hover`. 되돌릴 수 없는
+  확정 액션(회원 탈퇴 등)에만 쓰고, 확인 모달의 마지막 버튼 자리에만 둡니다.
+  비활성(동의 전)은 `opacity: 0.45; cursor: not-allowed;` 로 색을 바꾸지 않고 낮춥니다.
 - 사이즈: `padding: 13px 22px` (기본), `padding: 10px 18px` (compact).
 - radius: 기본 `$radius` (12px), compact `$radius-md` (10px).
 - 텍스트: `@include t.button-text` (15/600).

@@ -5,9 +5,36 @@ import { BRAND } from '../../config/env'
 import styles from './Home.module.scss'
 
 const STATS = [
-  { num: '68%', label: '첫 계약 임차인의 68%가 계약서의 사기 조항을 발견하지 못합니다.' },
-  { num: '2.4조', label: '전세 및 임대 사기로 인한 연간 추정 금융 피해액.' },
-  { num: '15초', label: `${BRAND.nameKo} AI가 계약서 전체를 스캔해 진단하는 데 걸리는 평균 시간.` },
+  {
+    num: '68%',
+    label: (
+      <>
+        첫 계약 임차인의 68%가
+        <br />
+        계약서의 사기 조항을 발견하지 못합니다.
+      </>
+    ),
+  },
+  {
+    num: '2.4조',
+    label: (
+      <>
+        전세 및 임대 사기로 인한
+        <br />
+        연간 추정 금융 피해액.
+      </>
+    ),
+  },
+  {
+    num: '15초',
+    label: (
+      <>
+        {BRAND.nameKo} AI가 계약서 전체를 스캔해
+        <br />
+        진단하는 데 걸리는 평균 시간.
+      </>
+    ),
+  },
 ]
 
 const BENEFITS = [
@@ -140,7 +167,7 @@ export function Home() {
               </span>
               <h3 className={styles.featTitle}>OCR 계약서 진단</h3>
               <p className={styles.featDesc}>
-                종이 계약서 사진을 업로드하세요. AI가 몇 초 안에 텍스트를 스캔하고 추출하여 고위험
+                종이 계약서 사진을 업로드하세요. <br /> AI가 몇 초 안에 텍스트를 스캔하고 추출하여 고위험
                 영역을 강조해 보여줍니다.
               </p>
               <div className={styles.ocrScene} aria-hidden>

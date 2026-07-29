@@ -10,3 +10,4 @@
 | [setup.md](./setup.md) | 첫 설정·실행 가이드 (Mac/Windows) |
 | [폴더 파일 구조.md](./폴더%20파일%20구조.md) | 폴더/파일 구조 지도 |
 | [ocr-masking.md](./ocr-masking.md) | PaddleOCR-VL 계약서 OCR·마스킹 설계 및 완료 기준 |
+| [회원탈퇴.md](./회원탈퇴.md) | 회원 탈퇴 Soft Delete 정책 + 완전 삭제 배치 TODO |

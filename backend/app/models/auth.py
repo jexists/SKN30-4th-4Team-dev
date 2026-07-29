@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, false
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
@@ -23,6 +23,12 @@ class AppUser(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    # 회원 탈퇴는 Soft Delete 다 — 행을 지우지 않고 이 두 컬럼으로만 표시한다.
+    # 조회는 반드시 AuthRepository 를 거쳐 탈퇴 회원을 걸러낸다(직접 db.get 금지).
+    # deleted_at 기준 3일이 지난 회원을 완전 삭제하는 배치는 아직 없다 — docs/회원탈퇴.md 참고.
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -1,4 +1,4 @@
-@use '../../styles/variables' as v;
+@use "../../styles/variables" as v;
 
 .page {
   position: relative;
@@ -479,20 +479,26 @@
   margin-top: 4px;
 }
 .btnGhost,
-.btnPrimary {
+.btnPrimary,
+.btnDanger {
   padding: 11px 20px;
   border-radius: v.$radius-sm;
   font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 }
 .btnGhost {
   border: 1px solid v.$border-strong;
   background: v.$surface;
   color: v.$slate;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: v.$page-bg;
   }
 }
@@ -501,25 +507,36 @@
   background: v.$navy-800;
   color: v.$text-on-dark;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: v.$navy-hover;
   }
 }
+/* Danger solid — 되돌릴 수 없는 확정 액션 전용 (design.md §12). */
+.btnDanger {
+  border: none;
+  background: v.$red;
+  color: v.$text-on-dark;
 
-/* ══════════════ 로그아웃 ══════════════ */
-.signOutRow {
+  &:hover:not(:disabled) {
+    background: v.$red-hover;
+  }
+}
+
+/* ══════════════ 회원 탈퇴 ══════════════ */
+.withdrawRow {
   display: flex;
   justify-content: center;
   padding-top: 8px;
 }
-.signOutBtn {
+/* Danger link — 진입점은 눈에 띄되 유도하지는 않는다 (design.md §12). */
+.withdrawBtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   border: none;
   background: none;
   padding: 0;
-  color: v.$slate;
+  color: v.$red;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -529,8 +546,45 @@
     height: 16px;
   }
   &:hover {
-    color: v.$ink;
     text-decoration: underline;
+  }
+}
+
+/* ══════════════ 회원 탈퇴 확인 모달 ══════════════ */
+.withdrawBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.withdrawQuestion {
+  font-size: 16px;
+  font-weight: 700;
+  color: v.$ink;
+  margin-bottom: 0;
+}
+/* 되돌릴 수 없다는 사실은 읽고 지나치기 쉬우므로 경고 표면 위에 올린다. */
+.withdrawWarning {
+  // border-radius: v.$radius-sm;
+  // background: v.$red-soft;
+  // padding: 14px 16px;
+  color: v.$red;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+.withdrawAgree {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: v.$ink;
+  font-size: 14px;
+  line-height: 1.5;
+  cursor: pointer;
+
+  input {
+    margin-top: 2px;
+    accent-color: v.$red;
+    cursor: pointer;
   }
 }
 

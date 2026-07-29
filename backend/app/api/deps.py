@@ -1,4 +1,3 @@
-import uuid
 from typing import Annotated
 
 from fastapi import Depends, Header
@@ -8,6 +7,7 @@ from app.core.exceptions import AppError
 from app.core.security import AUTH_EXPIRED, AUTH_UNAVAILABLE, verify_token_with_reason
 from app.db.session import get_app_db
 from app.repositories.auth import AuthRepository
+from app.services.auth import claims_user_id, reject_if_withdrawn
 
 # Authorization 헤더가 아예 없거나 Bearer 형식이 아닐 때의 사유.
 AUTH_MISSING = "missing"
@@ -74,15 +74,16 @@ def require_member(
     user: Annotated[dict, Depends(require_user)],
     db: Annotated[Session, Depends(get_app_db)],
 ) -> dict:
-    """JWT가 유효하고 app_user 가입까지 완료된 사용자만 허용한다."""
-    try:
-        user_id = uuid.UUID(str(user.get("sub", "")))
-    except ValueError as exc:
-        raise AppError(
-            "로그인 필요", "사용자 식별에 실패했습니다. 다시 로그인해 주세요.", 401
-        ) from exc
+    """JWT가 유효하고 app_user 가입까지 완료된 사용자만 허용한다.
 
-    if not AuthRepository(db).is_registered(user_id):
+    탈퇴 회원(is_deleted)은 is_registered 가 False 이므로 여기서 함께 걸린다.
+    다만 안내 문구는 '가입 필요' 와 달라야 해서 탈퇴는 먼저 갈라낸다.
+    """
+    user_id = claims_user_id(user)
+    repo = AuthRepository(db)
+    reject_if_withdrawn(repo, user_id)
+
+    if not repo.is_registered(user_id):
         raise AppError(
             "회원가입 필요",
             "서비스 이용약관에 동의하고 회원가입을 완료해 주세요.",

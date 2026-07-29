@@ -29,6 +29,7 @@ erDiagram
         text username UK "서비스 핸들"
         timestamptz created_at
         timestamptz updated_at
+        boolean is_deleted "탈퇴 여부, default false"
         timestamptz deleted_at "nullable, soft delete"
     }
     profile {
@@ -168,9 +169,13 @@ Supabase `auth.users` 의 확장 테이블. 로그인·이메일·소셜 정보�
 | username | TEXT | UNIQUE | 서비스 핸들 (닉네임과 역할 구분) |
 | created_at | TIMESTAMPTZ | | 가입 일시 |
 | updated_at | TIMESTAMPTZ | | 수정 일시 |
+| is_deleted | BOOLEAN | NOT NULL, DEFAULT false | 회원 탈퇴 여부 |
 | deleted_at | TIMESTAMPTZ | NULL | 탈퇴(soft delete) 일시 |
 
 > `email`·`social_id`·`social_type` 은 `auth.users` 가 관리 → 중복 저장 안 함(필요 시 join/동기화).
+>
+> **회원 탈퇴는 Soft Delete 다.** 조회는 반드시 `AuthRepository` 를 거쳐 탈퇴 회원을 걸러낸다.
+> 탈퇴 후 3일이 지난 회원을 완전 삭제하는 배치는 **미구현** — [`회원탈퇴.md`](회원탈퇴.md) 참고.
 
 ### 2. profile — 프로필
 표시용 정보. 로그인 정보(`app_user`)와 분리.

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { withdrawMember } from '../../api/auth'
 import { Modal } from '../../components/Modal/Modal'
 import { showToast } from '../../components/Toast/toastStore'
 import {
@@ -11,7 +12,7 @@ import {
   Edit,
   FileLines,
   Lock,
-  LogOut,
+  Trash,
   User,
 } from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
@@ -112,6 +113,10 @@ export function MyPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false)
+  const [withdrawAgreed, setWithdrawAgreed] = useState(false)
+  const [withdrawing, setWithdrawing] = useState(false)
+
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -172,13 +177,31 @@ export function MyPage() {
     showToast('비밀번호가 변경되었습니다.', 'success')
   }
 
-  function handleSignOut() {
+  function openWithdrawModal() {
+    // 동의는 열 때마다 다시 받는다 — 직전에 취소한 체크가 남아 있으면 안 된다.
+    setWithdrawAgreed(false)
+    setWithdrawModalOpen(true)
+  }
+
+  async function handleWithdraw() {
+    if (!withdrawAgreed || withdrawing) return
+
+    setWithdrawing(true)
+    try {
+      await withdrawMember()
+    } catch {
+      // 실패 안내는 client.ts 의 공통 오류 모달이 맡는다. 모달을 열어둔 채 되돌려
+      // 사용자가 곧바로 다시 시도할 수 있게 한다.
+      setWithdrawing(false)
+      return
+    }
+
     signOut()
-    // 보호된 화면(RequireAuth)에서 로그아웃하면 SPA 내 navigate('/') 는 라우터가
-    // 위치를 갱신하기 전에 가드가 먼저 인증 해제를 감지해 /login 으로 보내버리는
-    // 경합이 생긴다. 전체 새로고침으로 이동하면 앱이 처음부터 다시 마운트되며
-    // 이미 지워진 토큰으로 시작하므로 이 경합 자체가 발생하지 않는다.
-    window.location.href = '/'
+    // 보호된 화면(RequireAuth)에서 세션을 끊으면 SPA 내 navigate 는 라우터가 위치를
+    // 갱신하기 전에 가드가 먼저 인증 해제를 감지해 /login 으로 보내버리는 경합이 생긴다.
+    // 전체 새로고침으로 이동하면 앱이 처음부터 다시 마운트되며 이미 지워진 토큰으로
+    // 시작하므로 이 경합 자체가 발생하지 않는다.
+    window.location.href = '/login'
   }
 
   return (
@@ -345,9 +368,9 @@ export function MyPage() {
           </div>
         </section>
 
-        <div className={styles.signOutRow}>
-          <button type="button" className={styles.signOutBtn} onClick={handleSignOut}>
-            <LogOut /> 로그아웃
+        <div className={styles.withdrawRow}>
+          <button type="button" className={styles.withdrawBtn} onClick={openWithdrawModal}>
+            <Trash /> 회원 탈퇴
           </button>
         </div>
       </div>
@@ -446,6 +469,46 @@ export function MyPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={withdrawModalOpen}
+        onClose={() => setWithdrawModalOpen(false)}
+        title="회원 탈퇴"
+      >
+        <div className={styles.withdrawBody}>
+          <p className={styles.withdrawQuestion}>정말 회원 탈퇴하시겠습니까?</p>
+          <p className={styles.withdrawWarning}>
+            탈퇴 시 계정 정보와 채팅, 계약서 등 모든 데이터가 삭제되며 복구할 수 없습니다.
+          </p>
+          <label className={styles.withdrawAgree}>
+            <input
+              type="checkbox"
+              checked={withdrawAgreed}
+              onChange={(e) => setWithdrawAgreed(e.target.checked)}
+            />
+            <span>위 내용을 확인했으며 회원 탈퇴에 동의합니다.</span>
+          </label>
+          <div className={styles.modalActions}>
+            <button
+              type="button"
+              className={styles.btnGhost}
+              onClick={() => setWithdrawModalOpen(false)}
+              disabled={withdrawing}
+            >
+              취소
+            </button>
+            {/* 동의 전에는 누를 수 없다 — 되돌릴 수 없는 액션이라 오조작을 막는다. */}
+            <button
+              type="button"
+              className={styles.btnDanger}
+              onClick={() => void handleWithdraw()}
+              disabled={!withdrawAgreed || withdrawing}
+            >
+              {withdrawing ? '처리 중…' : '회원 탈퇴'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

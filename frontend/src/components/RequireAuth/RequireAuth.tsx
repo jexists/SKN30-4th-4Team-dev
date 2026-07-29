@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
+import { ApiError } from '../../api/apiError'
 import { getRegistration, type RegistrationStatus } from '../../api/kakaoAuth'
 import { setKakaoReturnTo } from '../../auth/kakaoOAuth'
 import { isAuthConfigured } from '../../config/supabase'
-import { useAuth } from '../../hooks/useAuth'
+import { signOut, useAuth } from '../../hooks/useAuth'
 
 type GuardStatus = RegistrationStatus | 'checking' | 'failed'
 
@@ -45,8 +46,15 @@ export function RequireAuth() {
         }
         setRegistration(status)
       })
-      .catch(() => {
-        if (active) setRegistration('failed')
+      .catch((error: unknown) => {
+        if (!active) return
+        // 403 은 탈퇴한 계정뿐이다(미가입은 signup_required 로 성공 응답을 준다).
+        // Supabase 세션은 탈퇴 후에도 만료 전까지 살아 있으므로 여기서 끊어준다.
+        if (error instanceof ApiError && error.code === 403) {
+          signOut()
+          return
+        }
+        setRegistration('failed')
       })
 
     return () => {

@@ -78,6 +78,9 @@ export function AuthCallback() {
           error instanceof Error && error.message
             ? error.message
             : '카카오 로그인에 실패했습니다. 다시 시도해 주세요.'
+        // 위에서 signIn 으로 세션을 잡아둔 뒤 실패했을 수 있다. 그대로 두면 탈퇴 계정처럼
+        // 서버가 거절한 사용자가 '로그인된 상태'로 남으므로 반드시 세션을 되돌린다.
+        signOut()
         showToast(message, 'error')
         void navigate('/login', { replace: true })
       }

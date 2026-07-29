@@ -1,4 +1,4 @@
-@use '../../styles/variables' as v;
+@use "../../styles/variables" as v;
 
 .page {
   color: v.$ink;
@@ -287,7 +287,7 @@
 
 .featureIntro {
   margin-top: 76px;
-  max-width: 640px;
+  // max-width: 640px;
 }
 .featureIntroTitle {
   margin: 0;
@@ -362,8 +362,8 @@
   display: grid;
   grid-template-columns: 1.35fr 1fr;
   grid-template-areas:
-    'ocr   dash'
-    'chat  ratio';
+    "ocr   dash"
+    "chat  ratio";
   gap: 20px;
 }
 .featCard {
@@ -486,7 +486,7 @@
   box-shadow: 0 12px 26px rgba(15, 26, 53, 0.3);
 
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 10px 8px auto 8px;
     height: 26px;
@@ -675,10 +675,10 @@
   .bento {
     grid-template-columns: 1fr;
     grid-template-areas:
-      'ocr'
-      'dash'
-      'chat'
-      'ratio';
+      "ocr"
+      "dash"
+      "chat"
+      "ratio";
   }
 }
 
