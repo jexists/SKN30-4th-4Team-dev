@@ -1,5 +1,5 @@
-@use '../../styles/variables' as v;
-@use '../../styles/typography' as t;
+@use "../../styles/variables" as v;
+@use "../../styles/typography" as t;
 
 .page {
   color: v.$ink;
@@ -28,7 +28,7 @@
 }
 .subtitle {
   margin: 16px 0 0;
-  max-width: 44rem;
+  // max-width: 44rem;
   font-size: 16px;
   line-height: 1.7;
   color: v.$slate;
@@ -386,7 +386,7 @@
     font-size: 14px;
     line-height: 1.65;
     color: #aab4cf;
-    max-width: 26rem;
+    // max-width: 26rem;
   }
 }
 .assureLink {

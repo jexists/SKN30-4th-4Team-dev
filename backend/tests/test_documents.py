@@ -1,6 +1,7 @@
 import base64
 
 from app.api.deps import require_user
+from app.core.config import settings
 from app.main import app
 from app.schemas.document import (
     ContractLlmAnalysis,
@@ -161,14 +162,14 @@ def test_analyze_document_processes_all_files_and_combines_results(client, monke
     ]
 
 
-def test_analyze_document_rejects_more_than_three_files(client):
+def test_analyze_document_rejects_more_files_than_the_limit(client):
     app.dependency_overrides[require_user] = lambda: {"sub": "user-id"}
 
     response = client.post(
         "/api/v1/documents/analyze",
         files=[
             ("file", (f"document-{index}.pdf", b"pdf", "application/pdf"))
-            for index in range(4)
+            for index in range(settings.CONTRACT_MAX_FILES + 1)
         ],
     )
 

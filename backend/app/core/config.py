@@ -65,7 +65,9 @@ class Settings(BaseSettings):
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
     OCR_WORKER_PROCESS_TIMEOUT_SECONDS: float = 1200.0
-    CONTRACT_MAX_FILES: int = 3
+    # 서류 종류(계약서·등기부등본·건축물대장)가 아니라 한 요청의 전체 파일 수 상한이다.
+    # 한 서류가 여러 장으로 스캔돼 오는 경우가 많아 종류 수보다 넉넉히 잡는다.
+    CONTRACT_MAX_FILES: int = 10
     CONTRACT_MAX_FILE_MB: int = 20
     CONTRACT_ANALYSIS_MODEL: str = "gpt-4.1-mini"
     CONTRACT_ANALYSIS_MAX_CHARS: int = 50_000

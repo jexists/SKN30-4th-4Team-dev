@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MAX_FILE_MB,
+  MAX_TOTAL_FILES,
   describeRejections,
   fileKey,
   formatFileSize,
@@ -82,6 +83,38 @@ describe('mergeFiles', () => {
     expect(result.rejected.map((r) => r.reason)).toEqual(['extension', 'size', 'duplicate'])
   })
 
+  it('남은 자리만큼만 담고 넘치는 파일은 사유를 남긴다', () => {
+    const result = mergeFiles([], [file('a.pdf'), file('b.pdf'), file('c.pdf')], 2)
+
+    expect(result.files.map((f) => f.name)).toEqual(['a.pdf', 'b.pdf'])
+    expect(result.rejected).toEqual([{ fileName: 'c.pdf', reason: 'limit' }])
+  })
+
+  it('자리가 없으면 아무것도 담지 않는다', () => {
+    const current = [file('kept.pdf')]
+
+    const result = mergeFiles(current, [file('new.pdf')], 0)
+
+    expect(result.files.map((f) => f.name)).toEqual(['kept.pdf'])
+    expect(result.rejected).toEqual([{ fileName: 'new.pdf', reason: 'limit' }])
+  })
+
+  it('중복은 자리를 차지하지 않으므로 남은 자리를 깎지 않는다', () => {
+    const result = mergeFiles([file('dup.pdf')], [file('dup.pdf'), file('new.pdf')], 1)
+
+    expect(result.files.map((f) => f.name)).toEqual(['dup.pdf', 'new.pdf'])
+    expect(result.rejected).toEqual([{ fileName: 'dup.pdf', reason: 'duplicate' }])
+  })
+
+  it('capacity 를 넘기지 않으면 개수를 제한하지 않는다', () => {
+    const incoming = Array.from({ length: 12 }, (_, i) => file(`page-${i}.pdf`))
+
+    const result = mergeFiles([], incoming)
+
+    expect(result.files).toHaveLength(12)
+    expect(result.rejected).toEqual([])
+  })
+
   it('기존 목록은 그대로 두고 뒤에 이어 붙인다', () => {
     const current = [file('first.pdf')]
 
@@ -124,6 +157,15 @@ describe('describeRejections', () => {
 
     expect(notice.message).toBe(
       `파일 하나당 최대 ${MAX_FILE_MB}MB까지 업로드할 수 있습니다 (등기부등본: 큰파일.pdf)`,
+    )
+    expect(notice.type).toBe('error')
+  })
+
+  it('개수 상한 초과는 전체 합계 기준으로 알린다', () => {
+    const [notice] = describeRejections([{ fileName: '4장.pdf', reason: 'limit' }], '건축물대장')
+
+    expect(notice.message).toBe(
+      `서류는 모두 합쳐 최대 ${MAX_TOTAL_FILES}개까지 업로드할 수 있습니다 (건축물대장: 4장.pdf)`,
     )
     expect(notice.type).toBe('error')
   })

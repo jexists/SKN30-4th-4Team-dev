@@ -15,12 +15,20 @@ export const ACCEPT_ATTR = ACCEPTED_EXTENSIONS.join(',')
 /** backend 의 CONTRACT_MAX_FILE_MB(기본 20) 와 같아야 한다. */
 export const MAX_FILE_MB = 20
 
+/**
+ * backend 의 CONTRACT_MAX_FILES(기본 10) 와 같아야 한다.
+ *
+ * 서류 종류별이 아니라 **한 번에 보내는 전체 파일 수** 상한이다 — 등기부등본처럼 여러 장으로
+ * 스캔된 서류가 있어 카드 하나에 파일이 여러 개 담긴다.
+ */
+export const MAX_TOTAL_FILES = 10
+
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
 const KB = 1024
 const MB = 1024 * 1024
 
 /** 거부 사유. 심각한 순서대로 나열한다 — 토스트도 이 순서로 나간다. */
-export const REJECT_REASONS = ['extension', 'size', 'duplicate'] as const
+export const REJECT_REASONS = ['extension', 'size', 'limit', 'duplicate'] as const
 export type RejectReason = (typeof REJECT_REASONS)[number]
 
 export interface Rejection {
@@ -43,12 +51,14 @@ export interface RejectionNotice {
 const REASON_TOAST: Record<RejectReason, ToastType> = {
   extension: 'error',
   size: 'error',
+  limit: 'error',
   duplicate: 'info',
 }
 
 const REASON_MESSAGE: Record<RejectReason, string> = {
   extension: 'PDF·JPG·PNG 파일만 업로드할 수 있습니다',
   size: `파일 하나당 최대 ${MAX_FILE_MB}MB까지 업로드할 수 있습니다`,
+  limit: `서류는 모두 합쳐 최대 ${MAX_TOTAL_FILES}개까지 업로드할 수 있습니다`,
   duplicate: '이미 추가한 파일입니다',
 }
 
@@ -72,8 +82,18 @@ function hasAcceptedExtension(file: File): boolean {
   return ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))
 }
 
-/** 기존 목록에 새 파일들을 검증·중복제거해서 합치고, 못 담은 파일은 사유와 함께 돌려준다. */
-export function mergeFiles(current: File[], incoming: File[]): MergeResult {
+/**
+ * 기존 목록에 새 파일들을 검증·중복제거해서 합치고, 못 담은 파일은 사유와 함께 돌려준다.
+ *
+ * `capacity` 는 이번에 **새로 담을 수 있는 개수**다(기본 무제한). 상한이 서류 카드 하나가
+ * 아니라 전체 합계라서, 남은 자리는 호출자만 알 수 있으므로 인자로 받는다. 중복은 자리를
+ * 차지하지 않으므로 capacity 검사보다 먼저 걸러낸다.
+ */
+export function mergeFiles(
+  current: File[],
+  incoming: File[],
+  capacity = Number.POSITIVE_INFINITY,
+): MergeResult {
   const seen = new Set(current.map(fileKey))
   const accepted: File[] = []
   const rejected: Rejection[] = []
@@ -91,6 +111,10 @@ export function mergeFiles(current: File[], incoming: File[]): MergeResult {
     if (seen.has(key)) {
       // 조용히 넘기면 "왜 목록이 안 늘지?" 가 된다. 사유를 남겨 화면이 알리게 한다.
       rejected.push({ fileName: file.name, reason: 'duplicate' })
+      continue
+    }
+    if (accepted.length >= capacity) {
+      rejected.push({ fileName: file.name, reason: 'limit' })
       continue
     }
     seen.add(key)

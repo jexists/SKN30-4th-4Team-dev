@@ -19,6 +19,7 @@ import { BRAND } from '../../config/env'
 import styles from './Analyze.module.scss'
 import {
   ACCEPT_ATTR,
+  MAX_TOTAL_FILES,
   describeRejections,
   fileKey,
   formatFileSize,
@@ -94,15 +95,18 @@ export function Analyze() {
 
   const uploadedCount = SLOTS.filter((slot) => files[slot.key].length > 0).length
   const allUploaded = uploadedCount === SLOTS.length
+  const totalCount = SLOTS.reduce((sum, slot) => sum + files[slot.key].length, 0)
 
   function addFiles(slot: SlotConfig, incoming: FileList | null) {
     if (!incoming || incoming.length === 0) return
-    // 백엔드 종합 분석 계약은 서류 종류별 1개, 총 3개다. 새 선택은 기존 파일을 교체한다.
-    const { files: accepted, rejected } = mergeFiles([], Array.from(incoming))
-    setFiles((prev) => ({ ...prev, [slot.key]: accepted.slice(0, 1) }))
-    if (accepted.length > 1) {
-      showToast(`${slot.title}은 파일 1개만 선택할 수 있습니다`, 'info')
-    }
+    // 서류 한 종류가 여러 장으로 스캔돼 오는 일이 흔하므로 카드마다 파일을 여러 개 담는다.
+    // 상한은 카드별이 아니라 전체 합계 — 백엔드 CONTRACT_MAX_FILES 와 같은 기준이다.
+    const { files: merged, rejected } = mergeFiles(
+      files[slot.key],
+      Array.from(incoming),
+      MAX_TOTAL_FILES - totalCount,
+    )
+    setFiles((prev) => ({ ...prev, [slot.key]: merged }))
     // 거부는 카드 안 문구가 아니라 토스트로 알린다 — 어떤 서류의 어떤 파일인지까지 담긴다.
     for (const notice of describeRejections(rejected, slot.title)) {
       showToast(notice.message, notice.type)
@@ -114,10 +118,10 @@ export function Analyze() {
   }
 
   async function handleDiagnose() {
-    const documents = SLOTS.map((slot) => files[slot.key][0]).filter(
-      (file): file is File => file !== undefined,
-    )
-    if (documents.length !== SLOTS.length || isAnalyzing) return
+    // 백엔드는 파일을 순서대로 이어붙여 한 번에 분석한다 — 같은 서류의 장들이 흩어지지
+    // 않도록 카드 단위로 묶어서 보낸다.
+    const documents = SLOTS.flatMap((slot) => files[slot.key])
+    if (!allUploaded || isAnalyzing) return
     setIsAnalyzing(true)
     try {
       const result = await analyzeDocuments(documents)
@@ -281,7 +285,7 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemo
             </ul>
             <label htmlFor={inputId} className={styles.addZone} {...dropProps}>
               <AddCircle />
-              <span>파일 변경</span>
+              <span>파일 추가</span>
             </label>
           </>
         )}
@@ -290,6 +294,7 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemo
       <input
         id={inputId}
         type="file"
+        multiple
         accept={ACCEPT_ATTR}
         className={styles.fileInput}
         onChange={(event) => {

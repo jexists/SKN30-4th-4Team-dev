@@ -61,7 +61,7 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 | `OPENAI_API_KEY` | LLM 호출용 |
 | `OCR_WORKER_URL` | 로컬 OCR worker 주소. 로컬 직접 실행 시 `http://127.0.0.1:8100` |
 | `OCR_WORKER_PROCESS_TIMEOUT_SECONDS` | 계약서 OCR 요청 제한 시간(초) |
-| `CONTRACT_MAX_FILES` | 한 번에 종합 분석할 수 있는 서류 수(기본 3개) |
+| `CONTRACT_MAX_FILES` | 한 번에 종합 분석할 수 있는 전체 파일 수(기본 10개). 서류 한 종류가 여러 장일 수 있어 종류 수보다 크다 |
 | `CONTRACT_MAX_FILE_MB` | 업로드 가능한 계약서 최대 크기 |
 | `CONTRACT_ANALYSIS_MODEL` | 개인정보 치환 텍스트를 분석할 LLM 모델 |
 
