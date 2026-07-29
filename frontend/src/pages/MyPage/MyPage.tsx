@@ -15,9 +15,31 @@ import {
   User,
 } from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
-import { setAvatarUrl, useAvatarUrl } from '../../hooks/useAvatar'
+
+import { setAvatarFile, useAvatarUrl } from '../../hooks/useAvatar'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
 import styles from './MyPage.module.scss'
+
+// 백엔드에 저장 API가 아직 없어, "다시 바꾸기 전까지 유지"는 localStorage 로 흉내낸다.
+const PHONE_STORAGE_KEY = 'homeshield.phone'
+const PASSWORD_CHANGED_STORAGE_KEY = 'homeshield.passwordChangedAt'
+const DEFAULT_PHONE = '010-1234-5678'
+
+function readStoredPhone(): string {
+  try {
+    return window.localStorage.getItem(PHONE_STORAGE_KEY) || DEFAULT_PHONE
+  } catch {
+    return DEFAULT_PHONE
+  }
+}
+
+function readPasswordChanged(): boolean {
+  try {
+    return window.localStorage.getItem(PASSWORD_CHANGED_STORAGE_KEY) !== null
+  } catch {
+    return false
+  }
+}
 
 type RiskLevel = 'safe' | 'caution' | 'risk'
 
@@ -80,11 +102,11 @@ export function MyPage() {
   const avatarUrl = useAvatarUrl()
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
-  const [phone, setPhone] = useState('010-1234-5678')
+  const [phone, setPhone] = useState(readStoredPhone)
   const [phoneModalOpen, setPhoneModalOpen] = useState(false)
   const [phoneDraft, setPhoneDraft] = useState(phone)
 
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [passwordChanged, setPasswordChanged] = useState(readPasswordChanged)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -92,7 +114,8 @@ export function MyPage() {
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setAvatarUrl(URL.createObjectURL(file))
+    setAvatarFile(file)
+#    setAvatarUrl(URL.createObjectURL(file))
   }
 
   function openPhoneModal() {
@@ -108,6 +131,11 @@ export function MyPage() {
       return
     }
     setPhone(trimmed)
+    try {
+      window.localStorage.setItem(PHONE_STORAGE_KEY, trimmed)
+    } catch {
+      // 저장 실패해도 화면 표시는 유지된다 — 이번 세션 안에서는 문제 없다.
+    }
     setPhoneModalOpen(false)
     showToast('휴대폰 번호가 변경되었습니다.', 'success')
   }
@@ -132,6 +160,12 @@ export function MyPage() {
     if (newPassword !== confirmPassword) {
       showToast('새 비밀번호가 일치하지 않습니다.', 'error')
       return
+    }
+    setPasswordChanged(true)
+    try {
+      window.localStorage.setItem(PASSWORD_CHANGED_STORAGE_KEY, String(Date.now()))
+    } catch {
+      // 저장 실패해도 화면 표시는 유지된다 — 이번 세션 안에서는 문제 없다.
     }
     setPasswordModalOpen(false)
     showToast('비밀번호가 변경되었습니다.', 'success')
@@ -280,7 +314,9 @@ export function MyPage() {
                 <Lock className={styles.settingIcon} />
                 <div>
                   <p className={styles.settingLabel}>비밀번호 변경</p>
-                  <p className={styles.settingSub}>마지막 변경: 3개월 전</p>
+                  <p className={styles.settingSub}>
+                    {passwordChanged ? '방금 변경되었습니다' : '마지막 변경: 3개월 전'}
+                  </p>
                 </div>
               </div>
               <button type="button" className={styles.linkBtn} onClick={openPasswordModal}>
