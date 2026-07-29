@@ -15,9 +15,9 @@ import {
   User,
 } from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
-
 import { setAvatarFile, useAvatarUrl } from '../../hooks/useAvatar'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
+import { setReportAlertsEnabled, useReportAlertsEnabled } from '../../hooks/useNotifications'
 import styles from './MyPage.module.scss'
 
 // 백엔드에 저장 API가 아직 없어, "다시 바꾸기 전까지 유지"는 localStorage 로 흉내낸다.
@@ -97,7 +97,7 @@ export function MyPage() {
   // 조회 실패는 client.ts 의 공통 처리가 오류 모달로 알린다 — 여기서 또 띄우지 않는다.
   const { status, data: currentUser } = useCurrentUser(token)
 
-  const [notifyReport, setNotifyReport] = useState(true)
+  const notifyReport = useReportAlertsEnabled()
   const [notifyChat, setNotifyChat] = useState(false)
   const avatarUrl = useAvatarUrl()
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -333,7 +333,7 @@ export function MyPage() {
                 <p className={styles.settingLabel}>위험 보고서 생성 완료</p>
                 <p className={styles.settingSub}>분석 완료 시 즉시 알림</p>
               </div>
-              <Toggle checked={notifyReport} onChange={setNotifyReport} label="위험 보고서 알림" />
+              <Toggle checked={notifyReport} onChange={setReportAlertsEnabled} label="위험 보고서 알림" />
             </div>
             <div className={styles.settingRow}>
               <div>

@@ -16,6 +16,7 @@ import {
   Upload,
 } from '../../components/icons'
 import { BRAND } from '../../config/env'
+import { isReportAlertsEnabled, markReportGenerated } from '../../hooks/useNotifications'
 import styles from './Analyze.module.scss'
 import {
   ACCEPT_ATTR,
@@ -125,6 +126,10 @@ export function Analyze() {
     setIsAnalyzing(true)
     try {
       const result = await analyzeDocuments(documents)
+      if (isReportAlertsEnabled()) {
+        markReportGenerated()
+        showToast('위험보고서가 생성되었습니다!', 'info')
+      }
       navigate('/risk-report', { state: { documentAnalysis: result } })
     } finally {
       setIsAnalyzing(false)

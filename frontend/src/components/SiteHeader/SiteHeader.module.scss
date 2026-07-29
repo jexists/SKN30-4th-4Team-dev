@@ -114,6 +114,13 @@
     background: v.$page-bg;
   }
 }
+.iconBtnAlert {
+  color: v.$red;
+
+  &:hover {
+    background: v.$red-soft;
+  }
+}
 .ctaSm {
   margin-left: 6px;
   padding: 9px 16px;
