@@ -1,13 +1,69 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { analyzeContract } from '../../api/documents'
-import { Building, Check, Doc, FileLines, Gavel, Search, Shield, Upload } from '../../components/icons'
+import { showToast } from '../../components/Toast/toastStore'
+import {
+  AddCircle,
+  Building,
+  Check,
+  Close,
+  Doc,
+  FileLines,
+  Gavel,
+  Search,
+  Shield,
+  Upload,
+} from '../../components/icons'
 import { BRAND } from '../../config/env'
 import styles from './Analyze.module.scss'
+import {
+  ACCEPT_ATTR,
+  describeRejections,
+  fileKey,
+  formatFileSize,
+  isPdf,
+  mergeFiles,
+} from './uploadFiles'
 
-const UPLOAD_SLOTS = ['register', 'contract', 'building'] as const
-type SlotKey = (typeof UPLOAD_SLOTS)[number]
+type SlotKey = 'register' | 'contract' | 'building'
+
+interface SlotConfig {
+  key: SlotKey
+  /** 거부 토스트 문구에도 그대로 쓰이므로 카드 제목과 한 곳에서 관리한다. */
+  title: string
+  hint: string
+  icon: ReactNode
+  dropIcon: ReactNode
+  inputId: string
+}
+
+const SLOTS: SlotConfig[] = [
+  {
+    key: 'register',
+    title: '등기부등본',
+    hint: '부동산 등기사항전부증명서',
+    icon: <Doc />,
+    dropIcon: <Upload />,
+    inputId: 'upload-register',
+  },
+  {
+    key: 'contract',
+    title: '임대차계약서',
+    hint: '전/월세 계약서',
+    icon: <Gavel />,
+    dropIcon: <FileLines />,
+    inputId: 'upload-contract',
+  },
+  {
+    key: 'building',
+    title: '건축물대장',
+    hint: '일반 / 집합 건축물대장',
+    icon: <Building />,
+    dropIcon: <Doc />,
+    inputId: 'upload-building-register',
+  },
+]
 
 const GUIDE = [
   {
@@ -30,21 +86,32 @@ const GUIDE = [
 export function Analyze() {
   const navigate = useNavigate()
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [files, setFiles] = useState<Record<SlotKey, File | null>>({
-    register: null,
-    contract: null,
-    building: null,
+  const [files, setFiles] = useState<Record<SlotKey, File[]>>({
+    register: [],
+    contract: [],
+    building: [],
   })
 
-  const uploadedCount = UPLOAD_SLOTS.filter((slot) => files[slot] !== null).length
-  const allUploaded = uploadedCount === UPLOAD_SLOTS.length
+  const uploadedCount = SLOTS.filter((slot) => files[slot.key].length > 0).length
+  const allUploaded = uploadedCount === SLOTS.length
 
-  function setSlotFile(slot: SlotKey, file: File | null) {
-    setFiles((prev) => ({ ...prev, [slot]: file }))
+  function addFiles(slot: SlotConfig, incoming: FileList | null) {
+    if (!incoming || incoming.length === 0) return
+    const { files: next, rejected } = mergeFiles(files[slot.key], Array.from(incoming))
+    setFiles((prev) => ({ ...prev, [slot.key]: next }))
+    // 거부는 카드 안 문구가 아니라 토스트로 알린다 — 어떤 서류의 어떤 파일인지까지 담긴다.
+    for (const notice of describeRejections(rejected, slot.title)) {
+      showToast(notice.message, notice.type)
+    }
+  }
+
+  function removeFile(slot: SlotKey, key: string) {
+    setFiles((prev) => ({ ...prev, [slot]: prev[slot].filter((file) => fileKey(file) !== key) }))
   }
 
   async function handleDiagnose() {
-    const contract = files.contract
+    // 백엔드는 아직 파일 하나만 받는다 — 임대차계약서 첫 장으로 분석한다.
+    const contract = files.contract[0]
     if (!contract || isAnalyzing) return
     setIsAnalyzing(true)
     try {
@@ -71,30 +138,19 @@ export function Analyze() {
 
           <div className={styles.left}>
             <div className={styles.uploads}>
-              <UploadCard
-                title="등기부등본"
-                hint="부동산 등기사항전부증명서"
-                icon={<Doc />}
-                dropIcon={<Upload />}
-                inputId="upload-register"
-                onFileChange={(file) => setSlotFile('register', file)}
-              />
-              <UploadCard
-                title="임대차계약서"
-                hint="전/월세 계약서"
-                icon={<Gavel />}
-                dropIcon={<FileLines />}
-                inputId="upload-contract"
-                onFileChange={(file) => setSlotFile('contract', file)}
-              />
-              <UploadCard
-                title="건축물대장"
-                hint="일반 / 집합 건축물대장"
-                icon={<Building />}
-                dropIcon={<Doc />}
-                inputId="upload-building-register"
-                onFileChange={(file) => setSlotFile('building', file)}
-              />
+              {SLOTS.map((slot) => (
+                <UploadCard
+                  key={slot.key}
+                  title={slot.title}
+                  hint={slot.hint}
+                  icon={slot.icon}
+                  dropIcon={slot.dropIcon}
+                  inputId={slot.inputId}
+                  files={files[slot.key]}
+                  onAdd={(list) => addFiles(slot, list)}
+                  onRemove={(fileId) => removeFile(slot.key, fileId)}
+                />
+              ))}
             </div>
 
             <div className={styles.statusBar}>
@@ -107,11 +163,13 @@ export function Analyze() {
                   <Check />
                 </span>
                 <div>
-                  <p className={styles.statusTitle}>{uploadedCount}/3 서류 업로드 완료</p>
+                  <p className={styles.statusTitle}>
+                    {uploadedCount}/{SLOTS.length} 서류 업로드 완료
+                  </p>
                   <p className={styles.statusSub}>
                     {allUploaded
                       ? '모든 서류가 준비되었습니다'
-                      : `${UPLOAD_SLOTS.length - uploadedCount}개 서류를 더 업로드해주세요`}
+                      : `${SLOTS.length - uploadedCount}개 서류를 더 업로드해주세요`}
                   </p>
                 </div>
               </div>
@@ -161,13 +219,24 @@ export function Analyze() {
 type UploadCardProps = {
   title: string
   hint: string
-  icon: React.ReactNode
-  dropIcon: React.ReactNode
+  icon: ReactNode
+  dropIcon: ReactNode
   inputId: string
-  onFileChange: (file: File | null) => void
+  files: File[]
+  onAdd: (list: FileList | null) => void
+  onRemove: (key: string) => void
 }
 
-function UploadCard({ title, hint, icon, dropIcon, inputId, onFileChange }: UploadCardProps) {
+function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemove }: UploadCardProps) {
+  // 드롭 영역과 "파일 추가" 영역이 같은 동작을 공유한다.
+  const dropProps = {
+    onDragOver: (event: React.DragEvent) => event.preventDefault(),
+    onDrop: (event: React.DragEvent) => {
+      event.preventDefault()
+      onAdd(event.dataTransfer.files)
+    },
+  }
+
   return (
     <div className={styles.uploadCard}>
       <div className={styles.uploadHead}>
@@ -175,26 +244,56 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, onFileChange }: Uplo
         <span className={styles.uploadIcon}>{icon}</span>
       </div>
       <p className={styles.uploadHint}>{hint}</p>
-      <label
-        htmlFor={inputId}
-        className={styles.dropzone}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault()
-          const file = event.dataTransfer.files?.[0]
-          if (file) onFileChange(file)
+
+      {/* 파일이 몇 개든 높이가 고정된다 — 넘치면 목록 안에서만 스크롤한다. */}
+      <div className={styles.dropArea}>
+        {files.length === 0 ? (
+          <label htmlFor={inputId} className={styles.dropzone} {...dropProps}>
+            <span className={styles.dropIcon}>{dropIcon}</span>
+            <span className={styles.dropText}>파일을 드래그하거나 클릭하여 업로드</span>
+          </label>
+        ) : (
+          <>
+            {/* 제거 버튼 클릭이 파일 선택창을 열지 않도록 목록은 label 바깥에 둔다. */}
+            <ul className={styles.fileList} {...dropProps}>
+              {files.map((file) => (
+                <li key={fileKey(file)} className={styles.fileRow}>
+                  <span className={styles.fileRowIcon}>{isPdf(file) ? <FileLines /> : <Doc />}</span>
+                  <span className={styles.fileName} title={file.name}>
+                    {file.name}
+                  </span>
+                  <span className={styles.fileSize}>{formatFileSize(file.size)}</span>
+                  <button
+                    type="button"
+                    className={styles.fileRemove}
+                    aria-label={`${file.name} 제거`}
+                    onClick={() => onRemove(fileKey(file))}
+                  >
+                    <Close />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <label htmlFor={inputId} className={styles.addZone} {...dropProps}>
+              <AddCircle />
+              <span>파일 추가</span>
+            </label>
+          </>
+        )}
+      </div>
+
+      <input
+        id={inputId}
+        type="file"
+        multiple
+        accept={ACCEPT_ATTR}
+        className={styles.fileInput}
+        onChange={(event) => {
+          onAdd(event.target.files)
+          // 같은 파일을 지웠다 다시 고를 때도 change 가 뜨도록 비운다.
+          event.target.value = ''
         }}
-      >
-        <span className={styles.dropIcon}>{dropIcon}</span>
-        <span className={styles.dropText}>파일을 드래그하거나 클릭하여 업로드</span>
-        <input
-          id={inputId}
-          type="file"
-          accept=".pdf,image/*"
-          className={styles.fileInput}
-          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
-        />
-      </label>
+      />
     </div>
   )
 }

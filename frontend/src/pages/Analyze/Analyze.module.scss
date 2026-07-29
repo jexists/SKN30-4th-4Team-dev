@@ -1,4 +1,5 @@
 @use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
 
 .page {
   color: v.$ink;
@@ -41,8 +42,10 @@
 /* ── 업로드 카드 ── */
 .uploads {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  // minmax(0, …) 이 없으면 줄바꿈 없는 긴 파일명이 트랙의 min-content 를 밀어올려
+  // 좁은 화면에서 페이지가 가로로 넘친다.
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: v.$space-5;
 }
 .uploadCard {
   background: v.$surface;
@@ -114,29 +117,38 @@
     cursor: not-allowed;
   }
 }
+/* 업로드 전/후 모두 이 높이를 유지한다 — 파일이 늘어도 카드가 자라지 않는다. */
+.dropArea {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  height: v.$upload-drop-height;
+}
 .dropzone {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 40px 18px;
-  border: 1.5px dashed #c4cbdd;
-  border-radius: 12px;
+  gap: v.$space-3;
+  padding: v.$space-4;
+  border: 1.5px dashed v.$border-strong;
+  border-radius: v.$radius;
   background: v.$surface-sunken;
   cursor: pointer;
   text-align: center;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+    border-color v.$transition-base,
+    background v.$transition-base;
 
   &:hover {
     border-color: v.$navy-800;
-    background: #f4f6fc;
+    background: v.$lavender;
   }
 }
 .dropIcon {
-  color: #9aa3b8;
+  color: v.$slate-light;
 
   svg {
     width: 34px;
@@ -144,10 +156,108 @@
   }
 }
 .dropText {
-  font-size: 14.5px;
-  font-weight: 500;
+  @include t.body-sm;
+  font-weight: v.$font-weight-medium;
   color: v.$slate;
 }
+
+/* ── 업로드된 파일 목록 (넘치면 여기서만 스크롤) ── */
+.fileList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: v.$space-1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fileRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: v.$space-2;
+  padding: v.$space-1 v.$space-2;
+  background: v.$surface-sunken;
+  border: 1px solid v.$border-default;
+  border-radius: v.$radius-xs;
+}
+.fileRowIcon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: v.$slate;
+
+  svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+.fileName {
+  @include t.caption;
+  flex: 1;
+  min-width: 0;
+  color: v.$ink;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fileSize {
+  @include t.label;
+  flex-shrink: 0;
+}
+.fileRemove {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: v.$slate;
+  cursor: pointer;
+  transition: color v.$transition-base;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+  &:hover {
+    color: v.$red;
+  }
+}
+.addZone {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: v.$space-2;
+  padding: v.$space-2;
+  border: 1.5px dashed v.$border-strong;
+  border-radius: v.$radius-sm;
+  background: v.$surface-sunken;
+  color: v.$slate;
+  cursor: pointer;
+  transition:
+    border-color v.$transition-base,
+    background v.$transition-base;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+  span {
+    @include t.caption;
+    font-weight: v.$font-weight-medium;
+  }
+  &:hover {
+    border-color: v.$navy-800;
+    background: v.$lavender;
+  }
+}
+
 .fileInput {
   position: absolute;
   width: 1px;
@@ -301,15 +411,13 @@
 @media (max-width: 1100px) {
   .uploads,
   .guideGrid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 560px) {
-  .uploads {
-    grid-template-columns: 1fr;
-  }
+  .uploads,
   .guideGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (prefers-reduced-motion: reduce) {

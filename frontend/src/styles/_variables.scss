@@ -170,6 +170,7 @@ $content-max: 1120px; // 콘텐츠 컨테이너 최대 너비
 $form-max: 440px; // 로그인/회원가입 카드 최대 너비
 $header-height: 66px; // sticky 사이트 헤더
 $sidebar-width: 300px; // 챗 사이드바
+$upload-drop-height: 152px; // 업로드 카드 드롭 영역 — 파일 수와 무관하게 고정(넘치면 내부 스크롤)
 
 // ══════════════ Breakpoints ══════════════════════════════════
 // mobile-first 로 min-width 대신 max-width 를 주로 쓴다(이미 그렇게 쓰고 있음).

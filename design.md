@@ -294,7 +294,9 @@ const isMobile = useIsMobile()
 - **폼 카드**: `max-width: v.$form-max` (440px).
 - **헤더 높이**: `v.$header-height` (66px). 페이지가 sticky 요소를 두면 이 값을 기준으로 오프셋.
 - **채팅 사이드바 폭**: `v.$sidebar-width` (300px).
+- **업로드 드롭 영역 높이**: `v.$upload-drop-height` (152px). 파일 개수와 무관하게 고정하고, 넘치면 목록 안에서만 스크롤한다(카드가 자라 페이지가 밀리지 않게).
 - 페이지 상하 padding은 대체로 `48px 0 96px` 또는 `56px 16px 72px`.
+- **가변 폭 그리드는 `minmax(0, 1fr)`** 로 쓴다. 그냥 `1fr` 이면 `white-space: nowrap` 인 자식(예: 파일명)이 트랙의 min-content 를 밀어올려 좁은 화면에서 페이지가 가로로 넘친다.
 
 ---
 
@@ -439,6 +441,8 @@ const isMobile = useIsMobile()
 - **Badge / Pill** — `historyItem`, `warnPill`, `hotTag`, `tierBadge` 등.
 - **EmptyState** — Chat, MyPage 에서 등장.
 - **SectionHeader** — `sectionTitle` + `sectionSub` 조합이 여러 곳에.
+- **FileUpload / FileRow** — 현재는 `pages/Analyze` 에만 있다(고정 높이 드롭 영역 + 내부 스크롤 파일 목록 + 파일명·용량·제거 행). 검증과 **거부 사유 문구 생성**은 `pages/Analyze/uploadFiles.ts` 에 순수 함수(`mergeFiles`·`describeRejections`)로 분리해 두었으니, 다른 화면에서 두 번째 업로드 UI 가 생기면 그 파일부터 `utils` 로 올리고 UI 를 `components/` 로 추출한다.
+  - 거부(확장자·용량·중복)는 **카드 안 인라인 문구가 아니라 토스트**로 알린다. 문구에 서류명과 파일명을 담고, 중복은 실패가 아니므로 `info`·나머지는 `error`. 클라이언트 검증 알림에 `showToast` 를 쓰는 것은 `frontend/CLAUDE.md` 가 허용한 예외다(`SignUp` 폼 검증과 같은 취급).
 
 신규 페이지에서 이들 반복 패턴이 필요하면 **여기 컴포넌트로 추출한 뒤** 사용하세요. 페이지 로컬 CSS 로 새로 만드는 것은 지양합니다.
 
