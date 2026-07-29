@@ -1,5 +1,9 @@
 import { Link, useLocation } from 'react-router-dom'
 
+import apartmentImg from '../../../assets/images/apartment.png'
+import officetelImg from '../../../assets/images/efficiency_apartment.png'
+import houseImg from '../../../assets/images/house.png'
+import villaImg from '../../../assets/images/multiplex_housing.png'
 import {
   Building,
   Check,
@@ -12,6 +16,16 @@ import {
 } from '../../components/icons'
 import type { DocumentAnalysisResult, RiskSeverity } from '../../types/document'
 import styles from './RiskReport.module.scss'
+
+/** 백엔드 규칙 분석기가 뽑아내는 property_type 원문(analyzer.py 의 정규식)과 1:1 매핑. */
+const PROPERTY_TYPE_IMAGE: Record<string, string> = {
+  아파트: apartmentImg,
+  오피스텔: officetelImg,
+  단독주택: houseImg,
+  다가구주택: houseImg,
+  연립주택: villaImg,
+  다세대주택: villaImg,
+}
 
 type ClauseTone = 'risk' | 'safe' | 'neutral'
 
@@ -76,6 +90,7 @@ export function RiskReport() {
   const result = (location.state as ReportLocationState | null)?.documentAnalysis
   const analysis = result?.analysis
   const terms = analysis?.terms
+  const propertyImage = terms?.property_type ? PROPERTY_TYPE_IMAGE[terms.property_type] : undefined
 
   const analyzedClauses: Clause[] =
     analysis?.risks.map((risk) => ({
@@ -258,7 +273,11 @@ export function RiskReport() {
         <div className={styles.visualGrid}>
           <div className={styles.visualCard}>
             <div className={`${styles.visualArt} ${styles.visualArtBuilding}`}>
-              <Building className={styles.visualArtIcon} />
+              {propertyImage ? (
+                <img src={propertyImage} alt={terms?.property_type ?? ''} className={styles.visualArtPhoto} />
+              ) : (
+                <Building className={styles.visualArtIcon} />
+              )}
             </div>
             <div className={styles.visualOverlay}>
               <p className={styles.visualOverlayTitle}>개인정보 보호 결과</p>

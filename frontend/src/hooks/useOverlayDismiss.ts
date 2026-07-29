@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 type Options = {
   /** 오버레이가 열려 있는지. false 면 아무것도 하지 않는다. */
@@ -21,6 +21,16 @@ const FOCUSABLE =
  * (Modal 은 가운데 다이얼로그, Drawer 는 좌측 슬라이드 — 다른 건 레이아웃뿐이다.)
  */
 export function useOverlayDismiss({ open, onClose, containerRef, initialFocusRef }: Options) {
+  // 호출자가 onClose 를 인라인 함수로 넘기는 경우가 대부분이라(=매 렌더 새 참조),
+  // 이를 그대로 아래 effect 의 의존성에 두면 부모가 리렌더될 때마다(예: 모달 안
+  // input 에 타이핑) 포커스 트랩 effect 가 매번 재실행되어 포커스를 다시 컨테이너로
+  // 빼앗아 간다 — 그 결과 한 글자 입력할 때마다 입력창 포커스가 풀린다. ref 로
+  // 최신 onClose 만 따라가게 하여 effect 는 open 이 실제로 바뀔 때만 재실행한다.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
+
   useEffect(() => {
     if (!open) return
 
@@ -35,7 +45,7 @@ export function useOverlayDismiss({ open, onClose, containerRef, initialFocusRef
 
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab') return
@@ -69,5 +79,5 @@ export function useOverlayDismiss({ open, onClose, containerRef, initialFocusRef
       document.body.style.overflow = prevOverflow
       restoreFocusTo?.focus?.()
     }
-  }, [containerRef, initialFocusRef, open, onClose])
+  }, [containerRef, initialFocusRef, open])
 }

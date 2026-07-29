@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { Modal } from '../../components/Modal/Modal'
+import { showToast } from '../../components/Toast/toastStore'
 import {
   ArrowRight,
   BarChart,
@@ -10,10 +12,10 @@ import {
   FileLines,
   Lock,
   LogOut,
-  Shield,
   User,
 } from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
+import { setAvatarUrl, useAvatarUrl } from '../../hooks/useAvatar'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
 import styles from './MyPage.module.scss'
 
@@ -73,26 +75,66 @@ export function MyPage() {
   // 조회 실패는 client.ts 의 공통 처리가 오류 모달로 알린다 — 여기서 또 띄우지 않는다.
   const { status, data: currentUser } = useCurrentUser(token)
 
-  const [twoFactor, setTwoFactor] = useState(true)
   const [notifyReport, setNotifyReport] = useState(true)
   const [notifyChat, setNotifyChat] = useState(false)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const avatarUrl = useAvatarUrl()
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
-  // object URL 은 컴포넌트 생명 주기 동안 해제하지 않으면 메모리에 계속 남는다.
-  useEffect(() => {
-    return () => {
-      if (avatarUrl) URL.revokeObjectURL(avatarUrl)
-    }
-  }, [avatarUrl])
+  const [phone, setPhone] = useState('010-1234-5678')
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false)
+  const [phoneDraft, setPhoneDraft] = useState(phone)
+
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setAvatarUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return URL.createObjectURL(file)
-    })
+    setAvatarUrl(URL.createObjectURL(file))
+  }
+
+  function openPhoneModal() {
+    setPhoneDraft(phone)
+    setPhoneModalOpen(true)
+  }
+
+  function handlePhoneSave(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = phoneDraft.trim()
+    if (!trimmed) {
+      showToast('휴대폰 번호를 입력해주세요.', 'error')
+      return
+    }
+    setPhone(trimmed)
+    setPhoneModalOpen(false)
+    showToast('휴대폰 번호가 변경되었습니다.', 'success')
+  }
+
+  function openPasswordModal() {
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+    setPasswordModalOpen(true)
+  }
+
+  function handlePasswordSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showToast('모든 항목을 입력해주세요.', 'error')
+      return
+    }
+    if (newPassword.length < 8) {
+      showToast('새 비밀번호는 8자 이상이어야 합니다.', 'error')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('새 비밀번호가 일치하지 않습니다.', 'error')
+      return
+    }
+    setPasswordModalOpen(false)
+    showToast('비밀번호가 변경되었습니다.', 'success')
   }
 
   function handleSignOut() {
@@ -160,16 +202,13 @@ export function MyPage() {
                 <p className={styles.infoLabel}>이메일 주소</p>
                 <p className={styles.infoValue}>chulsoo.kim@example.com</p>
               </div>
-              <button type="button" className={styles.linkBtn}>
-                수정
-              </button>
             </div>
             <div className={styles.infoRow}>
               <div>
                 <p className={styles.infoLabel}>휴대폰 번호</p>
-                <p className={styles.infoValue}>010-1234-5678</p>
+                <p className={styles.infoValue}>{phone}</p>
               </div>
-              <button type="button" className={styles.linkBtn}>
+              <button type="button" className={styles.linkBtn} onClick={openPhoneModal}>
                 수정
               </button>
             </div>
@@ -244,19 +283,9 @@ export function MyPage() {
                   <p className={styles.settingSub}>마지막 변경: 3개월 전</p>
                 </div>
               </div>
-              <button type="button" className={styles.linkBtn}>
+              <button type="button" className={styles.linkBtn} onClick={openPasswordModal}>
                 변경
               </button>
-            </div>
-            <div className={styles.settingRow}>
-              <div className={styles.settingLeft}>
-                <Shield className={styles.settingIcon} />
-                <div>
-                  <p className={styles.settingLabel}>2단계 인증 (2FA)</p>
-                  <p className={styles.settingSub}>로그인 시 추가 보안 확인</p>
-                </div>
-              </div>
-              <Toggle checked={twoFactor} onChange={setTwoFactor} label="2단계 인증" />
             </div>
           </div>
 
@@ -289,6 +318,98 @@ export function MyPage() {
       <Link to="/chat" className={styles.fab} aria-label="AI 챗봇 상담 시작하기">
         <Chat />
       </Link>
+
+      <Modal open={phoneModalOpen} onClose={() => setPhoneModalOpen(false)} title="휴대폰 번호 수정">
+        <form className={styles.modalForm} onSubmit={handlePhoneSave}>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="phone-draft">
+              휴대폰 번호
+            </label>
+            <input
+              id="phone-draft"
+              type="tel"
+              className={styles.input}
+              placeholder="010-0000-0000"
+              value={phoneDraft}
+              onChange={(e) => setPhoneDraft(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className={styles.modalActions}>
+            <button
+              type="button"
+              className={styles.btnGhost}
+              onClick={() => setPhoneModalOpen(false)}
+            >
+              취소
+            </button>
+            <button type="submit" className={styles.btnPrimary}>
+              저장
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        title="비밀번호 변경"
+      >
+        <form className={styles.modalForm} onSubmit={handlePasswordSave}>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="current-password">
+              현재 비밀번호
+            </label>
+            <input
+              id="current-password"
+              type="password"
+              className={styles.input}
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="new-password">
+              새 비밀번호
+            </label>
+            <input
+              id="new-password"
+              type="password"
+              className={styles.input}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="confirm-password">
+              새 비밀번호 확인
+            </label>
+            <input
+              id="confirm-password"
+              type="password"
+              className={styles.input}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+          <div className={styles.modalActions}>
+            <button
+              type="button"
+              className={styles.btnGhost}
+              onClick={() => setPasswordModalOpen(false)}
+            >
+              취소
+            </button>
+            <button type="submit" className={styles.btnPrimary}>
+              변경
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

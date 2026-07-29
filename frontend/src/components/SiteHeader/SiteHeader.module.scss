@@ -161,10 +161,12 @@
   position: relative;
 }
 .avatar {
+  position: relative;
   width: 38px;
   height: 38px;
   padding: 0;
   border-radius: 50%;
+  overflow: hidden;
   flex-shrink: 0;
   background: v.$avatar-gradient;
   border: 2px solid v.$white;
@@ -174,6 +176,13 @@
   &:hover {
     box-shadow: 0 0 0 1px #b9c2d6;
   }
+}
+.avatarImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .menu {
   position: absolute;
