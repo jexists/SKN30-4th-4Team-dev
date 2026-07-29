@@ -398,7 +398,7 @@ const isMobile = useIsMobile()
 |---|---|---|
 | `SiteHeader` | `components/SiteHeader/` | 상단 sticky 헤더 (로고·네비·유저 메뉴) |
 | `SiteFooter` | `components/SiteFooter/` | 하단 다크 푸터 / compact 스트립 |
-| `Modal` | `components/Modal/` | 다이얼로그 (헤더·바디·백드롭·ESC 닫힘, 초기 포커스 지정 가능) |
+| `Modal` | `components/Modal/` | 다이얼로그 (헤더·바디·백드롭·ESC 닫힘, 초기 포커스 지정 가능, `describedBy` 로 `aria-describedby` 연결 가능) |
 | `Drawer` | `components/Drawer/` | 좌측 슬라이드 오버레이. 모바일 네비·챗 대화기록 공용 (`open`·`onClose`·`title`) |
 | `Toast` (`Toaster`) | `components/Toast/` | 알림 (success/error/info) |
 | `LegalDoc` | `components/LegalDoc/` | 약관·개인정보 문서 프레임 (blocks 포함) |

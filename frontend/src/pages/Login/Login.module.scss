@@ -173,10 +173,10 @@
     background 0.15s ease,
     transform 0.12s ease;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: v.$navy-hover;
   }
-  &:active {
+  &:active:not(:disabled) {
     transform: scale(0.985);
   }
   &:disabled {
@@ -230,11 +230,15 @@
     filter 0.15s ease,
     transform 0.12s ease;
 
-  &:hover {
+  &:hover:not(:disabled) {
     filter: brightness(0.96);
   }
-  &:active {
+  &:active:not(:disabled) {
     transform: scale(0.985);
+  }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
 .socialMark {
@@ -264,6 +268,41 @@
   }
 }
 
+/* ══════════════ 비밀번호 찾기 모달 ══════════════ */
+.helpBody {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+  font-size: v.$font-size-md;
+  line-height: v.$line-height-relaxed;
+  color: v.$ink;
+
+  p {
+    margin: 0;
+  }
+}
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: v.$space-5;
+}
+// MyPage 모달의 btnPrimary 와 같은 톤(navy-800 · radius-sm · bold) 을 맞춘다.
+.btnPrimary {
+  padding: v.$space-3 v.$space-5;
+  border: none;
+  border-radius: v.$radius-sm;
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+  font-size: v.$font-size-md;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background v.$transition-base;
+
+  &:hover {
+    background: v.$navy-hover;
+  }
+}
+
 /* ══════════════ 신뢰 배지 ══════════════ */
 .badges {
   display: flex;
@@ -285,9 +324,14 @@
   height: 14px;
 }
 
-@media (max-width: 480px) {
+@media (max-width: v.$bp-sm) {
   .card {
     padding: 28px 20px;
+  }
+  // 카카오 버튼이 상단으로 올라오며 카드 안 구획이 하나 늘어, 좁은 화면에서는
+  // 구분선 여백을 살짝 줄여 폼까지 스크롤 없이 자연스럽게 이어지게 한다.
+  .divider {
+    margin: v.$space-6 0;
   }
   .badges {
     gap: 16px;
