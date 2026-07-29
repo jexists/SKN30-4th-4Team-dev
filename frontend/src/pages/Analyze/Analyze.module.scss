@@ -408,8 +408,10 @@
 }
 
 /* ── 반응형 ── */
+// 업로드 카드 3개는 페이지 전체 폭을 쓰는 단일 컬럼 레이아웃이라(더 이상 우측
+// 사이드바와 나눠 쓰지 않는다) 이 폭까지는 그대로 3열을 유지해도 카드가 좁아지지
+// 않는다 — 서류 발급 안내(guideGrid)만 문단이 길어 조금 더 일찍 2열로 접는다.
 @media (max-width: 1100px) {
-  .uploads,
   .guideGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -40,20 +40,20 @@ interface SlotConfig {
 
 const SLOTS: SlotConfig[] = [
   {
-    key: 'register',
-    title: '등기부등본',
-    hint: '부동산 등기사항전부증명서',
-    icon: <Doc />,
-    dropIcon: <Upload />,
-    inputId: 'upload-register',
-  },
-  {
     key: 'contract',
     title: '임대차계약서',
     hint: '전/월세 계약서',
     icon: <Gavel />,
     dropIcon: <FileLines />,
     inputId: 'upload-contract',
+  },
+  {
+    key: 'register',
+    title: '등기부등본',
+    hint: '부동산 등기사항전부증명서',
+    icon: <Doc />,
+    dropIcon: <Upload />,
+    inputId: 'upload-register',
   },
   {
     key: 'building',
@@ -68,13 +68,13 @@ const SLOTS: SlotConfig[] = [
 const GUIDE = [
   {
     step: '1',
-    title: '등기부등본',
-    body: '대법원 인터넷등기소(iros.go.kr)에서 발급 가능합니다. 법적 효력 확인을 위해 "발급용" PDF 파일을 준비해 주세요.',
+    title: '임대차계약서',
+    body: "공인중개사에게 요청하여 초안이나 스캔본을 받으세요. 특히 '특약사항' 부분이 명확하게 보이도록 촬영/스캔해야 합니다.",
   },
   {
     step: '2',
-    title: '임대차계약서',
-    body: "공인중개사에게 요청하여 초안이나 스캔본을 받으세요. 특히 '특약사항' 부분이 명확하게 보이도록 촬영/스캔해야 합니다.",
+    title: '등기부등본',
+    body: '대법원 인터넷등기소(iros.go.kr)에서 발급 가능합니다. 법적 효력 확인을 위해 "발급용" PDF 파일을 준비해 주세요.',
   },
   {
     step: '3',
