@@ -15,6 +15,7 @@ import {
   User,
 } from '../../components/icons'
 import { useAuth } from '../../hooks/useAuth'
+
 import { setAvatarFile, useAvatarUrl } from '../../hooks/useAvatar'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
 import styles from './MyPage.module.scss'
@@ -106,7 +107,6 @@ export function MyPage() {
   const [phoneDraft, setPhoneDraft] = useState(phone)
 
   const [passwordChanged, setPasswordChanged] = useState(readPasswordChanged)
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -115,6 +115,7 @@ export function MyPage() {
     const file = e.target.files?.[0]
     if (!file) return
     setAvatarFile(file)
+#    setAvatarUrl(URL.createObjectURL(file))
   }
 
   function openPhoneModal() {

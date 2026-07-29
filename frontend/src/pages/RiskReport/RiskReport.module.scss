@@ -491,6 +491,13 @@
   height: 64px;
   opacity: 0.5;
 }
+.visualArtPhoto {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .visualArtBuilding .visualArtIcon {
   color: #aab6d6;
 }
