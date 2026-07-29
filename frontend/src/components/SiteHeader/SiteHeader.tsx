@@ -17,8 +17,17 @@ const NAV = [
 
 export function SiteHeader() {
   const { isAuthed } = useAuth()
+  const { pathname } = useLocation()
   const hasUnreadReportAlert = useHasUnreadReportAlert()
   const [navOpen, setNavOpen] = useState(false)
+  /*
+   * 카카오 인증만 마치고 아직 가입을 끝내지 않은 사용자도 Supabase 세션은 갖는다
+   * (isAuthed=true). 그 상태에서 아바타·알림을 보여주면 가입도 하기 전에 "이미 회원"
+   * 처럼 보인다. 가입이 끝나기 전 화면에서는 세션이 있어도 회원 UI 를 감춘다.
+   * 이미 가입한 회원이 /signup 으로 와도 SignUp 이 /mypage 로 돌려보내므로 잃는 게 없다.
+   */
+  const beforeSignupDone = pathname === '/signup' || pathname === '/auth/callback'
+  const showMemberUi = isAuthed && !beforeSignupDone
   // 드로어의 "이동하면 닫기" effect 의존성이 되므로 identity 를 고정한다.
   const closeNav = useCallback(() => setNavOpen(false), [])
 
@@ -58,7 +67,7 @@ export function SiteHeader() {
         <MobileNavDrawer open={navOpen} onClose={closeNav} />
 
         <div className={styles.headerRight}>
-          {isAuthed && (
+          {showMemberUi && (
             <>
               {/* <button className={styles.iconBtn} aria-label="최근 기록">
                 <Clock />
@@ -80,7 +89,7 @@ export function SiteHeader() {
             상담 시작하기
           </Link> */}
 
-          {isAuthed ? (
+          {showMemberUi ? (
             <UserMenu />
           ) : (
             <Link to="/login" className={styles.loginBtn}>
@@ -201,12 +210,7 @@ function UserMenu() {
             마이페이지
           </Link>
 
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.menuItem}
-            onClick={handleSignOut}
-          >
+          <button type="button" role="menuitem" className={styles.menuItem} onClick={handleSignOut}>
             로그아웃
           </button>
         </div>

@@ -2,57 +2,10 @@
 
 import uuid
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import select, text
 
-from app.api.deps import require_user
-from app.db.base import Base
-from app.db.session import get_app_db
-from app.main import app
 from app.models.auth import AppUser, LoginHistory, Profile, UserAgreement
 from app.repositories.auth import AuthRepository
-
-
-@pytest.fixture()
-def kakao_client():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    Base.metadata.create_all(engine)
-
-    def override_get_app_db():
-        with TestingSessionLocal() as db:
-            yield db
-
-    user_id = uuid.uuid4()
-    claims = {
-        "sub": str(user_id),
-        "email": None,
-        "app_metadata": {"provider": "kakao", "providers": ["kakao"]},
-        "user_metadata": {
-            "nickname": "카카오닉",
-            "avatar_url": "https://example.com/kakao.png",
-        },
-    }
-    with engine.begin() as connection:
-        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS auth")
-        connection.exec_driver_sql("CREATE TABLE auth.users (id TEXT PRIMARY KEY)")
-        connection.execute(
-            text("INSERT INTO auth.users (id) VALUES (:user_id)"),
-            {"user_id": str(user_id)},
-        )
-
-    app.dependency_overrides[get_app_db] = override_get_app_db
-    app.dependency_overrides[require_user] = lambda: claims
-    with TestClient(app) as client:
-        yield client, TestingSessionLocal, claims
-    app.dependency_overrides.clear()
 
 
 def test_registration_says_signup_required_without_app_user(kakao_client):

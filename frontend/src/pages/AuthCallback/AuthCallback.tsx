@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { abandonKakaoSignup, kakaoLogin } from '../../api/kakaoAuth'
-import { consumeKakaoReturnTo, setKakaoReturnTo } from '../../auth/kakaoOAuth'
+import { consumeKakaoIntent, consumeKakaoReturnTo, setKakaoReturnTo } from '../../auth/kakaoOAuth'
 import { Modal } from '../../components/Modal/Modal'
 import { showToast } from '../../components/Toast/toastStore'
 import { supabase } from '../../config/supabase'
@@ -66,8 +66,15 @@ export function AuthCallback() {
         if (!active) return
 
         const returnTo = consumeKakaoReturnTo()
+        const intent = consumeKakaoIntent()
         if (result.status === 'signup_required') {
           setKakaoReturnTo(returnTo)
+          // 회원가입 화면에서 출발했으면 이미 가입 의사를 밝힌 것이다 — 되묻지 않고
+          // 바로 가입 폼(닉네임·약관)으로 보낸다.
+          if (intent === 'signup') {
+            void navigate('/signup?mode=kakao', { replace: true })
+            return
+          }
           setSignupPromptOpen(true)
           return
         }
@@ -124,9 +131,7 @@ export function AuthCallback() {
         title="회원가입 안내"
         initialFocusRef={signupButtonRef}
       >
-        <p className={styles.promptMessage}>
-          회원가입이 되어 있지 않습니다. 회원가입하시겠습니까?
-        </p>
+        <p className={styles.promptMessage}>회원가입이 되어 있지 않습니다. 회원가입하시겠습니까?</p>
         <div className={styles.promptActions}>
           <button
             type="button"

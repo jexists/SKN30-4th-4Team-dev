@@ -180,3 +180,8 @@ CREATE TABLE IF NOT EXISTS notification (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_notification_user ON notification (user_id, is_read);
+-- 가입 축하 알림은 회원당 1건. 이메일 가입(트리거)과 카카오 가입(API)이 서로 다른 경로로
+-- 만들기 때문에 애플리케이션 검사만으로는 동시 실행을 막지 못한다 — 최후 방어선을 DB 에 둔다.
+-- 조건절 문구는 app/models/notification.py 의 WELCOME_TITLE 과 반드시 같아야 한다.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_welcome
+    ON notification (user_id) WHERE title = '회원가입을 축하합니다.';

@@ -52,7 +52,7 @@ describe('Login 아이디 저장 — 로그인 성공 경로', () => {
   })
 
   it('체크된 상태로 로그인에 성공하면 입력한 이메일을 저장한다', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderLogin()
 
     // 저장된 이메일이 없어 체크박스는 기본 해제 상태다 — 직접 체크한다.
@@ -68,7 +68,7 @@ describe('Login 아이디 저장 — 로그인 성공 경로', () => {
 
   it('체크 해제 상태로 로그인에 성공하면 기존 저장값을 지운다', async () => {
     savedEmail.set('old@homeshield.co.kr')
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderLogin()
 
     // 저장된 이메일이 있어 체크박스는 기본 체크 상태다 — 해제한다.
@@ -80,7 +80,7 @@ describe('Login 아이디 저장 — 로그인 성공 경로', () => {
 
   it('저장된 이메일이 있는 상태에서 다른 이메일로 바꿔 로그인하면 저장값이 갱신된다', async () => {
     savedEmail.set('old@homeshield.co.kr')
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderLogin()
 
     // 체크박스는 이미 체크돼 있다 — 그대로 둔 채 이메일만 바꾼다.

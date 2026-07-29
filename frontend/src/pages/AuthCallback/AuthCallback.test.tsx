@@ -96,6 +96,34 @@ describe('AuthCallback', () => {
     expect(abandonKakaoSignup).not.toHaveBeenCalled()
   })
 
+  it('회원가입 화면에서 시작했으면 되묻지 않고 바로 가입 폼으로 보낸다', async () => {
+    kakaoLogin.mockResolvedValue({
+      status: 'signup_required',
+      user: { id: 'u1', email: null, nickname: '카카오닉', profile_image: null },
+    })
+    // SignUp 이 startKakaoOAuth(..., 'signup') 으로 심어 두는 값.
+    sessionStorage.setItem('homeshield.kakao.intent', 'signup')
+
+    renderCallback()
+
+    expect(await screen.findByText('카카오 회원가입')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '회원가입 안내' })).not.toBeInTheDocument()
+    expect(abandonKakaoSignup).not.toHaveBeenCalled()
+  })
+
+  it('가입 의도는 한 번만 쓰여 다음 로그인 시도에 새어 나가지 않는다', async () => {
+    kakaoLogin.mockResolvedValue({
+      status: 'signup_required',
+      user: { id: 'u1', email: null, nickname: '카카오닉', profile_image: null },
+    })
+    sessionStorage.setItem('homeshield.kakao.intent', 'signup')
+
+    renderCallback()
+    await screen.findByText('카카오 회원가입')
+
+    expect(sessionStorage.getItem('homeshield.kakao.intent')).toBeNull()
+  })
+
   it('회원가입 확인을 취소하면 임시 계정을 삭제하고 비회원으로 돌아간다', async () => {
     const user = userEvent.setup()
     kakaoLogin.mockResolvedValue({

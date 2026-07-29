@@ -3,10 +3,11 @@ from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api.deps import require_user
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_app_db, get_db
@@ -57,6 +58,51 @@ def client(db_sessionmaker):
     app.dependency_overrides[get_app_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def kakao_client():
+    """카카오 클레임으로 인증된 TestClient + 격리 DB.
+
+    가입 완료 API 를 태우는 테스트가 여러 파일에 걸쳐 있어(test_kakao_auth,
+    test_welcome_notification) 여기 둔다. auth.users 를 ATTACH 로 흉내내는 이유는
+    가입 취소(pending 삭제)가 그 테이블을 지우기 때문이다.
+    """
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    def override_get_app_db():
+        with TestingSessionLocal() as db:
+            yield db
+
+    user_id = uuid.uuid4()
+    claims = {
+        "sub": str(user_id),
+        "email": None,
+        "app_metadata": {"provider": "kakao", "providers": ["kakao"]},
+        "user_metadata": {
+            "nickname": "카카오닉",
+            "avatar_url": "https://example.com/kakao.png",
+        },
+    }
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS auth")
+        connection.exec_driver_sql("CREATE TABLE auth.users (id TEXT PRIMARY KEY)")
+        connection.execute(
+            text("INSERT INTO auth.users (id) VALUES (:user_id)"),
+            {"user_id": str(user_id)},
+        )
+
+    app.dependency_overrides[get_app_db] = override_get_app_db
+    app.dependency_overrides[require_user] = lambda: claims
+    with TestClient(app) as client:
+        yield client, TestingSessionLocal, claims
     app.dependency_overrides.clear()
 
 

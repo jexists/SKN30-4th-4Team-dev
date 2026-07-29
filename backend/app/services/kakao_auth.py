@@ -16,6 +16,7 @@ from app.schemas.kakao_auth import (
 )
 from app.services.auth import claims_user_id as _user_id
 from app.services.auth import reject_if_withdrawn
+from app.services.notification import create_welcome_notification
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +261,10 @@ def complete_kakao_signup(
             "회원 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
             500,
         ) from exc
+
+    # 가입 커밋이 끝난 뒤에 부른다 — 알림은 곁가지라 실패해도 가입을 되돌리지 않는다
+    # (create_welcome_notification 이 예외를 삼키고 자기 INSERT 만 커밋한다).
+    create_welcome_notification(db, user_id)
 
     return KakaoAuthResponse(
         status="authenticated",

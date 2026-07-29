@@ -62,12 +62,170 @@
   color: v.$slate;
 }
 
+/* ══════════════ 카카오 인증 완료 단계 ══════════════ */
+/* 처음 화면과 확실히 달라 보여야 "되돌아왔다" 는 인상을 주지 않는다. */
+.kakaoStep {
+  margin-bottom: v.$space-8;
+  text-align: center;
+}
+/* 브랜드 방패 대신 카카오 노랑 — 어떤 방식으로 가입 중인지 한눈에 보이게 한다. */
+.kakaoBadge {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto v.$space-4;
+  border-radius: 18px;
+  background: v.$brand-kakao;
+}
+.kakaoBadgeMark {
+  width: 32px;
+  height: 32px;
+  color: v.$brand-kakao-text;
+}
+/* 인증 완료 표시. 굵은 초록 문장으로 두면 네이비 제목과 강조가 맞붙어 시선 둘 곳이
+   없어지므로, 배경을 깐 낮은 대비의 상태 칩으로 낮춰 제목에만 초점이 가게 한다. */
+.kakaoDone {
+  display: inline-flex;
+  align-items: center;
+  gap: v.$space-1;
+  margin: 0 0 v.$space-3;
+  padding: v.$space-1 v.$space-3;
+  border-radius: v.$radius-pill;
+  background: v.$green-soft;
+  font-size: v.$font-size-xs;
+  font-weight: v.$font-weight-medium;
+  color: v.$green;
+}
+.kakaoDoneMark {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ══════════════ 가입 방식 선택 ══════════════ */
+.methods {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+}
+.method {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: v.$space-2;
+  padding: v.$space-3 v.$space-4;
+  border: none;
+  border-radius: v.$radius-sm;
+  font: inherit;
+  font-size: v.$font-size-base;
+  font-weight: v.$font-weight-bold;
+  cursor: pointer;
+  transition:
+    filter v.$transition-base,
+    transform v.$transition-fast;
+
+  &:hover:not(:disabled) {
+    filter: brightness(0.96);
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+.methodMark {
+  width: 20px;
+  height: 20px;
+}
+.kakao {
+  background: v.$brand-kakao;
+  color: v.$brand-kakao-text;
+
+  // 카카오 가입이 진행 중일 땐 "이미 고른 방식" 이라 눌리지 않는다. 흐려지면 고른 게
+  // 아니라 막힌 것처럼 보이므로, 다른 disabled 와 달리 색을 그대로 두고 테두리로 표시한다.
+  &:disabled[aria-pressed='true'] {
+    box-shadow: inset 0 0 0 2px v.$navy-800;
+  }
+  &:disabled:not([aria-pressed='true']) {
+    opacity: 0.6;
+  }
+}
+/* 이메일을 고른 동안 카카오를 낮춘다. 회색조 + 투명도로 "지금 고른 쪽이 아니다" 를
+   보여주되, 마우스를 올리면 원래 색으로 돌아와 여전히 누를 수 있음을 알려준다. */
+.dimmed {
+  filter: grayscale(0.8);
+  opacity: 0.5;
+
+  &:hover:not(:disabled) {
+    filter: grayscale(0);
+    opacity: 1;
+  }
+}
+
+.emailMethod {
+  border: 1px solid v.$border-strong;
+  background: v.$surface;
+  color: v.$ink;
+
+  // 선택 상태는 테두리 색을 그대로 배경으로 채운다 — 옅은 배경 + 테두리 조합보다
+  // 훨씬 확실하게 "이걸 골랐다" 가 읽힌다(체크 아이콘은 마크업에서 붙인다).
+  &[aria-pressed='true'] {
+    border-color: v.$navy-800;
+    background: v.$navy-800;
+    color: v.$text-on-dark;
+  }
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+.methodCheck {
+  width: 18px;
+  height: 18px;
+  // 색은 버튼에서 물려받는다 — 선택 시 네이비 배경 위 흰색이 된다.
+}
+
+/* 방식 선택 ↔ 입력 ↔ 약관을 나누는 실선. "또는" 문구는 쓰지 않는다. */
+.rule {
+  height: 1px;
+  margin: v.$space-6 0;
+  background: v.$border-card;
+}
+
+.first_rule {
+  // height: 1px;
+  margin: v.$space-6 0;
+  // background: v.$border-card;
+}
 /* ══════════════ 폼 ══════════════ */
 .form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
 }
+
+/* 펼쳐지는 입력 영역. 닫힐 땐 언마운트되므로 나타날 때만 애니메이션한다. */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+  animation: expand v.$transition-slow;
+}
+
+@keyframes expand {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fields {
+    animation: none;
+  }
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -131,18 +289,17 @@
 .agreements {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 4px;
-  padding: 16px;
+  gap: v.$space-3;
+  padding: v.$space-4;
   border-radius: v.$radius-sm;
   background: v.$page-bg;
 }
 .agree {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  font-size: 13.5px;
-  line-height: 1.5;
+  gap: v.$space-2;
+  font-size: v.$font-size-sm;
+  line-height: v.$line-height-normal;
   color: v.$slate;
   cursor: pointer;
 
@@ -154,29 +311,47 @@
     accent-color: v.$navy-800;
     cursor: pointer;
   }
-  a {
-    color: v.$navy-800;
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
+}
+/* 전체 동의 — 개별 항목보다 한 단계 강조한다. */
+.agreeAll {
+  font-size: v.$font-size-base;
+  font-weight: v.$font-weight-bold;
+  color: v.$ink;
+}
+.agreeDivider {
+  height: 1px;
+  background: v.$border-strong;
+}
+/* 체크박스와 "보기" 를 양끝으로 — 터치 영역이 겹치지 않게 형제로 배치한다. */
+.agreeRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: v.$space-3;
 }
 
 /* 약관·방침 모달을 여는 링크형 버튼 — 텍스트 링크처럼 보이게 리셋. */
 .legalLink {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  // 모바일에서 누르기 쉽도록 세로 여백을 주되, 글자는 약관 줄과 같은 높이에서 시작한다.
+  padding: 0 0 v.$space-2 v.$space-2;
   border: none;
   background: none;
   font: inherit;
-  color: v.$navy-800;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  font-size: v.$font-size-sm;
+  color: v.$slate;
   cursor: pointer;
 
   &:hover {
-    color: v.$ink;
+    color: v.$navy-800;
   }
+}
+.legalMark {
+  width: 14px;
+  height: 14px;
 }
 .req {
   color: v.$navy-800;
@@ -188,7 +363,7 @@
 }
 
 .submit {
-  margin-top: 4px;
+  margin-top: v.$space-4;
   padding: 14px;
   border: none;
   border-radius: v.$radius-sm;
@@ -214,77 +389,39 @@
   }
 }
 
-/* ══════════════ 구분선 · 소셜 ══════════════ */
-.divider {
-  position: relative;
-  margin: 32px 0;
+/* 카카오 진행 중 이메일 가입으로 갈아타는 자리. 주 동작(가입 완료)보다 확실히
+   약해 보여야 실수로 눌러 임시 계정이 지워지지 않는다. */
+.switchBlock {
   text-align: center;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    border-top: 1px solid v.$border-card;
-  }
-  span {
-    position: relative;
-    padding: 0 14px;
-    background: v.$surface;
-    font-size: 12px;
-    letter-spacing: 0.05em;
-    color: v.$slate-light;
-  }
 }
-
-.socials {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.social {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 13px 16px;
+.switchLink {
+  padding: v.$space-1 v.$space-2;
   border: none;
-  border-radius: v.$radius-sm;
+  background: none;
   font: inherit;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  color: v.$navy-800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
-  transition:
-    filter 0.15s ease,
-    transform 0.12s ease;
 
-  &:hover {
-    filter: brightness(0.96);
+  &:hover:not(:disabled) {
+    color: v.$ink;
   }
-  &:active {
-    transform: scale(0.985);
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
-.socialMark {
-  width: 20px;
-  height: 20px;
-}
-.kakao {
-  background: v.$brand-kakao;
-  color: v.$brand-kakao-text;
-}
-.naver {
-  background: v.$brand-naver;
-  color: v.$text-on-dark;
-}
-.naverMark {
-  font-size: 18px;
-  font-weight: 800;
+.switchNote {
+  margin: v.$space-1 0 0;
+  font-size: v.$font-size-xs;
+  color: v.$slate-light;
 }
 
 .signin {
-  margin: 32px 0 0;
+  margin: v.$space-8 0 0;
   font-size: 15px;
   text-align: center;
   color: v.$slate;

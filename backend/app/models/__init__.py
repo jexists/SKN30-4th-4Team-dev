@@ -6,3 +6,4 @@
 
 from app.models.auth import AppUser, LoginHistory, Profile, UserAgreement  # noqa: F401
 from app.models.chat import ChatMessage, ChatRoom  # noqa: F401
+from app.models.notification import Notification  # noqa: F401

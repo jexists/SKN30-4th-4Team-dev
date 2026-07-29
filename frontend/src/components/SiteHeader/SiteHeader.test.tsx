@@ -81,6 +81,38 @@ describe('SiteHeader', () => {
     expect(screen.getByLabelText('알림')).toBeInTheDocument()
   })
 
+  // 카카오 인증만 끝난 사용자도 Supabase 세션은 갖는다(isAuthed=true). 그 상태로
+  // 아바타를 보여주면 가입도 하기 전에 "이미 회원" 처럼 보인다.
+  it.each(['/signup?mode=kakao', '/auth/callback?code=x'])(
+    '가입이 끝나기 전 화면(%s)에서는 세션이 있어도 회원 UI 를 감춘다',
+    (path) => {
+      signedIn()
+
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <SiteHeader />
+        </MemoryRouter>,
+      )
+
+      expect(screen.queryByLabelText('내 계정')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('알림')).not.toBeInTheDocument()
+      expect(screen.getByRole('link', { name: '로그인' })).toBeInTheDocument()
+    },
+  )
+
+  it('가입을 마친 뒤 다른 화면에서는 다시 회원 UI 를 보여준다', () => {
+    signedIn()
+
+    render(
+      <MemoryRouter initialEntries={['/mypage']}>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByLabelText('내 계정')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '로그인' })).not.toBeInTheDocument()
+  })
+
   it('아바타를 누르면 마이페이지·로그아웃 메뉴가 열린다', async () => {
     signedIn()
     const user = userEvent.setup()
