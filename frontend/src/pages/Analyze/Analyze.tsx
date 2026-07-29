@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { analyzeContract } from '../../api/documents'
+import { analyzeDocuments } from '../../api/documents'
 import { showToast } from '../../components/Toast/toastStore'
 import {
   AddCircle,
@@ -97,8 +97,12 @@ export function Analyze() {
 
   function addFiles(slot: SlotConfig, incoming: FileList | null) {
     if (!incoming || incoming.length === 0) return
-    const { files: next, rejected } = mergeFiles(files[slot.key], Array.from(incoming))
-    setFiles((prev) => ({ ...prev, [slot.key]: next }))
+    // 백엔드 종합 분석 계약은 서류 종류별 1개, 총 3개다. 새 선택은 기존 파일을 교체한다.
+    const { files: accepted, rejected } = mergeFiles([], Array.from(incoming))
+    setFiles((prev) => ({ ...prev, [slot.key]: accepted.slice(0, 1) }))
+    if (accepted.length > 1) {
+      showToast(`${slot.title}은 파일 1개만 선택할 수 있습니다`, 'info')
+    }
     // 거부는 카드 안 문구가 아니라 토스트로 알린다 — 어떤 서류의 어떤 파일인지까지 담긴다.
     for (const notice of describeRejections(rejected, slot.title)) {
       showToast(notice.message, notice.type)
@@ -110,12 +114,13 @@ export function Analyze() {
   }
 
   async function handleDiagnose() {
-    // 백엔드는 아직 파일 하나만 받는다 — 임대차계약서 첫 장으로 분석한다.
-    const contract = files.contract[0]
-    if (!contract || isAnalyzing) return
+    const documents = SLOTS.map((slot) => files[slot.key][0]).filter(
+      (file): file is File => file !== undefined,
+    )
+    if (documents.length !== SLOTS.length || isAnalyzing) return
     setIsAnalyzing(true)
     try {
-      const result = await analyzeContract(contract)
+      const result = await analyzeDocuments(documents)
       navigate('/risk-report', { state: { documentAnalysis: result } })
     } finally {
       setIsAnalyzing(false)
@@ -276,7 +281,7 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemo
             </ul>
             <label htmlFor={inputId} className={styles.addZone} {...dropProps}>
               <AddCircle />
-              <span>파일 추가</span>
+              <span>파일 변경</span>
             </label>
           </>
         )}
@@ -285,7 +290,6 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemo
       <input
         id={inputId}
         type="file"
-        multiple
         accept={ACCEPT_ATTR}
         className={styles.fileInput}
         onChange={(event) => {

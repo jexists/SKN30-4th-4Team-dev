@@ -69,6 +69,18 @@ class ContractLlmAnalysis(BaseModel):
     missing_information: list[str] = Field(default_factory=list)
 
 
+class DocumentOcrOut(BaseModel):
+    filename: str
+    sanitized_text: str
+    redaction_counts: dict[str, int]
+    redaction_scope: list[str]
+    mask_count: int
+    coarse_mask_count: int
+    review_required: bool
+    masked_pdf_media_type: str
+    masked_pdf_base64: str
+
+
 class DocumentAnalysisOut(BaseModel):
     sanitized_text: str
     redaction_counts: dict[str, int]
@@ -78,4 +90,5 @@ class DocumentAnalysisOut(BaseModel):
     review_required: bool
     masked_pdf_media_type: str
     masked_pdf_base64: str
+    documents: list[DocumentOcrOut] = Field(default_factory=list)
     analysis: ContractLlmAnalysis

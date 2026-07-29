@@ -61,16 +61,20 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 | `OPENAI_API_KEY` | LLM 호출용 |
 | `OCR_WORKER_URL` | 로컬 OCR worker 주소. 로컬 직접 실행 시 `http://127.0.0.1:8100` |
 | `OCR_WORKER_PROCESS_TIMEOUT_SECONDS` | 계약서 OCR 요청 제한 시간(초) |
+| `CONTRACT_MAX_FILES` | 한 번에 종합 분석할 수 있는 서류 수(기본 3개) |
 | `CONTRACT_MAX_FILE_MB` | 업로드 가능한 계약서 최대 크기 |
 | `CONTRACT_ANALYSIS_MODEL` | 개인정보 치환 텍스트를 분석할 LLM 모델 |
 
 ## 계약서 분석 API
 
 `POST /api/v1/documents/analyze`는 인증이 필요한 multipart 업로드 API입니다.
-백엔드는 계약서를 OCR worker에 전달하고, worker가 만든 개인정보 치환 텍스트만
-LLM에 보냅니다. 원본 OCR 텍스트와 마스킹 PDF는 LLM 입력에 포함되지 않습니다.
-현재 응답의 마스킹 PDF는 PoC용 base64이며 운영 저장 방식은 private Storage로
-교체해야 합니다.
+같은 `file` 필드를 반복하면 최대 `CONTRACT_MAX_FILES`개의 서류를 전달할 수 있습니다.
+백엔드는 모든 서류를 OCR worker로 순차 처리하고, 문서별로 구분한 개인정보 치환
+텍스트만 한 번의 종합 분석 입력으로 사용합니다. 원본 OCR 텍스트와 마스킹 PDF는
+LLM 입력에 포함되지 않습니다. 응답의 `documents`에는 문서별 마스킹 결과가 있으며,
+기존 최상위 마스킹 PDF 필드는 단일 파일 클라이언트 호환을 위해 첫 번째 결과를
+담습니다. 현재 base64 응답은 PoC용이며 운영 저장 방식은 private Storage로 교체해야
+합니다.
 
 걸리기 쉬운 것 다섯:
 

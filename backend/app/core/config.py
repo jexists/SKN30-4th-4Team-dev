@@ -65,9 +65,11 @@ class Settings(BaseSettings):
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
     OCR_WORKER_PROCESS_TIMEOUT_SECONDS: float = 1200.0
+    CONTRACT_MAX_FILES: int = 3
     CONTRACT_MAX_FILE_MB: int = 20
     CONTRACT_ANALYSIS_MODEL: str = "gpt-4.1-mini"
     CONTRACT_ANALYSIS_MAX_CHARS: int = 50_000
+    CONTRACT_ANALYSIS_MAX_TOTAL_CHARS: int = 150_000
     # 로컬 시연에서 API 키가 없으면 기본 계약 조건과 위험 키워드를 규칙으로 분석한다.
     CONTRACT_ANALYSIS_LOCAL_FALLBACK: bool = True
     OPENAI_API_KEY: str = ""

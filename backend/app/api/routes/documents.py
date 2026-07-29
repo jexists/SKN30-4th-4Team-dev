@@ -7,7 +7,12 @@ from app.api.deps import RequireUser
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.document import DocumentAnalysisOut, OcrWorkerHealth
+from app.schemas.document import (
+    DocumentAnalysisOut,
+    DocumentOcrOut,
+    OcrAnalysisResult,
+    OcrWorkerHealth,
+)
 from app.services.document_processing.analyzer import ContractAnalyzer
 from app.services.document_processing.client import OcrWorkerClient
 
@@ -22,50 +27,90 @@ def ocr_health() -> ApiResponse[OcrWorkerHealth]:
 
 @router.post("/analyze", response_model=ApiResponse[DocumentAnalysisOut])
 def analyze_document(
-    file: Annotated[UploadFile, File()], _user: RequireUser
+    file: Annotated[list[UploadFile], File()], _user: RequireUser
 ) -> ApiResponse[DocumentAnalysisOut]:
-    """계약서를 로컬 OCR로 익명화한 뒤 안전 텍스트만 LLM에 전달한다."""
-    suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in {".pdf", ".png", ".jpg", ".jpeg"}:
+    """모든 제출 서류를 OCR로 익명화한 뒤 안전 텍스트를 종합 분석한다."""
+    if len(file) > settings.CONTRACT_MAX_FILES:
         raise AppError(
-            "지원하지 않는 파일",
-            "PDF, PNG, JPG 계약서만 업로드할 수 있습니다.",
-            415,
-        )
-    max_bytes = settings.CONTRACT_MAX_FILE_MB * 1024 * 1024
-    content = file.file.read(max_bytes + 1)
-    if not content:
-        raise AppError("빈 파일", "내용이 없는 계약서는 분석할 수 없습니다.", 422)
-    if len(content) > max_bytes:
-        raise AppError(
-            "파일 크기 초과",
-            f"계약서는 최대 {settings.CONTRACT_MAX_FILE_MB}MB까지 업로드할 수 있습니다.",
+            "파일 개수 초과",
+            f"서류는 최대 {settings.CONTRACT_MAX_FILES}개까지 업로드할 수 있습니다.",
             413,
         )
 
-    ocr_result = OcrWorkerClient().process_for_analysis(
-        file.filename or f"contract{suffix}",
-        content,
-    )
-    if not ocr_result.text_safe_for_analysis:
-        raise AppError(
-            "개인정보 검토 필요",
-            "계약서에서 개인정보가 남아 있어 자동 분석을 중단했습니다.",
-            422,
-        )
+    max_bytes = settings.CONTRACT_MAX_FILE_MB * 1024 * 1024
+    worker = OcrWorkerClient()
+    processed: list[tuple[str, OcrAnalysisResult]] = []
+    for index, upload in enumerate(file, start=1):
+        suffix = Path(upload.filename or "").suffix.lower()
+        if suffix not in {".pdf", ".png", ".jpg", ".jpeg"}:
+            raise AppError(
+                "지원하지 않는 파일",
+                "모든 서류는 PDF, PNG, JPG 형식이어야 합니다.",
+                415,
+            )
 
-    analysis = ContractAnalyzer().analyze(ocr_result.sanitized_text)
+        content = upload.file.read(max_bytes + 1)
+        if not content:
+            raise AppError("빈 파일", f"{index}번째 서류에 내용이 없습니다.", 422)
+        if len(content) > max_bytes:
+            raise AppError(
+                "파일 크기 초과",
+                f"각 서류는 최대 {settings.CONTRACT_MAX_FILE_MB}MB까지 업로드할 수 있습니다.",
+                413,
+            )
+
+        filename = Path(upload.filename or f"document-{index}{suffix}").name
+        result = worker.process_for_analysis(filename, content)
+        if not result.text_safe_for_analysis:
+            raise AppError(
+                "개인정보 검토 필요",
+                f"{index}번째 서류에서 개인정보가 남아 있어 종합 분석을 중단했습니다.",
+                422,
+            )
+        if len(result.sanitized_text) > settings.CONTRACT_ANALYSIS_MAX_CHARS:
+            raise AppError(
+                "서류 분석 실패",
+                f"{index}번째 서류의 인식 내용이 분석 가능한 길이를 초과했습니다.",
+                422,
+            )
+        processed.append((filename, result))
+
+    combined_text = (
+        processed[0][1].sanitized_text
+        if len(processed) == 1
+        else "\n\n".join(
+            f"[문서 {index}]\n{result.sanitized_text.strip()}"
+            for index, (_, result) in enumerate(processed, start=1)
+        )
+    )
+    analysis = ContractAnalyzer().analyze(combined_text)
+    first_result = processed[0][1]
+    redaction_counts: dict[str, int] = {}
+    for _, result in processed:
+        for pii_type, count in result.redaction_counts.items():
+            redaction_counts[pii_type] = redaction_counts.get(pii_type, 0) + count
+
     return success_response(
         DocumentAnalysisOut(
-            sanitized_text=ocr_result.sanitized_text,
-            redaction_counts=ocr_result.redaction_counts,
-            redaction_scope=ocr_result.redaction_scope,
-            mask_count=ocr_result.mask_count,
-            coarse_mask_count=ocr_result.coarse_mask_count,
-            review_required=ocr_result.review_required,
-            masked_pdf_media_type=ocr_result.masked_pdf_media_type,
-            masked_pdf_base64=ocr_result.masked_pdf_base64,
+            sanitized_text=combined_text,
+            redaction_counts=redaction_counts,
+            redaction_scope=sorted(
+                {pii_type for _, result in processed for pii_type in result.redaction_scope}
+            ),
+            mask_count=sum(result.mask_count for _, result in processed),
+            coarse_mask_count=sum(result.coarse_mask_count for _, result in processed),
+            review_required=any(result.review_required for _, result in processed),
+            # 기존 단일 파일 클라이언트 호환 필드. 전체 결과는 documents에 제공한다.
+            masked_pdf_media_type=first_result.masked_pdf_media_type,
+            masked_pdf_base64=first_result.masked_pdf_base64,
+            documents=[
+                DocumentOcrOut(
+                    filename=filename,
+                    **result.model_dump(exclude={"text_safe_for_analysis"}),
+                )
+                for filename, result in processed
+            ],
             analysis=analysis,
         ),
-        message="계약서 분석을 완료했습니다.",
+        message=f"서류 {len(processed)}개의 종합 분석을 완료했습니다.",
     )

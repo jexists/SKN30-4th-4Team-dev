@@ -105,3 +105,72 @@ def test_analyze_document_stops_before_llm_when_text_is_unsafe(client, monkeypat
 
     assert response.status_code == 422
     assert called is False
+
+
+def test_analyze_document_processes_all_files_and_combines_results(client, monkeypatch):
+    ocr_calls: list[tuple[str, bytes]] = []
+
+    def fake_process(self, filename, content):
+        ocr_calls.append((filename, content))
+        index = len(ocr_calls)
+        return OcrAnalysisResult(
+            sanitized_text=f"서류 {index}의 안전한 내용",
+            redaction_counts={"name": index},
+            redaction_scope=["name", "address"] if index == 2 else ["name"],
+            text_safe_for_analysis=True,
+            mask_count=index,
+            coarse_mask_count=1,
+            review_required=index == 2,
+            masked_pdf_media_type="application/pdf",
+            masked_pdf_base64=base64.b64encode(f"%PDF-{index}".encode()).decode(),
+        )
+
+    monkeypatch.setattr(OcrWorkerClient, "process_for_analysis", fake_process)
+    analyzed: list[str] = []
+
+    def fake_analyze(self, text):
+        analyzed.append(text)
+        return ContractLlmAnalysis(
+            summary="두 서류를 종합 분석했습니다.",
+            terms=ContractTerms(),
+        )
+
+    monkeypatch.setattr(ContractAnalyzer, "analyze", fake_analyze)
+    app.dependency_overrides[require_user] = lambda: {"sub": "user-id"}
+
+    response = client.post(
+        "/api/v1/documents/analyze",
+        files=[
+            ("file", ("register.pdf", b"register", "application/pdf")),
+            ("file", ("contract.jpg", b"contract", "image/jpeg")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert ocr_calls == [("register.pdf", b"register"), ("contract.jpg", b"contract")]
+    assert analyzed == ["[문서 1]\n서류 1의 안전한 내용\n\n[문서 2]\n서류 2의 안전한 내용"]
+    data = response.json()["data"]
+    assert data["redaction_counts"] == {"name": 3}
+    assert data["redaction_scope"] == ["address", "name"]
+    assert data["mask_count"] == 3
+    assert data["coarse_mask_count"] == 2
+    assert data["review_required"] is True
+    assert [item["filename"] for item in data["documents"]] == [
+        "register.pdf",
+        "contract.jpg",
+    ]
+
+
+def test_analyze_document_rejects_more_than_three_files(client):
+    app.dependency_overrides[require_user] = lambda: {"sub": "user-id"}
+
+    response = client.post(
+        "/api/v1/documents/analyze",
+        files=[
+            ("file", (f"document-{index}.pdf", b"pdf", "application/pdf"))
+            for index in range(4)
+        ],
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["title"] == "파일 개수 초과"
