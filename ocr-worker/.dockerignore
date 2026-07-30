@@ -7,3 +7,8 @@ __pycache__/
 tests/
 samples/
 .venv-mlx/
+
+# PaddleOCR-VL 스냅샷(1.8GB)은 이미지에 굽지 않는다 — compose 가 /models 로 마운트한다.
+# 제외하지 않으면 빌드할 때마다 1.8GB 가 빌드 컨텍스트로 전송된다.
+models/
+samples/
