@@ -50,6 +50,11 @@ fast_llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0, timeout=20, max_retri
 
 MAX_RETRIEVAL_ATTEMPTS = 1  # 쿼리 재작성 최대 1회
 
+# 첨부 계약서 본문의 프롬프트 반영 상한. 여러 장짜리 계약서는 수만 자가 나오는데 전부 넣으면
+# 컨텍스트를 계약서가 다 먹어 법령 근거가 밀린다. 앞부분(당사자·보증금·기간·특약)에 핵심이
+# 몰려 있어 앞에서 자른다.
+MAX_DOCUMENT_CHARS = 8000
+
 # 결정론 grade 임계값 (KURE-v1: 관련 조항 보통 0.5~0.7)
 GRADE_STRONG = 0.45  # top-1 이 이 이상이면 충분 → 바로 생성
 GRADE_WEAK = 0.35  # top-1 이 이 미만이면 부족 → (남은 횟수 내) 재작성
@@ -89,6 +94,8 @@ class ChatState(TypedDict, total=False):
     # 입력 / 세션
     question: str
     messages: Annotated[list, add_messages]
+    # 이 방에 첨부된 계약서 본문(개인정보 치환 완료). 없으면 빈 문자열.
+    document_context: str
     # 검색 / 생성
     query: str  # 검색어 (초기엔 질문, rewrite_query 가 갱신)
     retrieved: list
@@ -171,6 +178,19 @@ def generate(state: ChatState) -> dict:
         # source_type 별 출처 표기(_cite): 법령→법령명·조항, 판례→법원·사건번호, 사례→문서명
         return "\n".join(f"- {_cite(h)}: {h.get('content', '')[:200]}" for h in hs) or "(없음)"
 
+    # 첨부 계약서는 법령 근거와 층이 다르다 — 근거가 아니라 '사용자의 실제 계약 내용'이다.
+    # 첨부가 없을 때 빈 블록을 넣으면 모델이 "계약서를 확인할 수 없다"는 군더더기를 붙이므로
+    # 블록과 규칙을 통째로 넣지 않는다.
+    document = (state.get("document_context") or "").strip()
+    doc_rule = (
+        "7) [첨부 계약서]는 사용자가 실제로 올린 계약서다. 계약서에 관한 질문이면 그 내용을 "
+        "먼저 확인하고, 법령·판례와 대조해 문제 소지를 짚어라. 계약서에 없는 조항·금액·날짜를 "
+        "지어내지 말고, 확인되지 않으면 '첨부된 계약서에서는 확인되지 않는다'고 밝혀라.\n"
+        if document
+        else ""
+    )
+    doc_block = f"[첨부 계약서]\n{document[:MAX_DOCUMENT_CHARS]}\n\n" if document else ""
+
     prompt = (
         "너는 세입자를 돕는 법률 상담봇이다. 아래 근거만 사용해 답하라.\n"
         "규칙:\n"
@@ -183,8 +203,10 @@ def generate(state: ChatState) -> dict:
         "5) [사례]는 '이런 경우 이렇게 판단된 적 있다'는 참고로만. "
         "근거에 없는 내용은 절대 단정하지 마라. 근거 밖 사실을 추가하지 마라.\n"
         "6) 이전 대화가 있으면 이어지는 대화처럼 답하라. 앞에서 이미 설명한 내용은 반복하지 말고 "
-        "새로 묻는 부분에 집중하라. 면책 문구·인사말은 넣지 마라.\n\n"
+        "새로 묻는 부분에 집중하라. 면책 문구·인사말은 넣지 마라.\n"
+        f"{doc_rule}\n"
         f"[대화 맥락]\n{_history_text(state)}\n\n"
+        f"{doc_block}"
         f"[법령·판례]\n{fmt(binding)}\n\n[사례]\n{fmt(persuasive)}\n\n[실무 참고]\n{fmt(ref)}\n\n"
         f"질문: {state.get('question', '')}"
     )
@@ -224,7 +246,12 @@ app = build_app()
 # ──────────────────────────────────────────────
 # 대화 맥락은 호출자가 넘긴 history 로 주입한다(DB 가 기록의 원본).
 # MemorySaver 는 그래프 컴파일 요건이라 남겨두되, 매 호출 새 thread_id 로 격리한다.
-def run_turn(question: str, history: list[dict] | None = None) -> str:
+def run_turn(
+    question: str,
+    history: list[dict] | None = None,
+    document_context: str | None = None,
+) -> str:
+    """한 턴 실행. document_context 는 방에 첨부된 계약서 본문(개인정보 치환 완료)이다."""
     import uuid
 
     msgs = []
@@ -245,6 +272,7 @@ def run_turn(question: str, history: list[dict] | None = None) -> str:
             "query": question,  # 이번 턴 검색어 (재작성 전 초기값)
             "retrieval_attempts": 0,  # 턴마다 재작성 예산 초기화
             "messages": msgs,
+            "document_context": document_context or "",
         },
         config={"configurable": {"thread_id": uuid.uuid4().hex}},
     )

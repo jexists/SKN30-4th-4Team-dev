@@ -23,6 +23,13 @@ export interface ChatRoom {
   title: string | null
   last_chat_at: string
   updated_at: string
+  /**
+   * 이 방에 첨부된 계약서 분석. 붙어 있으면 이후 질문에 계약서 맥락이 함께 들어간다.
+   * 방 정보로 내려오므로 새로고침하거나 대화를 다시 열어도 첨부 칩이 복원된다.
+   */
+  analysis_job_id: string | null
+  /** 칩에 표시할 파일명. 첨부가 없으면 null. */
+  analysis_file_name: string | null
 }
 
 export interface ChatMessageRow {
@@ -79,6 +86,21 @@ export function listMessages(
     withCursor(`/api/v1/chat/rooms/${roomId}/messages`, cursor),
     options,
   )
+}
+
+/**
+ * 완료된 계약서 분석을 방에 첨부한다. 분석이 아직 끝나지 않았으면 409 다.
+ * 첨부 후에는 그 방의 모든 질문에 계약서 맥락이 자동으로 들어간다.
+ */
+export function attachDocument(roomId: string, analysisJobId: string): Promise<ChatRoom> {
+  return apiPost<ChatRoom>(`/api/v1/chat/rooms/${roomId}/document`, {
+    analysis_job_id: analysisJobId,
+  })
+}
+
+/** 첨부만 해제한다. 분석과 위험 보고서는 그대로 남는다. */
+export function detachDocument(roomId: string): Promise<ChatRoom> {
+  return apiDelete<ChatRoom>(`/api/v1/chat/rooms/${roomId}/document`)
 }
 
 /** 메시지 저장. 방 last_chat_at/updated_at 갱신은 백엔드가 함께 처리한다. */

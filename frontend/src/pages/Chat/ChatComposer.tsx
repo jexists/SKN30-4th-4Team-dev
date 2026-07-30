@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef } from 'react'
 
-import { Info, Paperclip, Send } from '../../components/icons'
+import { Close, FileLines, Info, Paperclip, Send, Warn } from '../../components/icons'
 import styles from './Chat.module.scss'
+import type { Attachment } from './types'
 
 interface Props {
   value: string
@@ -15,17 +16,41 @@ interface Props {
    */
   notice?: string
   maxLength: number
+  /** 이 대화에 첨부된 계약서. 없으면 칩을 그리지 않는다. */
+  attachment?: Attachment | null
+  onAttach: (file: File) => void
+  onRemoveAttachment: () => void
 }
 
 const PLACEHOLDER = '법률적인 상황을 설명해주세요...'
 const MAX_HEIGHT = 200 // px — 이 높이까지 늘고 그 뒤엔 내부 스크롤
+/** 백엔드 업로드 검증(analysis.py)과 같은 목록. 여기서 먼저 걸러 헛왕복을 줄인다. */
+const ACCEPT = '.pdf,.png,.jpg,.jpeg'
+
+const STATE_TEXT: Record<Attachment['state'], string> = {
+  PREPARING: '올리는 중…',
+  PROCESSING: '계약서를 읽는 중…',
+  READY: '이 대화에서 참고 중',
+  FAILED: '첨부 실패',
+}
 
 /**
  * 하단 고정 입력창. Enter 전송 / Shift+Enter 줄바꿈, 내용이 길어지면 높이만 증가(상한 후 내부 스크롤),
- * 전송 중엔 비활성. 기존 .composer 마크업/스타일을 그대로 사용한다.
+ * 전송 중엔 비활성. 첨부한 계약서는 입력창 위 칩으로 상태를 보여준다.
  */
-export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxLength }: Props) {
+export function ChatComposer({
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  notice,
+  maxLength,
+  attachment,
+  onAttach,
+  onRemoveAttachment,
+}: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   // 내용에 맞춰 높이 자동 조절(레이아웃은 안 밀리게 상한 적용).
   useLayoutEffect(() => {
@@ -46,8 +71,44 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxL
     }
   }
 
+  function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // 같은 파일을 다시 골라도 change 가 오도록 값을 비운다(첨부 실패 후 재시도).
+    e.target.value = ''
+    if (file) onAttach(file)
+  }
+
+  // 처리 중에는 새 파일을 받지 않는다 — 회원당 진행 중 분석이 1건이라 어차피 거절된다.
+  const busy = attachment?.state === 'PREPARING' || attachment?.state === 'PROCESSING'
+  const failed = attachment?.state === 'FAILED'
+
   return (
     <div className={styles.composer}>
+      {attachment && (
+        <div
+          className={`${styles.attachment} ${failed ? styles.attachmentFailed : ''}`}
+          role="status"
+        >
+          {failed ? (
+            <Warn className={styles.attachmentIcon} />
+          ) : (
+            <FileLines className={styles.attachmentIcon} />
+          )}
+          <span className={styles.attachmentName}>{attachment.fileName}</span>
+          <span className={styles.attachmentState}>
+            {attachment.message ?? STATE_TEXT[attachment.state]}
+          </span>
+          <button
+            type="button"
+            className={styles.attachmentRemove}
+            aria-label="첨부 해제"
+            onClick={onRemoveAttachment}
+          >
+            <Close />
+          </button>
+        </div>
+      )}
+
       <form
         className={styles.inputBar}
         onSubmit={(e) => {
@@ -55,7 +116,23 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, notice, maxL
           submit()
         }}
       >
-        <button type="button" className={styles.attachBtn} aria-label="파일 첨부">
+        <input
+          ref={fileRef}
+          type="file"
+          className={styles.fileInput}
+          accept={ACCEPT}
+          onChange={pickFile}
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          className={styles.attachBtn}
+          aria-label="계약서 첨부"
+          title={busy ? '계약서를 읽는 중입니다' : '계약서 첨부 (PDF·PNG·JPG)'}
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
           <Paperclip />
         </button>
         <textarea

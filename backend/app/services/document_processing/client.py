@@ -12,19 +12,25 @@ from app.schemas.document import OcrAnalysisResult, OcrWorkerHealth
 
 logger = logging.getLogger(__name__)
 
+# Worker 를 외부 GPU 호스팅(RunPod 등)에 두면 그 앞단이 Cloudflare 인 경우가 있다.
+# urllib 기본값인 "Python-urllib/3.x" 는 봇으로 판정돼 Pod 에 닿기도 전에 403(error 1010)으로
+# 막힌다 — 워커가 죽은 것처럼 보이지만 실제로는 요청이 도착조차 하지 않는다.
+_USER_AGENT = "Mozilla/5.0 (compatible; homeshield-backend/1.0)"
+
 
 class OcrWorkerClient:
     """내부 OCR worker의 상태 확인과 계약서 처리 API를 호출한다."""
 
     @staticmethod
-    def _auth_headers() -> dict[str, str]:
-        if not settings.OCR_WORKER_API_KEY:
-            return {}
-        return {"X-API-Key": settings.OCR_WORKER_API_KEY}
+    def _base_headers() -> dict[str, str]:
+        headers = {"User-Agent": _USER_AGENT}
+        if settings.OCR_WORKER_API_KEY:
+            headers["X-API-Key"] = settings.OCR_WORKER_API_KEY
+        return headers
 
     def health(self) -> OcrWorkerHealth:
         url = f"{settings.OCR_WORKER_URL.rstrip('/')}/health"
-        request = Request(url, headers=self._auth_headers())
+        request = Request(url, headers=self._base_headers())
         try:
             with urlopen(  # noqa: S310
                 request, timeout=settings.OCR_WORKER_TIMEOUT_SECONDS
@@ -65,7 +71,7 @@ class OcrWorkerClient:
             method="POST",
             headers={
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
-                **self._auth_headers(),
+                **self._base_headers(),
             },
         )
         try:

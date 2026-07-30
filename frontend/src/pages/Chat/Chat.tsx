@@ -2,9 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/client'
+import { getAnalysis, startAnalysis } from '../../api/analyses'
 import { sendChat, type ChatTurn } from '../../api/chat'
-import { addMessage, createRoom, listMessages, listRooms, type ChatRoom } from '../../api/chatHistory'
+import {
+  addMessage,
+  attachDocument,
+  createRoom,
+  detachDocument,
+  listMessages,
+  listRooms,
+  type ChatRoom,
+} from '../../api/chatHistory'
 import { isRetryable } from '../../api/apiErrorHandler'
+import { isTerminal } from '../../types/analysis'
 import { Drawer } from '../../components/Drawer/Drawer'
 import { ErrorState } from '../../components/ErrorState/ErrorState'
 import { Close, Info } from '../../components/icons'
@@ -22,11 +32,14 @@ import { MessageList } from './MessageList'
 import { RenameRoomModal } from './RenameRoomModal'
 import { groupRoomsByDate } from './roomGroups'
 import { topicById } from './topics'
-import type { Message } from './types'
+import type { Attachment, Message } from './types'
 import styles from './Chat.module.scss'
 
 const MAX_LEN = 2000
 const HISTORY_TURNS = 10 // RAG 에 함께 보내는 최근 맥락 수
+/** 첨부 계약서 분석 폴링 간격·상한. 분석은 OCR + LLM 이라 수 분까지 걸린다. */
+const ATTACH_POLL_MS = 2000
+const ATTACH_TIMEOUT_MS = 10 * 60 * 1000
 const LEGAL_NOTICE_DISMISSED_KEY = 'homeshield:legal-notice-dismissed'
 
 /** 아직 방이 없는 새 대화의 대기 키. 방 id 는 빈 문자열이 될 수 없어 충돌하지 않는다. */
@@ -107,9 +120,15 @@ export function Chat() {
       return true
     }
   })
+  // 이 대화에 첨부한 계약서. READY 가 되면 이후 모든 질문에 계약서 맥락이 함께 들어간다
+  // (본문은 프론트가 들고 있지 않다 — 서버가 방에 붙은 분석에서 읽는다).
+  const [attachment, setAttachment] = useState<Attachment | null>(null)
+
   const lastQuestion = useRef('')
   const activeRoomIdRef = useRef<string | null>(activeRoomId)
   const createdRoomIdRef = useRef<string | null>(null)
+  // 첨부가 진행 중인 동안에는 방 목록 동기화가 칩을 덮어쓰지 않게 막는다.
+  const attachingRef = useRef(false)
   // 목록 무한스크롤의 스크롤 컨테이너. 사이드바·드로어 중 지금 마운트된 쪽이 채운다.
   const roomsScrollRef = useRef<HTMLDivElement>(null)
   const roomsSentinel = useRef<HTMLDivElement>(null)
@@ -392,6 +411,118 @@ export function Chat() {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, streaming: false } : m)))
   }, [])
 
+  // 방을 열거나 목록이 갱신되면 첨부 칩을 방 정보로 복원한다 — 새로고침·대화 재진입에서도
+  // "이 대화는 계약서를 보고 있다"가 보여야 한다.
+  // 진행 중인 첨부는 덮지 않는다(목록에 아직 반영 전이라 칩이 깜빡였다 사라진다).
+  useEffect(() => {
+    if (attachingRef.current) return
+    if (!activeRoomId) {
+      setAttachment(null)
+      return
+    }
+    const room = rooms.find((r) => r.id === activeRoomId)
+    // 목록에 아직 없으면(깊은 링크로 들어와 첫 페이지 밖) 그대로 둔다. 칩은 표시일 뿐이고,
+    // 답변에 계약서를 넣을지는 서버가 방 정보를 보고 정한다.
+    if (!room) return
+    setAttachment(
+      room.analysis_job_id
+        ? { fileName: room.analysis_file_name ?? '첨부한 계약서', state: 'READY' }
+        : null,
+    )
+  }, [activeRoomId, rooms])
+
+  /** 분석이 끝날 때까지 폴링한다. 실패·취소·시간초과는 사용자에게 보일 문구로 던진다. */
+  async function waitForAnalysis(jobId: string): Promise<void> {
+    const deadline = Date.now() + ATTACH_TIMEOUT_MS
+    for (;;) {
+      // 폴링이라 실패마다 모달이 뜨면 화면을 덮는다 — 칩이 대신 알린다.
+      const job = await getAnalysis(jobId, true)
+      if (job.status === 'SUCCEEDED') return
+      if (isTerminal(job.status)) {
+        throw new Error(job.error?.message ?? '계약서를 분석하지 못했습니다.')
+      }
+      if (Date.now() > deadline) {
+        throw new Error('분석이 오래 걸립니다. 잠시 후 다시 첨부해 주세요.')
+      }
+      await new Promise((resolve) => setTimeout(resolve, ATTACH_POLL_MS))
+    }
+  }
+
+  /**
+   * 계약서를 이 대화에 첨부한다. 기존 분석 파이프라인(OCR·마스킹·개인정보 검증)을 그대로 쓰고,
+   * 완료된 분석을 방에 연결해 이후 질문마다 서버가 계약서를 함께 읽게 한다.
+   *
+   * 실패는 공통 오류 모달이 아니라 칩에 남긴다 — 첨부한 자리에서 사유를 보고 바로 다시
+   * 고르는 편이 낫고, 모달은 그 흐름을 끊는다.
+   */
+  async function handleAttach(file: File) {
+    if (!persistent) {
+      setAttachment({
+        fileName: file.name,
+        state: 'FAILED',
+        message: '로그인하면 계약서를 첨부할 수 있습니다',
+      })
+      return
+    }
+
+    attachingRef.current = true
+    setAttachment({ fileName: file.name, state: 'PREPARING' })
+    // 분석은 수 분까지 걸린다. 그 사이 사용자가 다른 대화를 열었으면 칩을 건드리지 않는다 —
+    // 첨부 자체는 원래 방에 그대로 붙고, 그 방으로 돌아오면 목록 동기화가 칩을 복원한다.
+    let roomId = activeRoomIdRef.current
+    const stillHere = () => activeRoomIdRef.current === roomId
+    try {
+      // 새 대화에서 첨부하면 방이 아직 없다. 여기서 만들고 ref·URL 까지 맞춰 둬야
+      // 곧이어 질문을 보낼 때 submitQuestion 이 같은 방을 또 만들지 않는다.
+      if (!roomId) {
+        const room = await createRoom(file.name.slice(0, 40))
+        roomId = room.id
+        createdRoomIdRef.current = roomId
+        activeRoomIdRef.current = roomId
+        setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)])
+        navigate(`/chat/${encodeURIComponent(roomId)}`)
+      }
+
+      const job = await startAnalysis([file], undefined, { silent: true })
+      if (stillHere()) setAttachment({ fileName: file.name, state: 'PROCESSING' })
+      await waitForAnalysis(job.id)
+
+      const updated = await attachDocument(roomId, job.id)
+      setRooms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+      if (stillHere()) {
+        setAttachment({ fileName: updated.analysis_file_name ?? file.name, state: 'READY' })
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 401) return // client.ts 가 로그아웃 처리
+      if (!stillHere()) return // 다른 대화를 보고 있으면 그 방의 칩을 건드리지 않는다
+      setAttachment({
+        fileName: file.name,
+        state: 'FAILED',
+        // 서버 문구가 있으면 그대로 쓴다(첨부 제한·용량 초과 등 사유가 구체적이다).
+        message: error instanceof Error ? error.message : '계약서를 첨부하지 못했습니다',
+      })
+    } finally {
+      attachingRef.current = false
+    }
+  }
+
+  /** 첨부만 해제한다. 분석과 위험 보고서는 그대로 남는다. */
+  async function handleRemoveAttachment() {
+    const roomId = activeRoomIdRef.current
+    // 실패한 첨부는 서버에 붙은 적이 없으므로 칩만 지운다.
+    if (!roomId || attachment?.state !== 'READY') {
+      setAttachment(null)
+      return
+    }
+    setAttachment(null)
+    try {
+      const updated = await detachDocument(roomId)
+      setRooms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+    } catch {
+      // 실패하면 방 목록이 다음 동기화에서 칩을 되살린다 — 공통 모달이 이미 사유를 알렸다.
+    }
+  }
+
   async function submitQuestion(text: string, regenerate = false) {
     const q = text.trim()
     // 어느 방이든 생성 중이면 보내지 않는다(방을 옮겨도 마찬가지). 막힌 이유는 입력창이 안내한다.
@@ -451,7 +582,8 @@ export function Chat() {
         setPending(NEW_CHAT_KEY, false)
       }
 
-      const res = await sendChat(q, history)
+      // roomId 를 함께 넘기면 서버가 그 방에 첨부된 계약서를 근거에 넣는다.
+      const res = await sendChat(q, history, roomId)
       if (!persistent || activeRoomIdRef.current === roomId) {
         setMessages((m) => [
           ...dropTrailingError(m),
@@ -644,6 +776,9 @@ export function Chat() {
                 disabled={sending || openingRoom || busyElsewhere}
                 notice={busyElsewhere ? BUSY_ELSEWHERE_NOTICE : undefined}
                 maxLength={MAX_LEN}
+                attachment={attachment}
+                onAttach={(file) => void handleAttach(file)}
+                onRemoveAttachment={() => void handleRemoveAttachment()}
               />
             )}
           </div>

@@ -242,7 +242,8 @@ describe('Chat URL routing', () => {
       expect(api.createRoom).toHaveBeenCalledWith(question)
     })
     expect(api.addMessage).toHaveBeenCalledWith('room-new', 'USER', question)
-    expect(api.sendChat).toHaveBeenCalledWith(question, [])
+    // 방 id 를 함께 넘겨야 서버가 그 방에 첨부된 계약서를 답변 근거에 넣을 수 있다.
+    expect(api.sendChat).toHaveBeenCalledWith(question, [], 'room-new')
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent('/chat/room-new')
     })

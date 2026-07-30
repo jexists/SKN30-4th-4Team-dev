@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS chat_room (
 );
 ALTER TABLE chat_room ADD COLUMN IF NOT EXISTS last_chat_at     timestamptz;
 ALTER TABLE chat_room ADD COLUMN IF NOT EXISTS title_updated_at timestamptz;
+-- 방에 첨부된 계약서 분석. 붙어 있으면 그 방의 모든 질문에 계약서 맥락이 함께 들어간다.
+-- ON DELETE SET NULL: 분석을 지워도 대화 기록은 남아야 한다(첨부만 풀린다).
+-- FK 는 analysis_job 정의(14번) 이후에 붙여야 하므로 그 아래에서 추가한다.
+ALTER TABLE chat_room ADD COLUMN IF NOT EXISTS analysis_job_id  uuid;
 
 -- 기존 행 백필: 지금까지 updated_at 이 곧 '마지막 대화 시각' 이었으므로 그대로 옮긴다.
 -- 대화가 한 번도 없던 방은 updated_at 이 생성 시각이라 자연히 '등록일' 이 들어간다.
@@ -327,3 +331,20 @@ CREATE TABLE IF NOT EXISTS analysis_result (
 );
 CREATE INDEX IF NOT EXISTS idx_analysis_result_user
     ON analysis_result (user_id, created_at DESC);
+
+-- 16. chat_room.analysis_job_id FK — 채팅방에 첨부된 계약서 분석
+--
+-- 컬럼 자체는 chat_room(5번) 에서 추가했지만 FK 는 analysis_job 이 만들어진 뒤라야 걸 수 있어
+-- 여기에 둔다. ON DELETE SET NULL 이라 분석을 지워도 대화는 남고 첨부만 풀린다.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_chat_room_analysis_job'
+    ) THEN
+        ALTER TABLE chat_room
+            ADD CONSTRAINT fk_chat_room_analysis_job
+            FOREIGN KEY (analysis_job_id) REFERENCES analysis_job (id) ON DELETE SET NULL;
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_chat_room_analysis_job
+    ON chat_room (analysis_job_id) WHERE analysis_job_id IS NOT NULL;

@@ -1,6 +1,6 @@
 import type { AnalysisJob, AnalysisJobDetail, AnalysisJobSummary } from '../types/analysis'
 import type { Page } from '../types/api'
-import { apiGet, apiPostForm } from './client'
+import { apiGet, apiPostForm, type ApiOptions } from './client'
 
 const BASE = '/api/v1/analyses'
 
@@ -9,14 +9,22 @@ const BASE = '/api/v1/analyses'
  *
  * idempotencyKey 는 같은 요청의 재전송(더블클릭·네트워크 재시도)이 분석을 두 번 돌리지
  * 않게 한다 — 서버가 같은 키의 기존 작업을 그대로 돌려준다.
+ *
+ * options 는 채팅 첨부처럼 **화면이 실패를 직접 표현하는 자리**를 위한 것이다
+ * (첨부 칩이 사유를 보여주므로 공통 오류 모달까지 뜨면 같은 말이 두 번 나온다).
  */
-export function startAnalysis(files: File[], idempotencyKey?: string): Promise<AnalysisJob> {
+export function startAnalysis(
+  files: File[],
+  idempotencyKey?: string,
+  options?: ApiOptions,
+): Promise<AnalysisJob> {
   const form = new FormData()
   for (const file of files) {
     // FastAPI 의 list[UploadFile] 계약에 맞춰 같은 필드 이름을 반복한다.
     form.append('file', file)
   }
   return apiPostForm<AnalysisJob>(BASE, form, {
+    ...options,
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
   })
 }
