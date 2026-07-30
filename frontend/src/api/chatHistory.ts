@@ -1,3 +1,4 @@
+import type { Page } from '../types/api'
 import { apiDelete, apiGet, apiPost, apiPut, type ApiOptions } from './client'
 
 /**
@@ -13,11 +14,9 @@ import { apiDelete, apiGet, apiPost, apiPut, type ApiOptions } from './client'
 
 export type DbRole = 'USER' | 'ASSISTANT' | 'SYSTEM'
 
-/** 커서 페이지네이션 응답 봉투 (백엔드 Page[T] 와 1:1). */
-export interface Page<T> {
-  items: T[]
-  next_cursor: string | null
-}
+// Page<T> 는 알림·분석 목록도 쓰게 되어 types/api.ts 로 옮겼다.
+// 기존 import 경로(`from '../api/chatHistory'`)가 깨지지 않도록 여기서 다시 내보낸다.
+export type { Page }
 
 export interface ChatRoom {
   id: string

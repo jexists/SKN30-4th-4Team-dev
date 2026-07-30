@@ -5,18 +5,16 @@
 우회하므로 소유권(user_id==sub)은 코드가 직접 검증한다.
 """
 
-import base64
-import json
 import logging
 import time
 import uuid
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.cursor import decode_cursor, encode_cursor
 from app.api.deps import RequireMember
 from app.core.exceptions import AppError
 from app.db.session import get_app_db
@@ -143,26 +141,6 @@ def _room_out(room: ChatRoom) -> ChatRoomOut:
     )
 
 
-# ── 커서(keyset) 페이지네이션 ──────────────────────────────────────────
-# 커서 = 마지막으로 본 행의 (정렬 시각, id). base64(JSON) 불투명 문자열 — 프론트는 저장·재전달만.
-
-
-def _encode_cursor(ts: datetime, id_: uuid.UUID) -> str:
-    raw = json.dumps({"t": ts.isoformat(), "i": str(id_)})
-    return base64.urlsafe_b64encode(raw.encode()).decode()
-
-
-def _decode_cursor(raw: str | None) -> tuple[datetime, uuid.UUID] | None:
-    """커서를 (ts, id) 로. 없거나 손상됐으면 None → 첫 페이지로 취급(fail-soft)."""
-    if not raw:
-        return None
-    try:
-        data = json.loads(base64.urlsafe_b64decode(raw.encode()).decode())
-        return datetime.fromisoformat(data["t"]), uuid.UUID(data["i"])
-    except (ValueError, KeyError, TypeError):
-        return None
-
-
 @router.get("/chat/rooms", response_model=ApiResponse[Page[ChatRoomOut]])
 def list_rooms(
     user: RequireMember, db: AppDb, limit: Limit = 30, cursor: str | None = None
@@ -175,7 +153,7 @@ def list_rooms(
         .order_by(ChatRoom.last_chat_at.desc(), ChatRoom.id.desc())
         .limit(limit + 1)  # +1 로 다음 페이지 존재 여부 확인
     )
-    ck = _decode_cursor(cursor)
+    ck = decode_cursor(cursor)
     if ck is not None:
         c_ts, c_id = ck
         stmt = stmt.where(
@@ -186,7 +164,7 @@ def list_rooms(
 
     has_more = len(rows) > limit
     rows = rows[:limit]
-    next_cursor = _encode_cursor(rows[-1].last_chat_at, rows[-1].id) if has_more and rows else None
+    next_cursor = encode_cursor(rows[-1].last_chat_at, rows[-1].id) if has_more and rows else None
     return success_response(
         Page(
             items=[_room_out(r) for r in rows],
@@ -223,7 +201,7 @@ def list_messages(
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(limit + 1)
     )
-    ck = _decode_cursor(cursor)
+    ck = decode_cursor(cursor)
     if ck is not None:
         c_ts, c_id = ck
         stmt = stmt.where(
@@ -234,7 +212,7 @@ def list_messages(
 
     has_more = len(rows) > limit
     rows = rows[:limit]  # 최신순(desc)에서 limit 개
-    next_cursor = _encode_cursor(rows[-1].created_at, rows[-1].id) if has_more and rows else None
+    next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id) if has_more and rows else None
     rows = list(reversed(rows))  # 화면 표시용 오름차순(오래된 → 최신)
     return success_response(
         Page(

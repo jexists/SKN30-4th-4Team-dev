@@ -58,11 +58,15 @@ export interface ApiOptions {
    * health 폴링 = 상태 위젯). 기본값 false — 새 API 는 자동으로 공통 처리를 받는다.
    */
   silent?: boolean
+  /**
+   * 추가 요청 헤더. 지금은 분석 접수의 Idempotency-Key 뿐이다 —
+   * 인증 헤더는 여기서 넣지 않는다(아래 request 가 항상 자동으로 붙인다).
+   */
+  headers?: Record<string, string>
 }
 
 interface RequestOptions extends ApiOptions {
   method?: string
-  headers?: Record<string, string>
   body?: BodyInit | null
 }
 
@@ -149,7 +153,32 @@ export async function apiPut<T>(path: string, body: unknown, options?: ApiOption
   })
 }
 
-/** DELETE 요청. 표준 응답 봉투를 벗겨 data 반환, 실패면 ApiError. */
-export async function apiDelete<T>(path: string, options?: ApiOptions): Promise<T> {
-  return request<T>(path, { ...options, method: 'DELETE' })
+/** PATCH + JSON 바디. 표준 응답 봉투를 벗겨 data 반환, 실패면 ApiError. */
+export async function apiPatch<T>(path: string, body: unknown, options?: ApiOptions): Promise<T> {
+  return request<T>(path, {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+/**
+ * DELETE 요청. 표준 응답 봉투를 벗겨 data 반환, 실패면 ApiError.
+ *
+ * body 는 선택이다 — 알림 삭제처럼 "선택한 것들"을 함께 보내야 하는 경우에만 쓴다.
+ * (id 를 쿼리스트링에 늘어놓으면 선택 개수에 따라 URL 길이 제한에 걸린다.)
+ */
+export async function apiDelete<T>(
+  path: string,
+  body?: unknown,
+  options?: ApiOptions,
+): Promise<T> {
+  if (body === undefined) return request<T>(path, { ...options, method: 'DELETE' })
+  return request<T>(path, {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
