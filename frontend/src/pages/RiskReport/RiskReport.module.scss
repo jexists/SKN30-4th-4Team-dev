@@ -1,4 +1,4 @@
-@use '../../styles/variables' as v;
+@use "../../styles/variables" as v;
 
 .page {
   background: v.$page-bg;
@@ -37,7 +37,7 @@
 }
 .stateDesc {
   margin: 0;
-  max-width: 26rem;
+  // max-width: 26rem;
   font-size: v.$font-size-base;
   line-height: v.$line-height-relaxed;
   color: v.$slate;
@@ -245,7 +245,7 @@
 }
 .scoreDesc {
   margin: 0;
-  max-width: 26rem;
+  // max-width: 26rem;
   font-size: 15px;
   line-height: 1.65;
   color: v.$slate;

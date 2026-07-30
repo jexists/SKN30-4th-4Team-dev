@@ -468,8 +468,14 @@ def test_upload_avatar_requires_auth(client):
     assert resp.status_code == 401
 
 
-def test_upload_avatar_503_when_storage_not_configured(client, auth_secret, register_member):
-    """SUPABASE_SERVICE_ROLE_KEY 가 비어 있으면(로컬 기본값) 업로드는 503 이지 500 이 아니다."""
+def test_upload_avatar_503_when_storage_not_configured(
+    client, auth_secret, register_member, monkeypatch
+):
+    """SUPABASE_SERVICE_ROLE_KEY 가 비어 있으면 업로드는 503 이지 500 이 아니다.
+
+    로컬 .env 에 키가 들어 있으면 실제 Supabase 로 요청이 나가버리므로 값을 명시적으로 비운다.
+    """
+    monkeypatch.setattr(config.settings, "SUPABASE_SERVICE_ROLE_KEY", "")
     user_id = register_member()
     token = _make_token(sub=str(user_id))
     resp = client.post(

@@ -35,7 +35,9 @@ def upload_avatar(user_id: uuid.UUID, filename: str, content: bytes, content_typ
     upload_url = f"{settings.SUPABASE_URL}/storage/v1/object/{bucket}/{object_path}"
 
     try:
-        resp = httpx.put(
+        # PUT 이 아니라 POST 다. Storage 에서 PUT /object 는 "이미 있는 오브젝트 갱신"이라
+        # 매번 새 uuid 경로로 올리는 여기서는 항상 실패한다.
+        resp = httpx.post(
             upload_url,
             content=content,
             headers={
@@ -48,6 +50,15 @@ def upload_avatar(user_id: uuid.UUID, filename: str, content: bytes, content_typ
             timeout=10.0,
         )
         resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # Storage 는 "버킷 없음" 같은 원인도 본문에만 담아 400 으로 내려준다.
+        # 본문을 남기지 않으면 상태 코드만 보고는 원인을 알 수 없다.
+        logger.error("아바타 업로드 실패 (%s): %s", exc.response.status_code, exc.response.text)
+        raise AppError(
+            "업로드 실패",
+            "프로필 사진을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            502,
+        ) from exc
     except httpx.HTTPError as exc:
         logger.exception("아바타 업로드 실패")
         raise AppError(
