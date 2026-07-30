@@ -9,15 +9,19 @@ const useAuth = vi.fn()
 const useCurrentUser = vi.fn()
 const signOut = vi.fn()
 const withdrawMember = vi.hoisted(() => vi.fn())
+const listAnalyses = vi.hoisted(() => vi.fn())
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => useAuth() }))
 vi.mock('../../hooks/useCurrentUser', () => ({
   useCurrentUser: (token: string | null) => useCurrentUser(token),
 }))
 vi.mock('../../api/auth', () => ({ withdrawMember }))
+// 진단 내역은 이 파일의 관심사가 아니다 — 실제 fetch 가 나가지 않도록 빈 목록으로 고정한다.
+vi.mock('../../api/analyses', () => ({ listAnalyses }))
 
 describe('MyPage 프로필', () => {
   beforeEach(() => {
+    listAnalyses.mockResolvedValue({ items: [], next_cursor: null })
     useAuth.mockReturnValue({ token: 'access-token', signOut })
     useCurrentUser.mockReturnValue({
       status: 'ok',
@@ -52,7 +56,9 @@ describe('MyPage 프로필', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('status')).toHaveTextContent('프로필을 불러오는 중입니다.')
+    // 진단 내역 로딩도 role="status" 라 화면 전체에서 찾으면 둘이 잡힌다 — 제목 안에서 찾는다.
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(within(heading).getByRole('status')).toHaveTextContent('프로필을 불러오는 중입니다.')
   })
 })
 
@@ -60,6 +66,7 @@ describe('MyPage 회원 탈퇴', () => {
   const originalLocation = window.location
 
   beforeEach(() => {
+    listAnalyses.mockResolvedValue({ items: [], next_cursor: null })
     useAuth.mockReturnValue({ token: 'access-token', signOut })
     useCurrentUser.mockReturnValue({
       status: 'ok',

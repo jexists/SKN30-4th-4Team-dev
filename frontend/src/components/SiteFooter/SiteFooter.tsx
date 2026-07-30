@@ -24,7 +24,7 @@ type SiteFooterProps = {
 export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
   if (variant === 'compact') {
     return (
-      <footer className={styles.compact}>
+      <footer className={styles.compact} data-print="hide">
         <div className={styles.compactInner}>
           {/* 브랜드 워드마크는 헤더와 중복이라 생략하고, 법적 고지만 남긴다. */}
           <p className={styles.compactLegal}>
@@ -46,7 +46,7 @@ export function SiteFooter({ variant = 'full' }: SiteFooterProps) {
   }
 
   return (
-    <footer className={styles.siteFooter}>
+    <footer className={styles.siteFooter} data-print="hide">
       <div className={styles.footerInner}>
         <div className={styles.footerBrand}>
           <div className={styles.brand}>

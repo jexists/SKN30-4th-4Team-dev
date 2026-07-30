@@ -12,6 +12,96 @@
   padding-inline: 24px;
 }
 
+/* ══════════════ 상태 화면 (로딩·진행·오류·빈 상태) ══════════════ */
+/* 리포트가 아직/영영 없을 때 같은 자리를 채운다. 화면 한가운데를 통째로 쓰므로
+   ErrorState 는 variant="plain" 으로 넘긴다(테두리가 허공에 뜬 띠처럼 보인다). */
+.statePanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: v.$space-4;
+  min-height: 46vh;
+  text-align: center;
+}
+.stateTitle {
+  margin: 0;
+  font-size: v.$font-size-3xl;
+  font-weight: v.$font-weight-bold;
+  letter-spacing: v.$tracking-normal;
+  color: v.$navy-900;
+}
+.stateDesc {
+  margin: 0;
+  max-width: 26rem;
+  font-size: v.$font-size-base;
+  line-height: v.$line-height-relaxed;
+  color: v.$slate;
+}
+.stateStatus {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  color: v.$slate;
+  font-size: v.$font-size-lg;
+  font-weight: v.$font-weight-semibold;
+
+  p {
+    margin: 0;
+  }
+}
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid v.$border-strong;
+  border-top-color: v.$navy-800;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.progressBar {
+  width: 100%;
+  max-width: 22rem;
+  height: 8px;
+  border-radius: v.$radius-pill;
+  background: v.$blue-soft;
+  overflow: hidden;
+}
+.progressFill {
+  height: 100%;
+  border-radius: v.$radius-pill;
+  background: v.$navy-800;
+  transition: width v.$transition-slow;
+}
+.stateCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: v.$space-3 v.$space-6;
+  border-radius: v.$radius-md;
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+  font-size: v.$font-size-base;
+  font-weight: v.$font-weight-bold;
+  text-decoration: none;
+  transition: background v.$transition-base;
+
+  &:hover {
+    background: v.$navy-hover;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ══════════════ 헤더 ══════════════ */
 .pageHeader {
   display: flex;
@@ -560,5 +650,48 @@
   .btnPrimary {
     flex: 1;
     justify-content: center;
+  }
+}
+
+/* ══════════════ 인쇄 (= PDF 다운로드) ══════════════ */
+/* "PDF 다운로드" 는 window.print() 다. 화면에서만 의미 있는 것들을 걷어내고,
+   카드가 페이지 경계에서 잘리지 않게 한다. 전역 크롬(헤더·푸터·토스트) 숨김은
+   styles/main.scss 가 담당한다. */
+@media print {
+  .page {
+    padding: 0;
+    background: v.$white;
+  }
+  .container {
+    max-width: none;
+    padding-inline: 0;
+  }
+  /* 인쇄물에서 누를 수 없는 버튼은 잉크 낭비다. */
+  .headerActions {
+    display: none;
+  }
+  .bento {
+    gap: v.$space-4;
+  }
+  .scoreCard,
+  .financeCard,
+  .clauseCard,
+  .actionCard,
+  .visualCard {
+    /* 카드가 페이지 경계에 걸쳐 반으로 잘리지 않게. */
+    break-inside: avoid;
+    box-shadow: none;
+  }
+  .actionCard {
+    /* sticky 는 인쇄 시 첫 페이지에만 남아 내용이 사라진다. */
+    position: static;
+    margin-top: 0;
+  }
+  .gaugeFill,
+  .progressFill {
+    transition: none;
+  }
+  .actionCta {
+    display: none;
   }
 }

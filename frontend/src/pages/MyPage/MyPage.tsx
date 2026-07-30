@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { listAnalyses } from '../../api/analyses'
 import { withdrawMember } from '../../api/auth'
+import { ErrorState } from '../../components/ErrorState/ErrorState'
 import { Modal } from '../../components/Modal/Modal'
 import { showToast } from '../../components/Toast/toastStore'
 import {
@@ -15,10 +17,13 @@ import {
   Trash,
   User,
 } from '../../components/icons'
+import { requestDesktopPermission } from '../../hooks/desktopNotify'
 import { useAuth } from '../../hooks/useAuth'
 import { setAvatarFile, useAvatarUrl } from '../../hooks/useAvatar'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
-import { setReportAlertsEnabled, useReportAlertsEnabled } from '../../hooks/useNotifications'
+import { setDesktopAlertsEnabled, useDesktopAlertsEnabled } from '../../hooks/useNotifications'
+import type { AnalysisJobSummary } from '../../types/analysis'
+import { isTerminal } from '../../types/analysis'
 import styles from './MyPage.module.scss'
 
 // 백엔드에 저장 API가 아직 없어, "다시 바꾸기 전까지 유지"는 localStorage 로 흉내낸다.
@@ -42,15 +47,6 @@ function readPasswordChanged(): boolean {
   }
 }
 
-type RiskLevel = 'safe' | 'caution' | 'risk'
-
-type HistoryItem = {
-  id: string
-  address: string
-  date: string
-  level: RiskLevel
-}
-
 type Consultation = {
   id: string
   label: string
@@ -58,17 +54,6 @@ type Consultation = {
   title: string
   excerpt: string
 }
-
-const HISTORY: HistoryItem[] = [
-  { id: '1', address: '서울시 강남구 테헤란로 123-45', date: '2026.05.20 14:30', level: 'safe' },
-  {
-    id: '2',
-    address: '경기도 성남시 분당구 판교역로 10',
-    date: '2026.05.18 10:15',
-    level: 'caution',
-  },
-  { id: '3', address: '서울시 마포구 독막로 22', date: '2026.05.15 16:45', level: 'risk' },
-]
 
 const CONSULTATIONS: Consultation[] = [
   {
@@ -87,10 +72,25 @@ const CONSULTATIONS: Consultation[] = [
   },
 ]
 
-const LEVEL_LABEL: Record<RiskLevel, string> = {
-  safe: 'SAFE (안전)',
-  caution: 'CAUTION (주의)',
-  risk: 'HIGH RISK (위험)',
+/** 서버 risk_level → 화면 뱃지. 진행 중이라 아직 등급이 없으면 별도 처리한다. */
+const LEVEL_STYLE = { LOW: 'safe', MEDIUM: 'caution', HIGH: 'risk' } as const
+const LEVEL_LABEL = {
+  LOW: 'SAFE (안전)',
+  MEDIUM: 'CAUTION (주의)',
+  HIGH: 'HIGH RISK (위험)',
+} as const
+
+/** `2026.05.20 14:30` — 목록에서 한 줄로 읽히는 형식. */
+function formatAnalyzedAt(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** 카드 제목 — 서버가 준 요약 제목, 없으면 첫 파일명, 그것도 없으면 기본 문구. */
+function analysisTitle(job: AnalysisJobSummary): string {
+  return job.title || job.file_names[0] || '계약서 분석'
 }
 
 export function MyPage() {
@@ -98,8 +98,8 @@ export function MyPage() {
   // 조회 실패는 client.ts 의 공통 처리가 오류 모달로 알린다 — 여기서 또 띄우지 않는다.
   const { status, data: currentUser } = useCurrentUser(token)
 
-  const notifyReport = useReportAlertsEnabled()
-  const [notifyChat, setNotifyChat] = useState(false)
+  const notifyReport = useDesktopAlertsEnabled()
+  const history = useAnalysisHistory()
   const avatarUrl = useAvatarUrl()
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
@@ -122,6 +122,23 @@ export function MyPage() {
     if (!file) return
     setAvatarFile(file)
 // #    setAvatarUrl(URL.createObjectURL(file))
+  }
+
+  /**
+   * 켤 때만 브라우저 권한을 묻는다 — 사용자 제스처 안에서 물어야 브라우저가 받아준다.
+   * 거부당하면 토글을 켜지 않는다(켜져 있는데 배너가 안 오면 고장으로 보인다).
+   */
+  async function handleDesktopAlertsToggle(next: boolean) {
+    if (!next) {
+      setDesktopAlertsEnabled(false)
+      return
+    }
+    const granted = await requestDesktopPermission()
+    setDesktopAlertsEnabled(granted)
+    if (!granted) {
+      // API 실패가 아니라 브라우저 설정 문제라 서버가 알려줄 수 없다 — 화면이 직접 말한다.
+      showToast('브라우저에서 알림이 차단되어 있습니다. 사이트 설정에서 허용해주세요.', 'error')
+    }
   }
 
   function openPhoneModal() {
@@ -279,32 +296,60 @@ export function MyPage() {
             <h2 className={styles.sectionTitle}>
               <BarChart className={styles.sectionTitleIcon} /> 최근 진단 내역
             </h2>
-            <button type="button" className={styles.linkBtn}>
+            <Link to="/risk-report" className={styles.linkBtn}>
               전체보기
-            </button>
+            </Link>
           </div>
-          <div className={styles.historyList}>
-            {HISTORY.map((item) => (
-              <div key={item.id} className={styles.historyItem}>
-                <div>
-                  <h4 className={styles.historyAddress}>{item.address}</h4>
-                  <p className={styles.historyDate}>진단 일시: {item.date}</p>
-                </div>
-                <div className={styles.historyRight}>
-                  <span className={`${styles.levelPill} ${styles[`level_${item.level}`]}`}>
-                    {LEVEL_LABEL[item.level]}
-                  </span>
-                  <Link
-                    to={`/analyze/${item.id}`}
-                    className={styles.historyDetail}
-                    aria-label="진단 리포트 보기"
-                  >
-                    <FileLines />
-                  </Link>
-                </div>
+          {history.status === 'loading' && (
+            <p className={styles.historyEmpty} role="status">
+              진단 내역을 불러오는 중입니다.
+            </p>
+          )}
+          {history.status === 'error' && (
+            <ErrorState message="진단 내역을 불러오지 못했습니다." onRetry={history.retry} />
+          )}
+          {history.status === 'ok' &&
+            (history.items.length === 0 ? (
+              <p className={styles.historyEmpty}>
+                아직 진단한 계약서가 없습니다. 계약서를 올리면 이곳에 기록이 쌓입니다.
+              </p>
+            ) : (
+              <div className={styles.historyList}>
+                {history.items.map((job) => {
+                  const done = job.status === 'SUCCEEDED' && job.risk_level !== null
+                  return (
+                    <div key={job.id} className={styles.historyItem}>
+                      <div>
+                        <h4 className={styles.historyAddress}>{analysisTitle(job)}</h4>
+                        <p className={styles.historyDate}>
+                          진단 일시: {formatAnalyzedAt(job.created_at)}
+                        </p>
+                      </div>
+                      <div className={styles.historyRight}>
+                        {done ? (
+                          <span
+                            className={`${styles.levelPill} ${styles[`level_${LEVEL_STYLE[job.risk_level!]}`]}`}
+                          >
+                            {LEVEL_LABEL[job.risk_level!]}
+                          </span>
+                        ) : (
+                          <span className={styles.levelPill}>
+                            {isTerminal(job.status) ? '분석 실패' : '분석 중'}
+                          </span>
+                        )}
+                        <Link
+                          to={`/risk-report/${job.id}`}
+                          className={styles.historyDetail}
+                          aria-label={`${analysisTitle(job)} 진단 리포트 보기`}
+                        >
+                          <FileLines />
+                        </Link>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             ))}
-          </div>
         </section>
 
         {/* 최근 상담 내역 */}
@@ -354,16 +399,14 @@ export function MyPage() {
             <div className={styles.settingRow}>
               <div>
                 <p className={styles.settingLabel}>위험 보고서 생성 완료</p>
-                <p className={styles.settingSub}>분석 완료 시 즉시 알림</p>
+                {/* 알림 자체는 항상 쌓인다 — 이 토글이 정하는 건 브라우저 배너·토스트뿐이다. */}
+                <p className={styles.settingSub}>분석이 끝나면 브라우저 알림으로 알려드립니다</p>
               </div>
-              <Toggle checked={notifyReport} onChange={setReportAlertsEnabled} label="위험 보고서 알림" />
-            </div>
-            <div className={styles.settingRow}>
-              <div>
-                <p className={styles.settingLabel}>AI 챗봇 상담 내역 업데이트</p>
-                <p className={styles.settingSub}>중요한 상담 정보 자동 알림</p>
-              </div>
-              <Toggle checked={notifyChat} onChange={setNotifyChat} label="AI 챗봇 알림" />
+              <Toggle
+                checked={notifyReport}
+                onChange={(next) => void handleDesktopAlertsToggle(next)}
+                label="위험 보고서 알림"
+              />
             </div>
           </div>
         </section>
@@ -512,6 +555,37 @@ export function MyPage() {
       </Modal>
     </div>
   )
+}
+
+/**
+ * 최근 진단 내역. 목록에는 요약만 오므로(결과 payload 없음) 가볍다.
+ *
+ * 실패를 빈 목록으로 그리지 않는다 — 서버 장애가 "진단한 적 없음"으로 보이면 안 된다.
+ */
+function useAnalysisHistory() {
+  const [items, setItems] = useState<AnalysisJobSummary[]>([])
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setStatus('loading')
+    listAnalyses(null, 5)
+      .then((page) => {
+        if (cancelled) return
+        setItems(page.items)
+        setStatus('ok')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setStatus('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
+  return { items, status, retry: () => setReloadKey((key) => key + 1) }
 }
 
 function Toggle({

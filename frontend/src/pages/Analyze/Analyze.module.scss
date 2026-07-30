@@ -427,3 +427,75 @@
     transition: none !important;
   }
 }
+
+/* ── 분석 접수 후 ────────────────────────────────────────────────
+   접수돼도 화면을 떠나지 않는다. 버튼은 잠긴 채 "진행 중"을 보여주고,
+   그 옆에 결과로 가는 길을 남겨 알림을 놓쳐도 막다른 길이 되지 않게 한다. */
+.statusActions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+}
+
+.resultLink {
+  @include t.body-sm;
+  color: v.$navy-800;
+  font-weight: 600;
+  text-decoration: underline;
+
+  &:hover {
+    color: v.$navy-hover;
+  }
+}
+
+/* 안내 Modal 본문 */
+.startedBody {
+  @include t.body;
+  color: v.$slate;
+
+  p {
+    margin: 0 0 v.$space-3;
+  }
+}
+
+.startedHint {
+  color: v.$ink;
+  font-weight: 600;
+}
+
+.startedActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: v.$space-2;
+  margin-top: v.$space-5;
+}
+
+.startedGhost,
+.startedPrimary {
+  @include t.body-sm;
+  padding: v.$space-3 v.$space-5;
+  border-radius: v.$radius-md;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.startedGhost {
+  border: 1px solid v.$border-strong;
+  background: v.$white;
+  color: v.$slate;
+
+  &:hover {
+    background: v.$page-bg;
+  }
+}
+
+.startedPrimary {
+  border: none;
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+
+  &:hover {
+    background: v.$navy-hover;
+  }
+}
