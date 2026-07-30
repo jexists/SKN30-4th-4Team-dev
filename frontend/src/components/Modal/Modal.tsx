@@ -45,7 +45,7 @@ export function Modal({
   if (!open) return null
 
   return createPortal(
-    <div className={styles.backdrop} onMouseDown={onClose}>
+    <div className={styles.backdrop} onMouseDown={onClose} data-print="hide">
       <div
         ref={dialogRef}
         className={styles.dialog}

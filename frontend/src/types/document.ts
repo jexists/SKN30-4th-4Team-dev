@@ -24,14 +24,5 @@ export interface ContractAnalysis {
   missing_information: string[]
 }
 
-export interface DocumentAnalysisResult {
-  sanitized_text: string
-  redaction_counts: Record<string, number>
-  redaction_scope: string[]
-  mask_count: number
-  coarse_mask_count: number
-  review_required: boolean
-  masked_pdf_media_type: string
-  masked_pdf_base64: string
-  analysis: ContractAnalysis
-}
+// 동기 분석 응답(DocumentAnalysisResult)은 제거됐다. 분석은 이제 작업 큐를 거치므로
+// 결과 타입은 types/analysis.ts 의 AnalysisResult 를 쓴다(마스킹 PDF 는 보관하지 않는다).

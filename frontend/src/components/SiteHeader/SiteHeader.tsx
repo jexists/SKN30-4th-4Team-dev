@@ -4,9 +4,9 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { BRAND } from '../../config/env'
 import { useAuth } from '../../hooks/useAuth'
 import { useAvatarUrl } from '../../hooks/useAvatar'
-import { clearReportAlert, useHasUnreadReportAlert } from '../../hooks/useNotifications'
 import { Drawer } from '../Drawer/Drawer'
-import { Bell, Clock, Menu, Shield } from '../icons'
+import { NotificationBell } from '../NotificationBell/NotificationBell'
+import { Menu, Shield } from '../icons'
 import styles from './SiteHeader.module.scss'
 
 const NAV = [
@@ -18,7 +18,6 @@ const NAV = [
 export function SiteHeader() {
   const { isAuthed } = useAuth()
   const { pathname } = useLocation()
-  const hasUnreadReportAlert = useHasUnreadReportAlert()
   const [navOpen, setNavOpen] = useState(false)
   /*
    * 카카오 인증만 마치고 아직 가입을 끝내지 않은 사용자도 Supabase 세션은 갖는다
@@ -32,7 +31,7 @@ export function SiteHeader() {
   const closeNav = useCallback(() => setNavOpen(false), [])
 
   return (
-    <header className={styles.siteHeader}>
+    <header className={styles.siteHeader} data-print="hide">
       <div className={styles.headerInner}>
         {/* 좁은 화면에서 .nav 대신 서비스 이동을 담당한다(CSS 로 표시 전환). */}
         <button
@@ -67,23 +66,7 @@ export function SiteHeader() {
         <MobileNavDrawer open={navOpen} onClose={closeNav} />
 
         <div className={styles.headerRight}>
-          {showMemberUi && (
-            <>
-              {/* <button className={styles.iconBtn} aria-label="최근 기록">
-                <Clock />
-              </button> */}
-              <button
-                type="button"
-                className={
-                  hasUnreadReportAlert ? `${styles.iconBtn} ${styles.iconBtnAlert}` : styles.iconBtn
-                }
-                aria-label="알림"
-                onClick={clearReportAlert}
-              >
-                <Bell />
-              </button>
-            </>
-          )}
+          {showMemberUi && <NotificationBell />}
 
           {/* <Link to="/chat" className={styles.ctaSm}>
             상담 시작하기

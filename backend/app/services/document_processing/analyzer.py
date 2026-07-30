@@ -65,9 +65,7 @@ class ContractAnalyzer:
             r"(아파트|오피스텔|연립주택|다세대주택|단독주택|다가구주택)", text
         )
         special_terms = [
-            line.strip()
-            for line in text.splitlines()
-            if "특약" in line and len(line.strip()) > 2
+            line.strip() for line in text.splitlines() if "특약" in line and len(line.strip()) > 2
         ][:10]
         terms = ContractTerms(
             deposit=ContractAnalyzer._field_after_label(text, "보증금", "임대차보증금"),

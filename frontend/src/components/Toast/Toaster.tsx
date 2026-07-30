@@ -20,7 +20,7 @@ export function Toaster() {
   if (toasts.length === 0) return null
 
   return createPortal(
-    <div className={styles.viewport}>
+    <div className={styles.viewport} data-print="hide">
       {toasts.map((toast) => {
         const Icon = ICONS[toast.type]
         return (

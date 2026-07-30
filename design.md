@@ -406,7 +406,18 @@ const isMobile = useIsMobile()
 | `RequireAuth` | `components/RequireAuth/` | 라우트 가드 |
 | `ErrorModal` | `components/ErrorModal/` | 글로벌 에러 모달 (store 기반). 모든 API 실패가 여기로 모인다 |
 | `ErrorState` | `components/ErrorState/` | 데이터를 못 불러온 영역의 자리표시 + 다시 시도. `action` 으로 대체 행동(예: "새 대화 시작"), `variant="plain"` 으로 테두리 없는 형태 |
+| `NotificationBell` | `components/NotificationBell/` | 헤더 알림 종 — 안읽음 배지(`99+` 상한)·분석 진행 중 펄스·최근 5건 드롭다운. 좁은 화면에서는 드롭다운 대신 `/notifications` 로 이동 |
 | `icons` | `components/icons.tsx` | stroke 아이콘 |
+
+> **이동할 곳이 없는 알림 행은 클릭 가능해 보이지 않게 그린다.** 경로 판정은
+> `components/NotificationBell/notificationLink.ts` 한 곳에서만 하고, 경로를 돌려주면 `<button>`
+> (커서 pointer·호버 강조·끝에 화살표), `null` 이면 `<div>`(호버 효과 없음)로 렌더한다.
+> 눌렀는데 아무 일도 일어나지 않는 행은 고장처럼 보인다.
+>
+> **인쇄에서 걷어낼 화면 크롬에는 `data-print="hide"` 를 붙인다.** 위험 리포트의 "PDF 다운로드"가
+> `window.print()` 라서 사이트 헤더·푸터·토스트·모달이 종이에 섞이면 안 된다. `header`/`footer`
+> 요소 선택자로 잡으면 페이지 안의 `<header>` 까지 사라지므로, 숨길 대상에만 속성을 단다
+> (규칙 본체는 `styles/main.scss`).
 
 > **API 실패는 Empty State 로 그리지 않는다.** "데이터가 없습니다" 는 성공 응답의 0건 전용이고,
 > 실패한 영역에는 `<ErrorState />` 를 놓는다(원인 안내는 보통 `ErrorModal` 이 맡음). 자세한 규칙은

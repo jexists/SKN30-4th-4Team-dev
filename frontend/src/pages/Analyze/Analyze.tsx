@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { analyzeDocuments } from '../../api/documents'
+import { startAnalysis } from '../../api/analyses'
+import { Modal } from '../../components/Modal/Modal'
 import { showToast } from '../../components/Toast/toastStore'
 import {
   AddCircle,
@@ -16,7 +17,7 @@ import {
   Upload,
 } from '../../components/icons'
 import { BRAND } from '../../config/env'
-import { isReportAlertsEnabled, markReportGenerated } from '../../hooks/useNotifications'
+import { markAnalysisStarted } from '../../hooks/useNotifications'
 import styles from './Analyze.module.scss'
 import {
   ACCEPT_ATTR,
@@ -88,6 +89,10 @@ const GUIDE = [
 export function Analyze() {
   const navigate = useNavigate()
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  // 접수된 작업 id. Modal 을 닫아도 남겨 두어 진행 중임을 화면에 계속 보여준다.
+  const [startedJobId, setStartedJobId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const idempotencyKey = useRef<string | null>(null)
   const [files, setFiles] = useState<Record<SlotKey, File[]>>({
     register: [],
     contract: [],
@@ -107,6 +112,7 @@ export function Analyze() {
       Array.from(incoming),
       MAX_TOTAL_FILES - totalCount,
     )
+    idempotencyKey.current = null // 다른 서류 묶음이면 다른 요청이다
     setFiles((prev) => ({ ...prev, [slot.key]: merged }))
     // 거부는 카드 안 문구가 아니라 토스트로 알린다 — 어떤 서류의 어떤 파일인지까지 담긴다.
     for (const notice of describeRejections(rejected, slot.title)) {
@@ -115,6 +121,7 @@ export function Analyze() {
   }
 
   function removeFile(slot: SlotKey, key: string) {
+    idempotencyKey.current = null
     setFiles((prev) => ({ ...prev, [slot]: prev[slot].filter((file) => fileKey(file) !== key) }))
   }
 
@@ -122,15 +129,19 @@ export function Analyze() {
     // 백엔드는 파일을 순서대로 이어붙여 한 번에 분석한다 — 같은 서류의 장들이 흩어지지
     // 않도록 카드 단위로 묶어서 보낸다.
     const documents = SLOTS.flatMap((slot) => files[slot.key])
-    if (!allUploaded || isAnalyzing) return
+    if (!allUploaded || isAnalyzing || startedJobId) return
     setIsAnalyzing(true)
     try {
-      const result = await analyzeDocuments(documents)
-      if (isReportAlertsEnabled()) {
-        markReportGenerated()
-        showToast('위험보고서가 생성되었습니다!', 'info')
-      }
-      navigate('/risk-report', { state: { documentAnalysis: result } })
+      // 같은 서류 묶음으로 다시 눌러도 분석이 두 번 돌지 않게 한다. 응답을 못 받았을 뿐
+      // 서버는 이미 접수했을 수 있기 때문이다(키는 파일이 바뀌면 새로 만든다).
+      idempotencyKey.current ??= crypto.randomUUID()
+      const job = await startAnalysis(documents, idempotencyKey.current)
+      markAnalysisStarted()
+      setStartedJobId(job.id)
+      setModalOpen(true)
+    } catch {
+      // 문구는 서버가 소유한다 — client.ts 가 이미 오류 모달을 띄웠다.
+      // 여기서는 안내 Modal 을 열지 않는 것으로 충분하다.
     } finally {
       setIsAnalyzing(false)
     }
@@ -187,14 +198,24 @@ export function Analyze() {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                className={styles.diagnoseBtn}
-                disabled={!allUploaded || isAnalyzing}
-                onClick={handleDiagnose}
-              >
-                <Search /> {isAnalyzing ? '진단 중...' : 'OCR 진단하기'}
-              </button>
+              {/* 접수된 뒤에도 버튼을 잠근 채 남겨 둔다 — 왜 다시 못 누르는지(중복 방지)가
+                  화면으로 설명되고, 알림을 놓쳐도 "결과 보기"로 되돌아갈 길이 생긴다. */}
+              <div className={styles.statusActions}>
+                <button
+                  type="button"
+                  className={styles.diagnoseBtn}
+                  disabled={!allUploaded || isAnalyzing || startedJobId !== null}
+                  onClick={handleDiagnose}
+                >
+                  <Search />{' '}
+                  {startedJobId ? '분석 진행 중...' : isAnalyzing ? '접수 중...' : 'OCR 진단하기'}
+                </button>
+                {startedJobId && (
+                  <Link to={`/risk-report/${startedJobId}`} className={styles.resultLink}>
+                    결과 보기
+                  </Link>
+                )}
+              </div>
             </div>
 
             <section className={styles.guide}>
@@ -226,6 +247,29 @@ export function Analyze() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="AI 분석을 시작했습니다."
+        describedBy="analysis-started-desc"
+      >
+        <div id="analysis-started-desc" className={styles.startedBody}>
+          <p>분석에는 약 30초~2분 정도 소요될 수 있습니다.</p>
+          <p>분석이 완료되면 알림으로 알려드리겠습니다.</p>
+          <p className={styles.startedHint}>
+            기다리시는 동안 AI 상담을 이용해 궁금한 점을 물어보세요.
+          </p>
+        </div>
+        <div className={styles.startedActions}>
+          <button type="button" className={styles.startedGhost} onClick={() => setModalOpen(false)}>
+            닫기
+          </button>
+          <button type="button" className={styles.startedPrimary} onClick={() => navigate('/chat')}>
+            AI 상담하기
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }

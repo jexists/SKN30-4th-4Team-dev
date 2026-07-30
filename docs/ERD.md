@@ -115,9 +115,44 @@ erDiagram
     notification {
         uuid id PK
         uuid user_id FK "app_user"
+        text type "GENERAL|WELCOME|ANALYSIS_*"
+        text resource_type "nullable, ANALYSIS_JOB"
+        uuid resource_id "nullable"
         text title
         text content
-        boolean is_read
+        text dedupe_key "nullable, user_id 와 UNIQUE"
+        timestamptz read_at "nullable = 안읽음"
+        timestamptz deleted_at "nullable = 살아있음"
+        timestamptz created_at
+    }
+    analysis_job {
+        uuid id PK
+        uuid user_id FK "app_user"
+        text idempotency_key "nullable, user_id 와 UNIQUE"
+        text status "QUEUED|RUNNING|SUCCEEDED|FAILED|CANCELLED"
+        text stage "nullable, UPLOADING~COMPLETED"
+        integer progress "0~100"
+        integer attempt_count
+        jsonb file_names
+        text error_code "nullable"
+        text error_message "nullable"
+        text locked_by "nullable, 워커 식별자"
+        timestamptz lease_expires_at "nullable"
+        timestamptz heartbeat_at "nullable"
+        timestamptz queued_at
+        timestamptz started_at "nullable"
+        timestamptz finished_at "nullable"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    analysis_result {
+        uuid id PK
+        uuid job_id FK "UNIQUE"
+        uuid user_id FK "app_user"
+        text title "nullable"
+        text summary "nullable"
+        text risk_level "nullable, LOW|MEDIUM|HIGH"
+        jsonb payload "마스킹 PDF 제외"
         timestamptz created_at
     }
     document {
@@ -147,7 +182,9 @@ erDiagram
     app_user ||--o{ chat_room : "owns"
     app_user ||--o{ contract : "uploads"
     app_user ||--o{ notification : "receives"
+    app_user ||--o{ analysis_job : "requests"
     app_user ||--o{ feedback : "writes"
+    analysis_job ||--o| analysis_result : "produces"
     chat_room ||--o{ chat_message : "contains"
     chat_message ||--o| feedback : "rated_by"
     chat_message ||--o{ message_source : "cites"
@@ -301,11 +338,69 @@ ASSISTANT 답변이 참조한 지식베이스 청크를 기록 → **출처 인�
 |------|------|---------|------|
 | id | UUID | PK | 알림 ID |
 | user_id | UUID | FK→`app_user` | 수신 사용자 |
+| type | TEXT | CHECK(`GENERAL`\|`WELCOME`\|`ANALYSIS_STARTED`\|`ANALYSIS_COMPLETED`\|`ANALYSIS_FAILED`) | 알림 종류 |
+| resource_type | TEXT | NULL, CHECK(`ANALYSIS_JOB`) | 연결 대상 종류 |
+| resource_id | UUID | NULL | 연결 대상 ID |
 | title | TEXT | | 알림 제목 |
 | content | TEXT | | 알림 내용 |
-| is_read | BOOLEAN | | 읽음 여부 |
+| dedupe_key | TEXT | NULL | 중복 생성 방지 키 |
+| read_at | TIMESTAMPTZ | NULL | 읽은 시각 (NULL = 안읽음) |
+| deleted_at | TIMESTAMPTZ | NULL | soft delete 시각 (NULL = 살아있음) |
 | created_at | TIMESTAMPTZ | | 생성 일시 |
-| — | | INDEX(user_id, is_read) | 안읽음 조회 |
+| — | | INDEX(user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL | 전체 탭 커서 조회 |
+| — | | INDEX(user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL AND read_at IS NULL | 안읽음 탭 + Badge |
+| — | | UNIQUE(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL | 같은 사건 알림 1건 |
+
+> **`is_read`·`is_deleted` 불리언을 두지 않는다.** `read_at`/`deleted_at` 이 같은 사실을 더 많은
+> 정보와 함께 표현한다. 두 컬럼이 한 사실을 나눠 가지면 `is_read=true` 인데 `read_at IS NULL`
+> 같은 불일치가 생기고, 갱신할 때마다 둘을 같이 써야 한다.
+>
+> **`dedupe_key` 는 삭제된 행도 본다.** 사용자가 가입 축하 알림을 지운 뒤 트리거가 다시 돌아도
+> 중복이 생기지 않아야 하므로, 이 UNIQUE 인덱스에는 일부러 `deleted_at IS NULL` 을 넣지 않았다.
+> 분석 알림은 `analysis:{job_id}:{status}` 를 키로 쓴다.
+
+### 11-a. analysis_job — AI 분석 작업(비동기 큐) ★신규
+분석 요청 1건 = 이 테이블 1행. **DB 자체가 작업 큐**이며 인프로세스 워커가
+`FOR UPDATE SKIP LOCKED` 로 선점한다(Redis/Celery 미도입).
+
+| 컬럼 | 타입 | 키/제약 | 설명 |
+|------|------|---------|------|
+| id | UUID | PK | 작업 ID (= `/risk-report/:jobId`) |
+| user_id | UUID | FK→`app_user` | 요청자 |
+| idempotency_key | TEXT | NULL | 클라이언트가 준 재전송 방지 키 |
+| status | TEXT | CHECK(`QUEUED`\|`RUNNING`\|`SUCCEEDED`\|`FAILED`\|`CANCELLED`) | 상태 머신 |
+| stage | TEXT | NULL, CHECK(`UPLOADING`~`COMPLETED`) | 진행 단계(참고용) |
+| progress | INTEGER | CHECK(0~100) | 진행률 |
+| attempt_count | INTEGER | | 시도 횟수 (일시적 오류만 재시도) |
+| file_names | JSONB | | 업로드 원본 파일명 목록 |
+| error_code / error_message | TEXT | NULL | 실패 사유 (message 는 그대로 사용자에게 보인다) |
+| locked_by | TEXT | NULL | 선점한 워커 식별자 |
+| lease_expires_at | TIMESTAMPTZ | NULL | 임대 만료 — 지나면 좀비로 보고 FAILED 처리 |
+| heartbeat_at | TIMESTAMPTZ | NULL | 마지막 생존 신호 |
+| queued_at / started_at / finished_at | TIMESTAMPTZ | | 큐 진입·시작·종료 시각 |
+| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 |
+| — | | INDEX(queued_at) WHERE status='QUEUED' | 다음 작업 선점 |
+| — | | INDEX(lease_expires_at) WHERE status='RUNNING' | 만료 임대 회수 |
+| — | | UNIQUE(user_id) WHERE status IN ('QUEUED','RUNNING') | 회원당 진행 중 1건 |
+| — | | UNIQUE(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL | 재전송 방지 |
+
+> **재시작하면 진행 중 작업은 재큐잉이 아니라 FAILED 다.** 업로드 원본을 임시 디렉터리에만
+> 두므로 되살릴 수 없다. 재시도는 워커가 살아 있는 동안의 일시적 오류(429·5xx)에 한해
+> 지수 백오프로만 한다.
+
+### 11-b. analysis_result — 분석 결과 ★신규
+작업과 1:1. 목록 조회가 수십 KB 짜리 `payload` 를 읽지 않도록 `title`·`risk_level` 을 따로 둔다.
+
+| 컬럼 | 타입 | 키/제약 | 설명 |
+|------|------|---------|------|
+| id | UUID | PK | 결과 ID |
+| job_id | UUID | FK→`analysis_job`, UNIQUE | 작업 ID (1:1) |
+| user_id | UUID | FK→`app_user` | 소유자 (조회 시 소유권 검증) |
+| title | TEXT | NULL | 목록용 제목 |
+| summary | TEXT | NULL | 목록용 요약 |
+| risk_level | TEXT | NULL, CHECK(`LOW`\|`MEDIUM`\|`HIGH`) | 목록용 위험 등급 |
+| payload | JSONB | | 리포트 전체. **마스킹 PDF 는 저장하지 않는다** |
+| created_at | TIMESTAMPTZ | | 생성 일시 |
 
 ### 12. document — 지식베이스 원문 메타 ★신규
 RAG 검색 대상인 법령·판례·가이드 원문의 메타데이터.
@@ -354,6 +449,8 @@ RAG 검색 대상인 법령·판례·가이드 원문의 메타데이터.
 | app_user | contract | 1 : N | 사용자당 계약서 여러 개 |
 | contract | contract_analysis | 1 : 1 | 계약서당 분석 결과 하나 |
 | app_user | notification | 1 : N | 사용자에게 알림 여러 개 |
+| app_user | analysis_job | 1 : N | 사용자당 분석 작업 여러 개 (진행 중은 1건) |
+| analysis_job | analysis_result | 1 : 1 | 작업당 결과 하나 (성공 시에만) |
 | document | document_chunk | 1 : N | 문서 → 청크 분할 |
 
 ---

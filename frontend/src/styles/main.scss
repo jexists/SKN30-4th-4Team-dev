@@ -14,3 +14,19 @@ body {
 a {
   color: inherit;
 }
+
+/*
+  인쇄 = "PDF 다운로드"(위험 리포트가 window.print() 를 부른다).
+  화면에서만 의미 있는 크롬(사이트 헤더·푸터·토스트·모달·개발용 칩)은 종이에 남기지 않는다.
+  요소 선택자(header/footer)로 잡으면 페이지 안의 <header> 까지 사라지므로,
+  숨길 것에 data-print="hide" 를 직접 붙인다.
+*/
+@media print {
+  [data-print='hide'] {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}

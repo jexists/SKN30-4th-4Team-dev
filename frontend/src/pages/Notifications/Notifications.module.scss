@@ -1,0 +1,399 @@
+@use '../../styles/variables' as v;
+
+.page {
+  background: v.$page-bg;
+  padding: v.$space-10 0 v.$space-20;
+  min-height: 100%;
+}
+.container {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding-inline: v.$space-6;
+}
+
+/* ══════════════ 헤더 ══════════════ */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$space-3;
+  margin-bottom: v.$space-5;
+}
+.title {
+  margin: 0;
+  font-size: v.$font-size-4xl;
+  font-weight: v.$font-weight-extrabold;
+  letter-spacing: v.$tracking-snug;
+  color: v.$navy-900;
+}
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: v.$space-4;
+}
+.linkBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: v.$navy-800;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  &:disabled {
+    color: v.$text-placeholder;
+    cursor: not-allowed;
+  }
+}
+.linkDanger {
+  color: v.$red;
+}
+
+/* ══════════════ 탭 ══════════════ */
+.tabs {
+  display: flex;
+  gap: v.$space-1;
+  margin-bottom: v.$space-4;
+  padding: v.$space-1;
+  border-radius: v.$radius-md;
+  background: v.$pill;
+}
+.tab {
+  flex: 1;
+  padding: v.$space-2 v.$space-4;
+  border: none;
+  border-radius: v.$radius-sm;
+  background: transparent;
+  color: v.$slate;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  cursor: pointer;
+  transition:
+    background v.$transition-base,
+    color v.$transition-base;
+}
+.tabActive {
+  background: v.$surface;
+  color: v.$navy-900;
+  box-shadow: v.$shadow-xs;
+}
+
+.selectAll {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  margin-bottom: v.$space-2;
+  padding: v.$space-2 v.$space-1;
+  color: v.$slate;
+  font-size: v.$font-size-sm;
+  font-weight: v.$font-weight-medium;
+  cursor: pointer;
+}
+
+/* ══════════════ 목록 ══════════════ */
+.list {
+  background: v.$surface;
+  border: 1px solid v.$border-default;
+  border-radius: v.$radius-lg;
+  overflow: hidden;
+}
+.rowWrap {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid v.$border-subtle;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+/* 체크박스는 행 클릭 영역 밖에 둔다 — 선택하려다 화면이 이동하면 안 된다.
+   터치 타깃 44px 을 지키려고 폭·패딩을 함께 잡는다. */
+.checkbox {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  padding-inline: v.$space-3;
+  cursor: pointer;
+}
+.row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: v.$space-3;
+  padding: v.$space-4 v.$space-5;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+.rowUnread {
+  background: v.$blue-soft;
+}
+/* 이동할 곳이 있는 행만 눌러도 된다고 말한다. */
+.rowLink {
+  cursor: pointer;
+  transition: background v.$transition-fast;
+
+  &:hover {
+    background: v.$page-bg;
+  }
+}
+.rowIcon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: v.$radius-sm;
+  background: v.$pill;
+  color: v.$slate;
+
+  svg {
+    width: 17px;
+    height: 17px;
+  }
+}
+.rowIconUnread {
+  background: v.$navy-800;
+  color: v.$text-on-dark;
+}
+.rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-1;
+}
+.rowTitle {
+  font-size: v.$font-size-base;
+  font-weight: v.$font-weight-semibold;
+  color: v.$ink;
+}
+.rowUnread .rowTitle {
+  font-weight: v.$font-weight-bold;
+  color: v.$navy-900;
+}
+.rowContent {
+  font-size: v.$font-size-md;
+  line-height: v.$line-height-relaxed;
+  color: v.$slate;
+}
+.rowTime {
+  flex-shrink: 0;
+  color: v.$text-placeholder;
+  font-size: v.$font-size-xs;
+  white-space: nowrap;
+}
+.rowArrow {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 3px;
+  color: v.$text-placeholder;
+}
+
+.listEnd {
+  margin: 0;
+  padding: v.$space-5;
+  text-align: center;
+  color: v.$text-placeholder;
+  font-size: v.$font-size-sm;
+}
+.sentinel {
+  min-height: v.$space-10;
+}
+
+/* ══════════════ 빈 상태 ══════════════ */
+/* API 실패는 여기로 오지 않는다 — <ErrorState /> 가 따로 그린다. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: v.$space-2;
+  padding: v.$space-16 v.$space-6;
+  text-align: center;
+}
+.emptyIcon {
+  width: 40px;
+  height: 40px;
+  color: v.$text-placeholder;
+}
+.emptyTitle {
+  margin: 0;
+  font-size: v.$font-size-lg;
+  font-weight: v.$font-weight-semibold;
+  color: v.$ink;
+}
+.emptyDesc {
+  margin: 0;
+  color: v.$slate;
+  font-size: v.$font-size-md;
+}
+
+/* ══════════════ 스켈레톤 ══════════════ */
+.skeletonRow {
+  display: flex;
+  align-items: flex-start;
+  gap: v.$space-3;
+  padding: v.$space-4 v.$space-5;
+  border-bottom: 1px solid v.$border-subtle;
+}
+.skeletonIcon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: v.$radius-sm;
+  background: v.$border-subtle;
+}
+.skeletonText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  padding-top: v.$space-1;
+}
+.skeletonLine {
+  height: 12px;
+  border-radius: v.$radius-xs;
+  background: linear-gradient(90deg, v.$border-subtle, v.$page-bg, v.$border-subtle);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.skeletonLineShort {
+  width: 60%;
+}
+
+/* ══════════════ 선택 액션바 ══════════════ */
+/* 모바일에서 엄지로 닿는 자리에 고정한다. 홈 인디케이터에 가리지 않게 safe-area 를 더한다. */
+.actionBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: v.$z-fab;
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  padding: v.$space-3 v.$space-5;
+  padding-bottom: calc(#{v.$space-3} + env(safe-area-inset-bottom));
+  background: v.$glass-surface;
+  backdrop-filter: blur(8px);
+  border-top: 1px solid v.$border-strong;
+  box-shadow: v.$shadow-lg;
+}
+.actionCount {
+  flex: 1;
+  color: v.$slate;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+}
+.actionBtn {
+  min-height: 44px;
+  padding: v.$space-2 v.$space-4;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-md;
+  background: v.$surface;
+  color: v.$navy-800;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  cursor: pointer;
+  transition: background v.$transition-base;
+
+  &:hover:not(:disabled) {
+    background: v.$page-bg;
+  }
+  &:disabled {
+    color: v.$text-placeholder;
+    cursor: not-allowed;
+  }
+}
+.actionDanger {
+  color: v.$red;
+
+  &:hover:not(:disabled) {
+    background: v.$red-soft;
+  }
+}
+
+/* ══════════════ 삭제 확인 모달 ══════════════ */
+.confirmBody {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+}
+.confirmQuestion {
+  margin: 0;
+  font-size: v.$font-size-lg;
+  font-weight: v.$font-weight-semibold;
+  color: v.$ink;
+}
+.confirmWarning {
+  margin: 0;
+  color: v.$slate;
+  font-size: v.$font-size-md;
+  line-height: v.$line-height-relaxed;
+}
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: v.$space-3;
+  margin-top: v.$space-5;
+}
+.btnGhost,
+.btnDanger {
+  min-width: 96px;
+  padding: v.$space-3 v.$space-5;
+  border-radius: v.$radius-md;
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+.btnGhost {
+  border: 1px solid v.$border-strong;
+  background: v.$surface;
+  color: v.$slate;
+}
+.btnDanger {
+  border: 1px solid v.$red;
+  background: v.$red;
+  color: v.$text-on-dark;
+
+  &:hover:not(:disabled) {
+    background: v.$red-hover;
+    border-color: v.$red-hover;
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonLine {
+    animation: none;
+  }
+}
+
+@media (max-width: v.$bp-md) {
+  .page {
+    padding: v.$space-6 0 v.$space-24;
+  }
+  .container {
+    padding-inline: v.$space-4;
+  }
+  .row {
+    padding: v.$space-4;
+  }
+}

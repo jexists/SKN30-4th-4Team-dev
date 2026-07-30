@@ -1,0 +1,38 @@
+import type { AnalysisJob, AnalysisJobDetail, AnalysisJobSummary } from '../types/analysis'
+import type { Page } from '../types/api'
+import { apiGet, apiPostForm } from './client'
+
+const BASE = '/api/v1/analyses'
+
+/**
+ * 분석을 접수한다. **분석이 끝날 때까지 기다리지 않고** 202 + 작업 id 만 받는다.
+ *
+ * idempotencyKey 는 같은 요청의 재전송(더블클릭·네트워크 재시도)이 분석을 두 번 돌리지
+ * 않게 한다 — 서버가 같은 키의 기존 작업을 그대로 돌려준다.
+ */
+export function startAnalysis(files: File[], idempotencyKey?: string): Promise<AnalysisJob> {
+  const form = new FormData()
+  for (const file of files) {
+    // FastAPI 의 list[UploadFile] 계약에 맞춰 같은 필드 이름을 반복한다.
+    form.append('file', file)
+  }
+  return apiPostForm<AnalysisJob>(BASE, form, {
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+  })
+}
+
+/**
+ * 작업 상태 + (끝났으면) 결과.
+ *
+ * silent 인 이유: 결과 화면이 폴링으로 반복 호출하므로, 일시적 실패마다 오류 모달이 뜨면
+ * 화면을 덮어버린다. 화면이 <ErrorState /> 로 직접 표현한다.
+ */
+export function getAnalysis(jobId: string, silent = false): Promise<AnalysisJobDetail> {
+  return apiGet<AnalysisJobDetail>(`${BASE}/${jobId}`, { silent })
+}
+
+export function listAnalyses(cursor?: string | null, limit = 20): Promise<Page<AnalysisJobSummary>> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (cursor) params.set('cursor', cursor)
+  return apiGet<Page<AnalysisJobSummary>>(`${BASE}?${params}`)
+}

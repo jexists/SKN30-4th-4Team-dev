@@ -10,7 +10,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
-from app.models.notification import WELCOME_CONTENT, WELCOME_TITLE, Notification
+from app.models.notification import (
+    WELCOME_CONTENT,
+    WELCOME_DEDUPE_KEY,
+    WELCOME_TITLE,
+    Notification,
+    NotificationType,
+)
 from app.repositories.auth import AuthRepository
 from app.services.notification import create_welcome_notification
 
@@ -46,7 +52,10 @@ def test_creates_welcome_notification_with_required_columns(session_factory):
         assert notification.user_id == user_id
         assert notification.title == WELCOME_TITLE
         assert notification.content == WELCOME_CONTENT
-        assert notification.is_read is False
+        assert notification.type == NotificationType.WELCOME
+        assert notification.dedupe_key == WELCOME_DEDUPE_KEY
+        assert notification.read_at is None
+        assert notification.deleted_at is None
         assert notification.created_at is not None
 
 
@@ -70,7 +79,15 @@ def test_unique_index_blocks_duplicate_that_slips_past_the_check(session_factory
         create_welcome_notification(db, user_id)
 
     with session_factory() as db:
-        db.add(Notification(user_id=user_id, title=WELCOME_TITLE, content=WELCOME_CONTENT))
+        db.add(
+            Notification(
+                user_id=user_id,
+                type=NotificationType.WELCOME.value,
+                title=WELCOME_TITLE,
+                content=WELCOME_CONTENT,
+                dedupe_key=WELCOME_DEDUPE_KEY,
+            )
+        )
         with pytest.raises(SQLAlchemyError):
             db.commit()
 
@@ -83,7 +100,7 @@ def test_failure_is_swallowed_so_signup_never_fails(session_factory, monkeypatch
         raise SQLAlchemyError("DB down")
 
     monkeypatch.setattr(
-        "app.repositories.notification.NotificationRepository.exists_by_title", boom
+        "app.repositories.notification.NotificationRepository.exists_by_dedupe", boom
     )
 
     with session_factory() as db:
@@ -110,7 +127,7 @@ def test_kakao_signup_api_creates_welcome_notification(kakao_client):
         assert notification.user_id == uuid.UUID(claims["sub"])
         assert notification.title == WELCOME_TITLE
         assert notification.content == WELCOME_CONTENT
-        assert notification.is_read is False
+        assert notification.read_at is None
 
 
 def test_kakao_signup_succeeds_even_if_notification_fails(kakao_client, monkeypatch):
@@ -121,7 +138,7 @@ def test_kakao_signup_succeeds_even_if_notification_fails(kakao_client, monkeypa
         raise SQLAlchemyError("DB down")
 
     monkeypatch.setattr(
-        "app.repositories.notification.NotificationRepository.exists_by_title", boom
+        "app.repositories.notification.NotificationRepository.exists_by_dedupe", boom
     )
 
     response = client.post(
@@ -148,13 +165,18 @@ def test_email_signup_trigger_creates_welcome_notification():
     assert "insert into public.notification" in sql
     assert "회원가입을 축하합니다." in sql
     assert "ai 분석으로 안전한 계약을 시작해보세요." in sql
+    # dedupe_key 를 빠뜨리면 uq_notification_dedupe 가 걸리지 않아 중복 방지가 통째로 풀린다.
+    assert f"'{WELCOME_DEDUPE_KEY}'" in sql
     # 카카오 식별자는 위에서 return 하므로 알림 INSERT 까지 내려오지 않는다.
     provider_guard = "new.raw_app_meta_data->>'provider' = 'kakao'"
     assert sql.index(provider_guard) < sql.index("insert into public.notification")
 
 
-def test_schema_has_welcome_dedupe_index():
+def test_schema_has_dedupe_index():
+    """중복 방지는 가입 축하 전용 인덱스가 아니라 범용 dedupe_key 인덱스가 맡는다."""
     sql = Path("sql/schema.sql").read_text(encoding="utf-8").lower()
 
-    assert "uq_notification_welcome" in sql
-    assert "회원가입을 축하합니다." in sql
+    assert "uq_notification_dedupe" in sql
+    assert "on notification (user_id, dedupe_key) where dedupe_key is not null" in sql
+    # 가입 축하 전용 인덱스는 위 범용 규칙으로 흡수됐다 — 되살아나면 특수 케이스가 다시 생긴다.
+    assert "create unique index if not exists uq_notification_welcome" not in sql
