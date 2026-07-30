@@ -106,12 +106,16 @@ cp ocr-worker/.env.example ocr-worker/.env
 
 | 파일 | 채울 값 |
 |---|---|
-| `.env` | `SITE_ADDRESS=내도메인`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+| `.env` | `SITE_ADDRESS=내도메인`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, (선택) `VITE_KAKAO_MAP_JS_KEY` |
 | `backend/.env` | `APP_DB_URL`(Supabase **Transaction pooler :6543**), `INGEST_DATABASE_URL`, `SUPABASE_URL`, `OPENAI_API_KEY` |
 | `ocr-worker/.env` | `OCR_PROVIDER=tesseract` (그 외 기본값 그대로) |
 
 `ocr-worker/.env` 의 `OCR_VL_MODEL_DIR` 과 `backend/.env` 의 `OCR_WORKER_URL` 은
 `docker-compose.prod.yml` 이 컨테이너 값으로 덮어쓰므로 신경 쓰지 않아도 된다.
+
+`VITE_KAKAO_MAP_JS_KEY` 는 비워도 배포가 된다 — 위험 보고서의 위치 카드가 지도 대신 핀 대체
+화면으로 뜨고 주소 텍스트는 그대로 보인다. 넣을 때는 카카오 개발자센터 **플랫폼 → Web** 에
+운영 도메인(`https://내도메인`)을 등록해야 한다. 미등록이면 키가 맞아도 지도가 뜨지 않는다.
 
 ## 4. DNS
 

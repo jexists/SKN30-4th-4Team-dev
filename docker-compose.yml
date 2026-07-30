@@ -58,6 +58,8 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        # 선택 — 비면 위험 보고서의 위치 카드가 핀 대체 화면으로 뜬다.
+        VITE_KAKAO_MAP_JS_KEY: ${VITE_KAKAO_MAP_JS_KEY:-}
     ports:
       - "5173:80"
     depends_on:

@@ -1,8 +1,8 @@
-@use "../../styles/variables" as v;
-@use "../../styles/typography" as t;
+@use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
 
 .page {
-  background: v.$page-bg;
+  // background: v.$page-bg;
   padding: 40px 0 80px;
   min-height: 100%;
 }
@@ -607,6 +607,10 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
+/* 월세 계약은 칸이 하나 더 붙는다(계약 유형·보증금·월세·계약 기간). */
+.financeGridQuad {
+  grid-template-columns: repeat(4, 1fr);
+}
 .financeStat {
   padding: 16px;
   border-radius: 12px;
@@ -917,15 +921,11 @@
 .visualArtBuilding .visualArtIcon {
   color: #aab6d6;
 }
-.visualArtMap .visualArtIcon {
-  color: v.$navy-800;
-  opacity: 0.35;
-}
 .visualOverlay {
   position: absolute;
   inset: auto 0 0 0;
   padding: 22px;
-  background: linear-gradient(to top, rgba(15, 26, 53, 0.85), transparent);
+  background: linear-gradient(to top, v.$scrim-dark, transparent);
 }
 .visualOverlayTitle {
   margin: 0 0 6px;
@@ -937,12 +937,31 @@
   margin: 0;
   font-size: 13.5px;
   line-height: 1.55;
-  color: #d7deee;
+  color: v.$text-on-dark-muted;
+}
+/* 지도 카드의 상단 스크림. 카카오 로고·출처가 하단 모서리에 있어 아래를 덮을 수 없다. */
+.mapCaption {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  padding: v.$space-5;
+  background: linear-gradient(to bottom, v.$scrim-dark, transparent);
+}
+.mapAddress {
+  @include t.body-sm;
+  margin: 0;
+  color: v.$text-on-dark-muted;
+  /* 도로명 + 건물명까지 붙은 주소는 한 줄을 넘긴다. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .visualBadge {
-  position: absolute;
-  top: 20px;
-  left: 20px;
+  align-self: flex-start;
   padding: 6px 14px;
   border-radius: 999px;
   background: v.$navy-800;
@@ -964,9 +983,14 @@
   .visualGrid {
     grid-template-columns: 1fr;
   }
+  /* 4칸은 좁은 화면에서 금액이 줄바꿈된다. 특이도가 같으므로 순서로 이긴다. */
+  .financeGridQuad {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 @media (max-width: 640px) {
-  .financeGrid {
+  .financeGrid,
+  .financeGridQuad {
     grid-template-columns: 1fr;
   }
   .headerActions {
@@ -1019,5 +1043,13 @@
   }
   .actionCta {
     display: none;
+  }
+  /* 지도는 인쇄되지 않고 핀 대체 화면만 남는다(KakaoMap.module.scss). 배경 그라디언트는
+     브라우저 설정에 따라 사라지므로 주소를 흰 글씨로 남기면 안 보인다. */
+  .mapCaption {
+    background: none;
+  }
+  .mapAddress {
+    color: v.$slate;
   }
 }

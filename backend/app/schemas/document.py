@@ -24,10 +24,15 @@ class OcrAnalysisResult(BaseModel):
 
 
 class ContractTerms(BaseModel):
+    # 계약 유형·소재지는 나중에 추가된 필드다. 리포트 전문은 analysis_result.payload
+    # JSONB 한 덩어리로 저장되므로 예전 레코드에는 이 키가 아예 없다 —
+    # 기본값 None 이 없으면 과거 분석을 다시 열 때 재검증이 터진다.
+    contract_type: Literal["전세", "월세"] | None = None
     deposit: str | None = None
     monthly_rent: str | None = None
     contract_start: str | None = None
     contract_end: str | None = None
+    address: str | None = None
     property_type: str | None = None
     special_terms: list[str] = Field(default_factory=list)
 

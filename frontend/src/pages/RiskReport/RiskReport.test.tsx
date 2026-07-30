@@ -75,10 +75,12 @@ const RESULT = {
   analysis: {
     summary: '보증금 대비 선순위 채권이 많아 주의가 필요합니다.',
     terms: {
+      contract_type: '전세' as const,
       deposit: '3억 원',
       monthly_rent: '없음',
       contract_start: '2026-08-01',
       contract_end: '2028-07-31',
+      address: '서울특별시 강남구 테헤란로 123',
       property_type: '아파트',
       special_terms: [],
     },
@@ -194,11 +196,112 @@ describe('RiskReport 완료', () => {
     renderReport('/risk-report/job-1')
 
     expect(await screen.findByRole('heading', { name: '종합 리스크 리포트' })).toBeInTheDocument()
-    expect(screen.getByText('계약 유형: 아파트')).toBeInTheDocument()
+    expect(screen.getByText('건물 유형: 아파트')).toBeInTheDocument()
     expect(screen.getByText('3억 원')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '수선 책임 전가' })).toBeInTheDocument()
     // 예전 하드코딩 샘플이 다시 새어나오지 않는지.
     expect(screen.queryByText(/선순위 권리 유지/)).not.toBeInTheDocument()
+  })
+
+  it('전세면 월세 칸을 그리지 않는다', async () => {
+    renderReport('/risk-report/job-1')
+
+    expect(await screen.findByText('계약 유형')).toBeInTheDocument()
+    expect(screen.getByText('전세')).toBeInTheDocument()
+    expect(screen.queryByText('월세')).not.toBeInTheDocument()
+  })
+
+  it('월세면 보증금과 월세를 함께 그린다', async () => {
+    getAnalysis.mockResolvedValue(
+      job('SUCCEEDED', {
+        result: {
+          ...RESULT,
+          analysis: {
+            ...RESULT.analysis,
+            terms: {
+              ...RESULT.analysis.terms,
+              contract_type: '월세' as const,
+              monthly_rent: '70만원',
+            },
+          },
+        },
+      }),
+    )
+    renderReport('/risk-report/job-1')
+
+    // "월세" 는 두 번 나온다 — 계약 유형 값과 월세 칸 라벨.
+    expect(await screen.findAllByText('월세')).toHaveLength(2)
+    expect(screen.getByText('70만원')).toBeInTheDocument()
+    expect(screen.getByText('3억 원')).toBeInTheDocument()
+  })
+
+  it('contract_type 이 없는 예전 분석도 월세 원문으로 유형을 메운다', async () => {
+    // 결과 전문이 JSONB 한 덩어리라 예전 레코드에는 이 키가 아예 없다.
+    getAnalysis.mockResolvedValue(
+      job('SUCCEEDED', {
+        result: {
+          ...RESULT,
+          analysis: {
+            ...RESULT.analysis,
+            terms: { ...RESULT.analysis.terms, contract_type: null, monthly_rent: '금 오십만원정' },
+          },
+        },
+      }),
+    )
+    renderReport('/risk-report/job-1')
+
+    expect(await screen.findAllByText('월세')).toHaveLength(2)
+    // 금액이 한글로만 적혀 있어도 전세로 뒤집히지 않아야 한다.
+    expect(screen.getByText('금 오십만원정')).toBeInTheDocument()
+  })
+
+  it('건물 사진 카드에 주거형태를 적는다', async () => {
+    renderReport('/risk-report/job-1')
+
+    expect(await screen.findByText('주거형태')).toBeInTheDocument()
+    // "아파트" 는 두 번 나온다 — 헤더의 "건물 유형: 아파트" 와 이 카드의 값.
+    expect(screen.getAllByText('아파트').length).toBeGreaterThan(0)
+  })
+
+  it('주거형태를 모르면 확인되지 않음으로 적는다', async () => {
+    getAnalysis.mockResolvedValue(
+      job('SUCCEEDED', {
+        result: {
+          ...RESULT,
+          analysis: {
+            ...RESULT.analysis,
+            terms: { ...RESULT.analysis.terms, property_type: null },
+          },
+        },
+      }),
+    )
+    renderReport('/risk-report/job-1')
+
+    expect(await screen.findByText('확인되지 않음')).toBeInTheDocument()
+  })
+
+  it('분석된 주소를 지도 카드에 함께 보여준다', async () => {
+    // 테스트 환경에는 카카오 키가 없어서 지도는 대체 화면으로 뜬다 — SDK 목킹이 필요 없다.
+    renderReport('/risk-report/job-1')
+
+    expect(await screen.findByText('서울특별시 강남구 테헤란로 123')).toBeInTheDocument()
+  })
+
+  it('주소가 없으면 안내 문구를 보여준다', async () => {
+    getAnalysis.mockResolvedValue(
+      job('SUCCEEDED', {
+        result: {
+          ...RESULT,
+          analysis: {
+            ...RESULT.analysis,
+            terms: { ...RESULT.analysis.terms, address: null },
+          },
+        },
+      }),
+    )
+    renderReport('/risk-report/job-1')
+
+    expect(await screen.findByText('위치 정보를 찾을 수 없습니다')).toBeInTheDocument()
   })
 
   it('결과를 열면 그 작업의 알림을 읽음 처리한다', async () => {
@@ -288,7 +391,12 @@ describe('RiskReport (jobId 없음) — 분석 목록', () => {
     listAnalyses.mockResolvedValue({
       items: [
         summary({ id: 'job-fail', status: 'FAILED', risk_level: null, title: '실패한 계약서' }),
-        summary({ id: 'job-cancel', status: 'CANCELLED', risk_level: null, title: '취소된 계약서' }),
+        summary({
+          id: 'job-cancel',
+          status: 'CANCELLED',
+          risk_level: null,
+          title: '취소된 계약서',
+        }),
         // SUCCEEDED 인데 등급이 없는 조합도 배지가 "분석 실패" 라 같이 막는다.
         summary({ id: 'job-empty', risk_level: null, title: '결과 없는 계약서' }),
       ],

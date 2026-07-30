@@ -13,6 +13,7 @@ import {
 } from '../../api/analyses'
 import { isRetryable } from '../../api/apiErrorHandler'
 import { ErrorState } from '../../components/ErrorState/ErrorState'
+import { KakaoMap } from '../../components/KakaoMap/KakaoMap'
 import { Modal } from '../../components/Modal/Modal'
 import {
   Building,
@@ -22,7 +23,6 @@ import {
   Edit,
   Info,
   MoreVertical,
-  Pin,
   Trash,
   Warn,
 } from '../../components/icons'
@@ -42,6 +42,7 @@ import type {
 } from '../../types/analysis'
 import { isTerminal } from '../../types/analysis'
 import type { RiskSeverity } from '../../types/document'
+import { contractTypeOf } from './contractType'
 import styles from './RiskReport.module.scss'
 
 /**
@@ -124,9 +125,10 @@ function AnalysisHistoryPanel() {
   const { items, status, error, hasMore, loadingMore, loadMore, applyTitle, removeItem, retry } =
     useAnalysisHistory(5)
   // 열려 있는 모달은 한 번에 하나다 — 어떤 항목에 대한 무슨 작업인지만 들고 있는다.
-  const [dialog, setDialog] = useState<{ kind: 'rename' | 'delete'; job: AnalysisJobSummary } | null>(
-    null,
-  )
+  const [dialog, setDialog] = useState<{
+    kind: 'rename' | 'delete'
+    job: AnalysisJobSummary
+  } | null>(null)
 
   if (status === 'loading') return <LoadingPanel label="분석 기록을 불러오고 있습니다" />
 
@@ -400,12 +402,7 @@ function RenameAnalysisModal({
           onChange={(event) => setTitle(event.target.value)}
         />
         <div className={styles.dialogActions}>
-          <button
-            type="button"
-            className={styles.dialogCancel}
-            disabled={saving}
-            onClick={onClose}
-          >
+          <button type="button" className={styles.dialogCancel} disabled={saving} onClick={onClose}>
             취소
           </button>
           <button type="submit" className={styles.dialogSubmit} disabled={saving || !title.trim()}>
@@ -640,7 +637,11 @@ function RunningPanel({ job }: { job: AnalysisJobDetail }) {
 function ReportBody({ result }: { result: AnalysisResult }) {
   const analysis = result.analysis
   const terms = analysis.terms
-  const propertyImage = terms.property_type ? PROPERTY_TYPE_IMAGE[terms.property_type] : undefined
+  // LLM 은 property_type 을 자유 문자열로 내려준다("다중주택"·"근린생활시설" 등).
+  // 매핑에 없는 값이 흔해서 아이콘으로 떨어뜨리지 않고 아파트 사진을 기본값으로 쓴다.
+  const propertyImage =
+    (terms.property_type && PROPERTY_TYPE_IMAGE[terms.property_type]) || apartmentImg
+  const [imageFailed, setImageFailed] = useState(false)
 
   const analyzedClauses: Clause[] = analysis.risks.map((risk) => ({
     tone: SEVERITY_TONE[risk.severity],
@@ -676,6 +677,7 @@ function ReportBody({ result }: { result: AnalysisResult }) {
   const scoreLabel = score >= 80 ? '안전' : score >= 60 ? '주의' : '위험'
   const riskPercent = 100 - score
   const period = [terms.contract_start, terms.contract_end].filter(Boolean).join(' ~ ') || '미확인'
+  const contractType = contractTypeOf(terms.contract_type, terms.monthly_rent)
 
   return (
     <div className={styles.page}>
@@ -683,8 +685,9 @@ function ReportBody({ result }: { result: AnalysisResult }) {
         <header className={styles.pageHeader}>
           <div>
             <h1 className={styles.title}>종합 리스크 리포트</h1>
+            {/* 계약 유형(전세/월세)은 "주요 계약 조건" 카드가 소유한다. 여기는 건물 유형이다. */}
             <p className={styles.subtitle}>
-              계약 유형: {terms.property_type || '주택 임대차계약서'}
+              건물 유형: {terms.property_type || '주택 임대차계약서'}
             </p>
           </div>
           <div className={styles.headerActions}>
@@ -726,15 +729,26 @@ function ReportBody({ result }: { result: AnalysisResult }) {
               <h3 className={styles.cardTitle}>주요 계약 조건</h3>
               <span className={styles.warnPill}>{highCount}개 고위험 항목</span>
             </div>
-            <div className={styles.financeGrid}>
+            {/* 전세는 월세 칸을 그리지 않는다 — "월세: 없음" 은 정보가 아니라 잡음이다. */}
+            <div
+              className={`${styles.financeGrid} ${
+                contractType === '월세' ? styles.financeGridQuad : ''
+              }`}
+            >
+              <div className={styles.financeStat}>
+                <p className={styles.financeLabel}>계약 유형</p>
+                <p className={styles.financeValue}>{contractType}</p>
+              </div>
               <div className={styles.financeStat}>
                 <p className={styles.financeLabel}>보증금</p>
                 <p className={styles.financeValue}>{terms.deposit || '미확인'}</p>
               </div>
-              <div className={styles.financeStat}>
-                <p className={styles.financeLabel}>월세</p>
-                <p className={styles.financeValue}>{terms.monthly_rent || '미확인'}</p>
-              </div>
+              {contractType === '월세' && (
+                <div className={styles.financeStat}>
+                  <p className={styles.financeLabel}>월세</p>
+                  <p className={styles.financeValue}>{terms.monthly_rent || '미확인'}</p>
+                </div>
+              )}
               <div className={`${styles.financeStat} ${styles.financeStatWarn}`}>
                 <p className={styles.financeLabel}>계약 기간</p>
                 <p className={styles.financeValueWarn}>{period}</p>
@@ -810,29 +824,34 @@ function ReportBody({ result }: { result: AnalysisResult }) {
         <div className={styles.visualGrid}>
           <div className={styles.visualCard}>
             <div className={`${styles.visualArt} ${styles.visualArtBuilding}`}>
-              {propertyImage ? (
+              {imageFailed ? (
+                <Building className={styles.visualArtIcon} />
+              ) : (
                 <img
                   src={propertyImage}
-                  alt={terms.property_type ?? ''}
+                  alt={terms.property_type ?? '건물 이미지'}
                   className={styles.visualArtPhoto}
+                  onError={() => setImageFailed(true)}
                 />
-              ) : (
-                <Building className={styles.visualArtIcon} />
               )}
             </div>
             <div className={styles.visualOverlay}>
-              <p className={styles.visualOverlayTitle}>개인정보 보호 결과</p>
-              <p className={styles.visualOverlayDesc}>
-                개인정보 {result.mask_count}개를 마스킹했습니다.
-                {result.review_required ? ' 결과를 사람이 한 번 더 확인하는 것을 권장합니다.' : ''}
-              </p>
+              <p className={styles.visualOverlayTitle}>주거형태</p>
+              <p className={styles.visualOverlayDesc}>{terms.property_type || '확인되지 않음'}</p>
             </div>
           </div>
+          {/*
+            지도 카드만 스크림이 **위**에 붙는다. 카카오는 하단 모서리에 로고와 출처 링크를
+            그리고 약관상 가릴 수 없어서, 아래쪽 오버레이를 다시 넣으면 안 된다.
+          */}
           <div className={styles.visualCard}>
             <div className={`${styles.visualArt} ${styles.visualArtMap}`}>
-              <Pin className={styles.visualArtIcon} />
+              <KakaoMap address={terms.address} />
             </div>
-            <span className={styles.visualBadge}>위치 정보 분석</span>
+            <div className={styles.mapCaption}>
+              <span className={styles.visualBadge}>위치 정보 분석</span>
+              <p className={styles.mapAddress}>{terms.address || '위치 정보를 찾을 수 없습니다'}</p>
+            </div>
           </div>
         </div>
       </div>

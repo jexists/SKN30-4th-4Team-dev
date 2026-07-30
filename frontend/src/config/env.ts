@@ -12,6 +12,11 @@ export const ENV = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
   /**
+   * 카카오맵 JavaScript 키 (개발자센터 → 내 애플리케이션 → 앱 키).
+   * 비면 지도 SDK 를 아예 요청하지 않고 위험 보고서의 위치 카드가 핀 대체 화면으로 뜬다.
+   */
+  kakaoMapJsKey: import.meta.env.VITE_KAKAO_MAP_JS_KEY ?? '',
+  /**
    * 로컬 개발 서버 여부. DEV 는 테스트 환경에서도 true 라서 MODE 로 비교한다.
    * (dev 전용 UI 가 테스트에서 렌더되면 불필요한 요청이 나간다.)
    */

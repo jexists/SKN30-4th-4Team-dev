@@ -74,6 +74,7 @@ $surface: $white; // 카드·모달 등 표면
 $surface-raised: #fcfdff; // 입력 필드 등 살짝 들뜬 표면
 $surface-sunken: #fbfcfe; // 드롭존 등 살짝 가라앉은 표면
 $backdrop: rgba(15, 23, 42, 0.48); // 모달 배경
+$scrim-dark: rgba(15, 26, 53, 0.85); // 사진·지도 위 텍스트를 읽히게 하는 그라디언트 스크림
 
 // 푸터 · 특수 배경
 $footer-compact-bg: #f6f7fa; // 작업 화면용 compact 푸터 스트립 (본문과 살짝 오프셋)

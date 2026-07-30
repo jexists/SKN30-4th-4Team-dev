@@ -37,6 +37,8 @@ services:
         # Vite 는 빌드 시점에 값을 굽는다 — 비면 로그인이 비활성화되므로 필수로 요구한다.
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?VITE_SUPABASE_URL 을 .env 에 설정하세요}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:?VITE_SUPABASE_ANON_KEY 를 .env 에 설정하세요}
+        # 지도는 선택 기능이다 — 필수(:?)로 만들면 키가 없는 지금 상태로 배포가 막힌다.
+        VITE_KAKAO_MAP_JS_KEY: ${VITE_KAKAO_MAP_JS_KEY:-}
     restart: unless-stopped
     expose:
       - "80"

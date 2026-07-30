@@ -451,9 +451,9 @@ export function MyPage() {
                   <Lock className={styles.settingIcon} />
                   <div>
                     <p className={styles.settingLabel}>비밀번호 변경</p>
-                    <p className={styles.settingSub}>
+                    {/* <p className={styles.settingSub}>
                       {passwordChanged ? '방금 변경되었습니다' : '마지막 변경: 3개월 전'}
-                    </p>
+                    </p> */}
                   </div>
                 </div>
                 <button type="button" className={styles.linkBtn} onClick={openPasswordModal}>

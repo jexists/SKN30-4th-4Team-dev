@@ -1,0 +1,49 @@
+@use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
+
+.root {
+  position: absolute;
+  inset: 0;
+}
+/* SDK 가 직접 자식 노드를 써 넣는 컨테이너. */
+.canvas {
+  position: absolute;
+  inset: 0;
+}
+.fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: v.$space-3;
+}
+.fallbackIcon {
+  width: 64px;
+  height: 64px;
+  color: v.$navy-800;
+  opacity: 0.35;
+}
+.fallbackText {
+  @include t.caption;
+  margin: 0;
+  color: v.$navy-800;
+  opacity: 0.7;
+  text-align: center;
+}
+
+/* 지도가 뜨면 대체 화면은 자리만 지키고 숨는다 — 제거하지 않는다(아래 인쇄 규칙에서 되살린다). */
+.root[data-state='ready'] .fallback {
+  visibility: hidden;
+}
+
+@media print {
+  /* 카카오 타일은 화면 뷰포트 기준 CDN 이미지라 종이에서 회색 박스로 나온다.
+     장식 대체 화면(핀)만 남기고, 주소 텍스트는 페이지 쪽 .mapCaption 이 그린다. */
+  .canvas {
+    display: none;
+  }
+  .root[data-state='ready'] .fallback {
+    visibility: visible;
+  }
+}

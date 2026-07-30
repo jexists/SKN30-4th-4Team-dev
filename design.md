@@ -45,6 +45,7 @@
 | `$surface-raised` | `#fcfdff` | 입력 필드 (살짝 들뜬 표면) |
 | `$surface-sunken` | `#fbfcfe` | 드롭존 (살짝 가라앉은 표면) |
 | `$backdrop` | `rgba(15,23,42,0.48)` | 모달 오버레이 |
+| `$scrim-dark` | `rgba(15,26,53,0.85)` | 사진·지도 위 텍스트를 읽히게 하는 그라디언트 스크림 (위험 리포트 시각 카드) |
 | `$footer-compact-bg` | `#f6f7fa` | compact 푸터 스트립 전용 (본문과 살짝 오프셋된 마감 띠). 페이지 배경으로 사용 금지 |
 
 **규칙: 페이지 배경은 반드시 `$page-bg` 만 사용합니다.**  단, 로그인/회원가입처럼 카드 뒤 배경에 부드러운 그라디언트를 쓰는 경우는 `linear-gradient(180deg, #f8f9ff, v.$page-bg)` 로 시작·끝을 `$page-bg` 에 맞춥니다.
@@ -420,6 +421,7 @@ const isMobile = useIsMobile()
 | `ErrorModal` | `components/ErrorModal/` | 글로벌 에러 모달 (store 기반). 모든 API 실패가 여기로 모인다 |
 | `ErrorState` | `components/ErrorState/` | 데이터를 못 불러온 영역의 자리표시 + 다시 시도. `action` 으로 대체 행동(예: "새 대화 시작"), `variant="plain"` 으로 테두리 없는 형태 |
 | `NotificationBell` | `components/NotificationBell/` | 헤더 알림 종 — 안읽음 배지(`99+` 상한)·분석 진행 중 펄스·최근 5건 드롭다운. 좁은 화면에서는 드롭다운 대신 `/notifications` 로 이동 |
+| `KakaoMap` | `components/KakaoMap/` | 주소 → 읽기 전용 카카오 지도 + 마커. 부모가 positioned 여야 하고 부모를 꽉 채운다. 키 미설정·SDK 실패·지오코딩 실패는 모두 핀 대체 화면으로 떨어진다 |
 | `icons` | `components/icons.tsx` | stroke 아이콘 |
 
 > **이동할 곳이 없는 알림 행은 클릭 가능해 보이지 않게 그린다.** 경로 판정은
@@ -431,6 +433,14 @@ const isMobile = useIsMobile()
 > `window.print()` 라서 사이트 헤더·푸터·토스트·모달이 종이에 섞이면 안 된다. `header`/`footer`
 > 요소 선택자로 잡으면 페이지 안의 `<header>` 까지 사라지므로, 숨길 대상에만 속성을 단다
 > (규칙 본체는 `styles/main.scss`).
+
+> **`KakaoMap` 의 실패는 공통 오류 UI 로 보내지 않는다.** 위 「API 실패」 정책은 `api/client.ts` 를
+> 타는 우리 API 전용이다. 애드블록·도메인 미등록으로 서드파티 SDK 가 죽었을 때 정상 리포트 위에
+> 오류 모달이 뜨면 사용자에게는 그게 고장이다. 지도는 조용히 핀 대체 화면으로 떨어지고, **키가
+> 없다는 사실을 문구로 노출하지 않는다**(배포 상태를 흘리고 버그처럼 보인다).
+>
+> **지도 카드의 스크림은 위에 붙인다.** 카카오는 하단 모서리에 로고와 출처 링크를 그리고 약관상
+> 가릴 수 없다. "더 깔끔하게" 하단 오버레이를 다시 넣지 않는다.
 
 > **API 실패는 Empty State 로 그리지 않는다.** "데이터가 없습니다" 는 성공 응답의 0건 전용이고,
 > 실패한 영역에는 `<ErrorState />` 를 놓는다(원인 안내는 보통 `ErrorModal` 이 맡음). 자세한 규칙은
