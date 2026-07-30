@@ -38,6 +38,7 @@ erDiagram
         text nickname
         timestamptz nickname_updated_at "nullable"
         text profile_image "nullable"
+        boolean notify_report_complete "기본 true"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -224,7 +225,8 @@ Supabase `auth.users` 의 확장 테이블. 로그인·이메일·소셜 정보�
 | nickname | TEXT | | 닉네임 |
 | nickname_updated_at | TIMESTAMPTZ | NULL | 닉네임 변경 일시 |
 | profile_image | TEXT | NULL | 프로필 이미지 URL |
-| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 |
+| notify_report_complete | BOOLEAN | NOT NULL, 기본 true | 위험 보고서 생성 완료 알림 수신 여부 |
+| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시(닉네임·프로필 사진·알림 설정 변경 시 갱신) |
 
 ### 3. user_agreement — 약관·동의 이력
 온보딩(이용약관·개인정보 동의)과 마케팅 수신 동의를 **버전·시점과 함께** 보관.

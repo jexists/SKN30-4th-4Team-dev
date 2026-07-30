@@ -109,6 +109,26 @@ def test_add_message_and_read_back(history_client):
     assert msgs[0]["content"] == "보증금 언제 돌려받나요?"
 
 
+def test_list_rooms_preview_is_latest_message_and_none_when_empty(history_client):
+    client, _ = history_client
+    empty_room = client.post("/api/v1/chat/rooms", json={"title": "아직 대화 없음"}).json()["data"]
+    talked_room = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]
+
+    client.post(
+        f"/api/v1/chat/rooms/{talked_room['id']}/messages",
+        json={"role": "USER", "content": "첫 메시지"},
+    )
+    client.post(
+        f"/api/v1/chat/rooms/{talked_room['id']}/messages",
+        json={"role": "ASSISTANT", "content": "가" * 100},
+    )
+
+    rooms = {r["id"]: r for r in client.get("/api/v1/chat/rooms").json()["data"]["items"]}
+    assert rooms[empty_room["id"]]["last_message_preview"] is None
+    preview = rooms[talked_room["id"]]["last_message_preview"]
+    assert preview == "가" * 80 + "…"
+
+
 def test_last_chat_at_starts_at_registration_and_changes_with_message(history_client):
     client, _ = history_client
     created = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]

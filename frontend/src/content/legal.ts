@@ -1,3 +1,4 @@
+import { LEGAL_DATES } from '../config/env'
 import type { LegalBlock } from '../components/LegalDoc/blocks'
 
 /** 약관·방침 문서 한 편. 조항(section)들의 모음. */
@@ -22,7 +23,7 @@ function paras(...lines: string[]): LegalBlock[] {
 
 export const TERMS: LegalDoc = {
   title: '이용약관',
-  effectiveDate: 'YYYY년 MM월 DD일',
+  effectiveDate: LEGAL_DATES.termsEffectiveDate,
   sections: [
     {
       chapter: '제1장 총칙',
@@ -140,14 +141,14 @@ export const TERMS: LegalDoc = {
     },
     {
       heading: '부칙',
-      body: paras(`본 약관은 YYYY년 MM월 DD일부터 시행합니다.`),
+      body: paras(`본 약관은 ${LEGAL_DATES.termsEffectiveDate}부터 시행합니다.`),
     },
   ],
 }
 
 export const PRIVACY: LegalDoc = {
   title: '개인정보처리방침',
-  effectiveDate: 'YYYY년 MM월 DD일',
+  effectiveDate: LEGAL_DATES.privacyEffectiveDate,
   intro: `SKN30 4기 4팀(이하 "운영자")은 「개인정보 보호법」 제30조에 따라 정보주체의 개인정보를 보호하고 이와 관련한 고충을 신속하게 처리할 수 있도록 다음과 같이 개인정보처리방침을 수립·공개합니다.`,
   sections: [
     {
@@ -372,8 +373,8 @@ export const PRIVACY: LegalDoc = {
           kind: 'p',
           text: '본 방침은 시행일로부터 적용되며, 변경 시 변경사항의 시행 7일 전부터 공지사항을 통하여 고지합니다.',
         },
-        { kind: 'p', indent: true, text: '공고일자: YYYY년 MM월 DD일' },
-        { kind: 'p', indent: true, text: '시행일자: YYYY년 MM월 DD일' },
+        { kind: 'p', indent: true, text: `공고일자: ${LEGAL_DATES.privacyAnnouncedDate}` },
+        { kind: 'p', indent: true, text: `시행일자: ${LEGAL_DATES.privacyEffectiveDate}` },
       ],
     },
   ],

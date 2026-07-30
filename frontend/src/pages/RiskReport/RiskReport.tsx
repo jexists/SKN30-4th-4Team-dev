@@ -15,7 +15,6 @@ import {
   Download,
   Info,
   Pin,
-  Share,
   Warn,
 } from '../../components/icons'
 import { markAnalysisFinished, markResourceNotificationsRead } from '../../hooks/useNotifications'
@@ -371,17 +370,6 @@ function ReportBody({ result }: { result: AnalysisResult }) {
             */}
             <button type="button" className={styles.btnOutline} onClick={() => window.print()}>
               <Download /> PDF 다운로드
-            </button>
-            <button
-              type="button"
-              className={styles.btnPrimary}
-              onClick={() => {
-                const text = analysis.summary || '종합 리스크 리포트'
-                if (navigator.share) void navigator.share({ title: '종합 리스크 리포트', text })
-                else void navigator.clipboard.writeText(text)
-              }}
-            >
-              <Share /> 리포트 공유
             </button>
           </div>
         </header>

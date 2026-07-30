@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, false
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, false, true
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
@@ -58,6 +58,10 @@ class Profile(Base):
         DateTime(timezone=True), nullable=True
     )
     profile_image: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 위험 보고서 생성 완료 알림(마이페이지 "알림 설정" 토글) 수신 여부. 기본은 켜짐이다.
+    notify_report_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow

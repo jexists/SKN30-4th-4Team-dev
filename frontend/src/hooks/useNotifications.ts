@@ -9,7 +9,7 @@ import { useAuth } from './useAuth'
 import { canShowDesktopNotification, showDesktopNotification } from './desktopNotify'
 
 /**
- * 알림 배지 상태 + 폴링 — useAvatar 와 같은 모듈 외부 스토어 패턴이다.
+ * 알림 배지 상태 + 폴링 — toastStore 와 같은 모듈 외부 스토어 패턴이다.
  *
  * 헤더(종 아이콘)·마이페이지(알림 설정)·분석 화면이 모두 같은 값을 봐야 하므로 어느 한
  * 화면의 로컬 state 로 두지 않는다.

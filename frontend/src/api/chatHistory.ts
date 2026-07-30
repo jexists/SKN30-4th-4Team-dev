@@ -23,6 +23,7 @@ export interface ChatRoom {
   title: string | null
   last_chat_at: string
   updated_at: string
+  last_message_preview: string | null
 }
 
 export interface ChatMessageRow {
@@ -37,15 +38,15 @@ const PAGE_SIZE = 30
 /** 제목 입력 상한 — 백엔드 UpdateRoomTitleIn/CreateRoomIn 과 동일. */
 export const ROOM_TITLE_MAX = 200
 
-function withCursor(path: string, cursor?: string | null): string {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+function withCursor(path: string, cursor?: string | null, limit: number = PAGE_SIZE): string {
+  const params = new URLSearchParams({ limit: String(limit) })
   if (cursor) params.set('cursor', cursor)
   return `${path}?${params.toString()}`
 }
 
 /** 내 채팅방 목록 (최신순, 한 페이지). cursor 로 다음(과거) 페이지. */
-export function listRooms(cursor?: string | null): Promise<Page<ChatRoom>> {
-  return apiGet<Page<ChatRoom>>(withCursor('/api/v1/chat/rooms', cursor))
+export function listRooms(cursor?: string | null, limit: number = PAGE_SIZE): Promise<Page<ChatRoom>> {
+  return apiGet<Page<ChatRoom>>(withCursor('/api/v1/chat/rooms', cursor, limit))
 }
 
 /** 새 채팅방 생성 (title = 첫 질문 요약). */

@@ -9,19 +9,32 @@ const useAuth = vi.fn()
 const useCurrentUser = vi.fn()
 const signOut = vi.fn()
 const withdrawMember = vi.hoisted(() => vi.fn())
+const updateNickname = vi.hoisted(() => vi.fn())
+const uploadAvatar = vi.hoisted(() => vi.fn())
 const listAnalyses = vi.hoisted(() => vi.fn())
+const listRooms = vi.hoisted(() => vi.fn())
+const setCurrentUser = vi.fn()
+const signInWithPassword = vi.hoisted(() => vi.fn())
+const updateUser = vi.hoisted(() => vi.fn())
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => useAuth() }))
 vi.mock('../../hooks/useCurrentUser', () => ({
   useCurrentUser: (token: string | null) => useCurrentUser(token),
 }))
-vi.mock('../../api/auth', () => ({ withdrawMember }))
+vi.mock('../../api/auth', () => ({ withdrawMember, updateNickname, uploadAvatar }))
 // 진단 내역은 이 파일의 관심사가 아니다 — 실제 fetch 가 나가지 않도록 빈 목록으로 고정한다.
 vi.mock('../../api/analyses', () => ({ listAnalyses }))
+// 상담 내역도 마찬가지 — 실제 fetch 가 나가지 않도록 빈 목록으로 고정한다.
+vi.mock('../../api/chatHistory', () => ({ listRooms }))
+// 비밀번호 변경은 Supabase Auth 를 직접 호출한다 — 실제 네트워크 대신 목으로 검증한다.
+vi.mock('../../config/supabase', () => ({
+  supabase: { auth: { signInWithPassword, updateUser } },
+}))
 
 describe('MyPage 프로필', () => {
   beforeEach(() => {
     listAnalyses.mockResolvedValue({ items: [], next_cursor: null })
+    listRooms.mockResolvedValue({ items: [], next_cursor: null })
     useAuth.mockReturnValue({ token: 'access-token', signOut })
     useCurrentUser.mockReturnValue({
       status: 'ok',
@@ -30,8 +43,10 @@ describe('MyPage 프로필', () => {
         email: 'user@example.com',
         role: 'authenticated',
         nickname: '홈실드',
+        login_provider: 'email',
       },
       error: null,
+      setCurrentUser,
     })
   })
 
@@ -47,8 +62,76 @@ describe('MyPage 프로필', () => {
     expect(screen.queryByText('김철수')).not.toBeInTheDocument()
   })
 
+  it('프로필 사진을 고르면 업로드하고, 성공하면 화면에 반영된다', async () => {
+    const user = userEvent.setup()
+    uploadAvatar.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      role: 'authenticated',
+      nickname: '홈실드',
+      login_provider: 'email',
+      profile_image: 'https://cdn.example/avatar.png',
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    const file = new File(['fake-bytes'], 'avatar.png', { type: 'image/png' })
+    const input = screen.getByLabelText('프로필 사진 변경', { selector: 'input' })
+    await user.upload(input, file)
+
+    await waitFor(() => expect(uploadAvatar).toHaveBeenCalledWith(file))
+    expect(setCurrentUser).toHaveBeenCalledWith(
+      expect.objectContaining({ profile_image: 'https://cdn.example/avatar.png' }),
+    )
+  })
+
+  it('로그인 경로를 표시한다', () => {
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('로그인 경로')).toBeInTheDocument()
+    expect(screen.getByText('이메일')).toBeInTheDocument()
+  })
+
+  it('닉네임 수정 버튼을 누르면 모달이 열리고, 저장하면 새 닉네임이 화면에 반영된다', async () => {
+    const user = userEvent.setup()
+    updateNickname.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      role: 'authenticated',
+      nickname: '새닉네임',
+      login_provider: 'email',
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '수정' }))
+    const dialog = await screen.findByRole('dialog', { name: '닉네임 변경' })
+    const input = within(dialog).getByLabelText('닉네임')
+    await user.clear(input)
+    await user.type(input, '새닉네임')
+    await user.click(within(dialog).getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(updateNickname).toHaveBeenCalledWith('새닉네임'))
+    expect(setCurrentUser).toHaveBeenCalledWith(
+      expect.objectContaining({ nickname: '새닉네임' }),
+    )
+    expect(screen.queryByRole('dialog', { name: '닉네임 변경' })).not.toBeInTheDocument()
+  })
+
   it('조회 중에는 기존 화면 위치에 로딩 상태를 표시한다', () => {
-    useCurrentUser.mockReturnValue({ status: 'loading', data: null, error: null })
+    useCurrentUser.mockReturnValue({ status: 'loading', data: null, error: null, setCurrentUser })
 
     render(
       <MemoryRouter>
@@ -62,16 +145,321 @@ describe('MyPage 프로필', () => {
   })
 })
 
-describe('MyPage 회원 탈퇴', () => {
-  const originalLocation = window.location
-
+describe('MyPage 최근 상담 내역', () => {
   beforeEach(() => {
     listAnalyses.mockResolvedValue({ items: [], next_cursor: null })
     useAuth.mockReturnValue({ token: 'access-token', signOut })
     useCurrentUser.mockReturnValue({
       status: 'ok',
-      data: { id: 'user-1', email: 'user@example.com', role: 'authenticated', nickname: '홈실드' },
+      data: {
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'authenticated',
+        nickname: '홈실드',
+        login_provider: 'email',
+      },
       error: null,
+      setCurrentUser,
+    })
+  })
+
+  it('전체보기 버튼을 누르면 AI 챗봇 화면으로 이동한다', () => {
+    listRooms.mockResolvedValue({ items: [], next_cursor: null })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: '전체보기' })).toHaveAttribute('href', '/chat')
+  })
+
+  it('DB 에서 받은 채팅방을 축약 ID·제목·미리보기·이어하기 링크로 보여준다', async () => {
+    listRooms.mockResolvedValue({
+      items: [
+        {
+          id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+          title: '임대인 세금 체납 관련 법적 효력',
+          last_chat_at: '2026-07-30T10:00:00Z',
+          updated_at: '2026-07-30T10:00:00Z',
+          last_message_preview: '현재 분석 중인 계약서 4조 2항의 특약 사항이 임차인에게 다소 불리하게',
+        },
+      ],
+      next_cursor: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('# 상담 ID: 3FA85F64')).toBeInTheDocument()
+    expect(screen.getByText('임대인 세금 체납 관련 법적 효력')).toBeInTheDocument()
+    expect(
+      screen.getByText('"현재 분석 중인 계약서 4조 2항의 특약 사항이 임차인에게 다소 불리하게"'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /상담 이어서 하기/ })).toHaveAttribute(
+      'href',
+      '/chat/3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    )
+  })
+
+  it('제목·미리보기가 없는 방은 기본 문구로 대신한다', async () => {
+    listRooms.mockResolvedValue({
+      items: [
+        {
+          id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+          title: null,
+          last_chat_at: '2026-07-30T10:00:00Z',
+          updated_at: '2026-07-30T10:00:00Z',
+          last_message_preview: null,
+        },
+      ],
+      next_cursor: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('새 상담')).toBeInTheDocument()
+    expect(screen.getByText('아직 대화 내용이 없습니다.')).toBeInTheDocument()
+  })
+
+  it('상담이 하나도 없으면 빈 상태 문구를 보여준다', async () => {
+    listRooms.mockResolvedValue({ items: [], next_cursor: null })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText('아직 진행한 상담이 없습니다. 챗봇에게 물어보면 이곳에 기록이 쌓입니다.'),
+    ).toBeInTheDocument()
+  })
+
+  it('조회에 실패하면 공통 오류 상태와 재시도 버튼을 보여준다', async () => {
+    listRooms.mockRejectedValue(new Error('network error'))
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('상담 내역을 불러오지 못했습니다.')).toBeInTheDocument()
+  })
+})
+
+describe('MyPage 최근 진단 내역 — 더 보기', () => {
+  beforeEach(() => {
+    listRooms.mockResolvedValue({ items: [], next_cursor: null })
+    useAuth.mockReturnValue({ token: 'access-token', signOut })
+    useCurrentUser.mockReturnValue({
+      status: 'ok',
+      data: {
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'authenticated',
+        nickname: '홈실드',
+        login_provider: 'email',
+      },
+      error: null,
+      setCurrentUser,
+    })
+  })
+
+  function job(id: string, title: string) {
+    return {
+      id,
+      status: 'FAILED' as const,
+      stage: null,
+      progress: 0,
+      file_names: ['1-전세계약.pdf'],
+      title,
+      risk_level: null,
+      created_at: '2026-07-30T11:23:00Z',
+      finished_at: null,
+    }
+  }
+
+  it('다음 페이지가 있으면 더 보기 버튼을 보여주고, 누르면 다음 페이지를 이어붙인다', async () => {
+    const user = userEvent.setup()
+    listAnalyses.mockResolvedValueOnce({
+      items: [job('job-1', '첫 페이지'), job('job-2', '첫 페이지 2')],
+      next_cursor: 'cursor-1',
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('첫 페이지')).toBeInTheDocument()
+    const loadMoreBtn = screen.getByRole('button', { name: '더 보기' })
+
+    listAnalyses.mockResolvedValueOnce({
+      items: [job('job-3', '두 번째 페이지')],
+      next_cursor: null,
+    })
+    await user.click(loadMoreBtn)
+
+    expect(await screen.findByText('두 번째 페이지')).toBeInTheDocument()
+    expect(screen.getByText('첫 페이지')).toBeInTheDocument()
+    expect(listAnalyses).toHaveBeenLastCalledWith('cursor-1', 5)
+    // 더 가져올 페이지가 없으면 버튼이 사라진다.
+    expect(screen.queryByRole('button', { name: '더 보기' })).not.toBeInTheDocument()
+  })
+
+  it('다음 페이지가 없으면 더 보기 버튼을 보여주지 않는다', async () => {
+    listAnalyses.mockResolvedValueOnce({
+      items: [job('job-1', '유일한 항목')],
+      next_cursor: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('유일한 항목')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '더 보기' })).not.toBeInTheDocument()
+  })
+})
+
+describe('MyPage 비밀번호 변경', () => {
+  beforeEach(() => {
+    listAnalyses.mockResolvedValue({ items: [], next_cursor: null })
+    listRooms.mockResolvedValue({ items: [], next_cursor: null })
+    useAuth.mockReturnValue({ token: 'access-token', signOut })
+    signInWithPassword.mockReset()
+    updateUser.mockReset()
+  })
+
+  it('카카오 로그인 계정에는 비밀번호 변경 섹션이 보이지 않는다', () => {
+    useCurrentUser.mockReturnValue({
+      status: 'ok',
+      data: {
+        id: 'user-1',
+        email: null,
+        role: 'authenticated',
+        nickname: '홈실드',
+        login_provider: 'kakao',
+      },
+      error: null,
+      setCurrentUser,
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByText('비밀번호 변경')).not.toBeInTheDocument()
+  })
+
+  it('이메일 로그인 계정은 현재 비밀번호 재인증 후 Supabase Auth 로 새 비밀번호를 저장한다', async () => {
+    const user = userEvent.setup()
+    useCurrentUser.mockReturnValue({
+      status: 'ok',
+      data: {
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'authenticated',
+        nickname: '홈실드',
+        login_provider: 'email',
+      },
+      error: null,
+      setCurrentUser,
+    })
+    signInWithPassword.mockResolvedValue({ data: {}, error: null })
+    updateUser.mockResolvedValue({ data: {}, error: null })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '변경' }))
+    const dialog = await screen.findByRole('dialog', { name: '비밀번호 변경' })
+    await user.type(within(dialog).getByLabelText('현재 비밀번호'), 'oldpass123')
+    await user.type(within(dialog).getByLabelText('새 비밀번호'), 'newpass123')
+    await user.type(within(dialog).getByLabelText('새 비밀번호 확인'), 'newpass123')
+    await user.click(within(dialog).getByRole('button', { name: '변경' }))
+
+    await waitFor(() =>
+      expect(signInWithPassword).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        password: 'oldpass123',
+      }),
+    )
+    expect(updateUser).toHaveBeenCalledWith({ password: 'newpass123' })
+    expect(screen.queryByRole('dialog', { name: '비밀번호 변경' })).not.toBeInTheDocument()
+  })
+
+  it('현재 비밀번호가 틀리면 새 비밀번호로 업데이트를 시도하지 않는다', async () => {
+    const user = userEvent.setup()
+    useCurrentUser.mockReturnValue({
+      status: 'ok',
+      data: {
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'authenticated',
+        nickname: '홈실드',
+        login_provider: 'email',
+      },
+      error: null,
+      setCurrentUser,
+    })
+    signInWithPassword.mockResolvedValue({ data: null, error: new Error('invalid credentials') })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '변경' }))
+    const dialog = await screen.findByRole('dialog', { name: '비밀번호 변경' })
+    await user.type(within(dialog).getByLabelText('현재 비밀번호'), 'wrongpass')
+    await user.type(within(dialog).getByLabelText('새 비밀번호'), 'newpass123')
+    await user.type(within(dialog).getByLabelText('새 비밀번호 확인'), 'newpass123')
+    await user.click(within(dialog).getByRole('button', { name: '변경' }))
+
+    await waitFor(() => expect(signInWithPassword).toHaveBeenCalledTimes(1))
+    expect(updateUser).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '비밀번호 변경' })).toBeInTheDocument()
+  })
+})
+
+describe('MyPage 회원 탈퇴', () => {
+  const originalLocation = window.location
+
+  beforeEach(() => {
+    listAnalyses.mockResolvedValue({ items: [], next_cursor: null })
+    listRooms.mockResolvedValue({ items: [], next_cursor: null })
+    useAuth.mockReturnValue({ token: 'access-token', signOut })
+    useCurrentUser.mockReturnValue({
+      status: 'ok',
+      data: {
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'authenticated',
+        nickname: '홈실드',
+        login_provider: 'email',
+      },
+      error: null,
+      setCurrentUser,
     })
     withdrawMember.mockReset()
     signOut.mockReset()
