@@ -180,7 +180,9 @@ def _get_owned_room(db: Session, room_id: str, uid: uuid.UUID) -> ChatRoom:
 
 
 
-def _room_out(room: ChatRoom, file_name: str | None = None) -> ChatRoomOut:
+def _room_out(
+    room: ChatRoom, file_name: str | None = None, preview: str | None = None
+) -> ChatRoomOut:
     """채팅방 응답 필드를 한곳에서 조립해 엔드포인트 사이 누락을 막는다."""
     return ChatRoomOut(
         id=str(room.id),
@@ -189,6 +191,7 @@ def _room_out(room: ChatRoom, file_name: str | None = None) -> ChatRoomOut:
         updated_at=room.updated_at,
         analysis_job_id=str(room.analysis_job_id) if room.analysis_job_id else None,
         analysis_file_name=file_name,
+        last_message_preview=preview,
     )
 
 
@@ -205,8 +208,6 @@ def _attachment_names(db: Session, rooms: Sequence[ChatRoom]) -> dict[uuid.UUID,
         select(AnalysisJob.id, AnalysisJob.file_names).where(AnalysisJob.id.in_(job_ids))
     ).all()
     return {job_id: (names[0] if names else None) for job_id, names in rows}
-        last_message_preview=preview,
-    )
 
 
 _PREVIEW_MAX_LEN = 80
@@ -260,17 +261,18 @@ def list_rooms(
     has_more = len(rows) > limit
     rows = rows[:limit]
     next_cursor = encode_cursor(rows[-1].last_chat_at, rows[-1].id) if has_more and rows else None
-# <<<<<<< feat/chat-ocr
     names = _attachment_names(db, rows)
+    previews = _last_message_previews(db, [r.id for r in rows])
     return success_response(
         Page(
-            items=[_room_out(r, names.get(r.analysis_job_id)) for r in rows],
-# =======
-#     previews = _last_message_previews(db, [r.id for r in rows])
-#     return success_response(
-#         Page(
-#             items=[_room_out(r, previews.get(r.id)) for r in rows],
-# >>>>>>> develop
+            items=[
+                _room_out(
+                    r,
+                    names.get(r.analysis_job_id) if r.analysis_job_id else None,
+                    previews.get(r.id),
+                )
+                for r in rows
+            ],
             next_cursor=next_cursor,
         )
     )

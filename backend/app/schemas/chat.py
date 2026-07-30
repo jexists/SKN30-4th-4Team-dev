@@ -60,15 +60,14 @@ class ChatRoomOut(BaseModel):
     analysis_job_id: str | None = None
     # 칩에 표시할 파일명(analysis_job.file_names 의 첫 항목). 첨부가 없으면 None.
     analysis_file_name: str | None = None
+    # 목록 카드에 보여줄 마지막 메시지 한 줄. 메시지가 없으면 None.
+    last_message_preview: str | None = None
 
 
 class AttachDocumentIn(BaseModel):
     """완료된 계약서 분석을 대화방에 첨부한다."""
 
     analysis_job_id: str
-
-    last_message_preview: str | None = None
-
 
 
 class AddMessageIn(BaseModel):
