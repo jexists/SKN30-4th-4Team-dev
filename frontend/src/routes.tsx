@@ -36,7 +36,7 @@ export const router = createBrowserRouter([
           { path: 'chat/:chatId?', element: <Chat /> },
           { path: 'mypage', element: <MyPage /> },
           { path: 'notifications', element: <Notifications /> },
-          // id 없이 들어오면 가장 최근 결과로 보낸다(헤더 "위험 보고서" 내비).
+          // id 없이 들어오면 지금까지 분석한 목록을 보여준다(헤더 "위험 보고서" 내비).
           { path: 'risk-report', element: <RiskReport /> },
           { path: 'risk-report/:jobId', element: <RiskReport /> },
         ],

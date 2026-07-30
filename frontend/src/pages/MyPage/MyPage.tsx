@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { listAnalyses } from '../../api/analyses'
 import { updateNickname, updateNotificationPref, uploadAvatar, withdrawMember } from '../../api/auth'
 import type { ChatRoom } from '../../api/chatHistory'
 import { listRooms } from '../../api/chatHistory'
@@ -22,11 +21,16 @@ import {
 } from '../../components/icons'
 import { supabase } from '../../config/supabase'
 import { requestDesktopPermission } from '../../hooks/desktopNotify'
+import {
+  analysisTitle,
+  formatAnalyzedAt,
+  isAnalysisFailed,
+  riskBadge,
+  useAnalysisHistory,
+} from '../../hooks/useAnalysisHistory'
 import { useAuth } from '../../hooks/useAuth'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
 import { setDesktopAlertsEnabled, useDesktopAlertsEnabled } from '../../hooks/useNotifications'
-import type { AnalysisJobSummary } from '../../types/analysis'
-import { isTerminal } from '../../types/analysis'
 import styles from './MyPage.module.scss'
 
 /** 로그인 수단 — Supabase 가 app_metadata.provider 에 넣어주는 값("email"/"kakao")을 한국어로. */
@@ -48,27 +52,6 @@ function consultLabel(room: ChatRoom): string {
 /** 카드 제목 — 방 제목(첫 질문 요약), 아직 없으면 기본 문구. */
 function consultTitle(room: ChatRoom): string {
   return room.title || '새 상담'
-}
-
-/** 서버 risk_level → 화면 뱃지. 진행 중이라 아직 등급이 없으면 별도 처리한다. */
-const LEVEL_STYLE = { LOW: 'safe', MEDIUM: 'caution', HIGH: 'risk' } as const
-const LEVEL_LABEL = {
-  LOW: 'SAFE (안전)',
-  MEDIUM: 'CAUTION (주의)',
-  HIGH: 'HIGH RISK (위험)',
-} as const
-
-/** `2026.05.20 14:30` — 목록에서 한 줄로 읽히는 형식. */
-function formatAnalyzedAt(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-/** 카드 제목 — 서버가 준 요약 제목, 없으면 첫 파일명, 그것도 없으면 기본 문구. */
-function analysisTitle(job: AnalysisJobSummary): string {
-  return job.title || job.file_names[0] || '계약서 분석'
 }
 
 export function MyPage() {
@@ -294,7 +277,7 @@ export function MyPage() {
               <span role="status">프로필을 불러오는 중입니다.</span>
             ) : (
               <>
-                {currentUser?.nickname || '회원'} <span className={styles.nameSuffix}>님</span>
+                {currentUser?.nickname || '회원'} <span className={styles.nameSuffix}></span>
               </>
             )}
           </h1>
@@ -350,7 +333,7 @@ export function MyPage() {
             ) : (
               <div className={styles.historyList}>
                 {history.items.map((job) => {
-                  const done = job.status === 'SUCCEEDED' && job.risk_level !== null
+                  const badge = riskBadge(job)
                   return (
                     <div key={job.id} className={styles.historyItem}>
                       <div>
@@ -360,24 +343,39 @@ export function MyPage() {
                         </p>
                       </div>
                       <div className={styles.historyRight}>
-                        {done ? (
-                          <span
-                            className={`${styles.levelPill} ${styles[`level_${LEVEL_STYLE[job.risk_level!]}`]}`}
-                          >
-                            {LEVEL_LABEL[job.risk_level!]}
-                          </span>
-                        ) : (
-                          <span className={styles.levelPill}>
-                            {isTerminal(job.status) ? '분석 실패' : '분석 중'}
-                          </span>
-                        )}
-                        <Link
-                          to={`/risk-report/${job.id}`}
-                          className={styles.historyDetail}
-                          aria-label={`${analysisTitle(job)} 진단 리포트 보기`}
+                        {/* 등급이 없는 상태(분석 중·실패)는 level_* 가 없어 기본 pill 모습이 된다. */}
+                        <span
+                          className={[styles.levelPill, styles[`level_${badge.tone}`]]
+                            .filter(Boolean)
+                            .join(' ')}
                         >
-                          <FileLines />
-                        </Link>
+                          {badge.label}
+                        </span>
+                        {/*
+                          실패한 기록은 열어도 보여줄 리포트가 없다. 버튼을 없애면 행마다
+                          오른쪽 폭이 달라져 목록이 어긋나므로, 자리는 그대로 두고 누르면
+                          토스트로 이유를 알린다(API 실패가 아니라 화면이 아는 사실이다).
+                        */}
+                        {isAnalysisFailed(job) ? (
+                          <button
+                            type="button"
+                            className={styles.historyDetail}
+                            aria-label={`${analysisTitle(job)} 진단 리포트 보기`}
+                            onClick={() =>
+                              showToast('분석에 실패한 기록이라 리포트를 열 수 없습니다.', 'error')
+                            }
+                          >
+                            <FileLines />
+                          </button>
+                        ) : (
+                          <Link
+                            to={`/risk-report/${job.id}`}
+                            className={styles.historyDetail}
+                            aria-label={`${analysisTitle(job)} 진단 리포트 보기`}
+                          >
+                            <FileLines />
+                          </Link>
+                        )}
                       </div>
                     </div>
                   )
@@ -627,61 +625,6 @@ export function MyPage() {
       </Modal>
     </div>
   )
-}
-
-/**
- * 최근 진단 내역. 목록에는 요약만 오므로(결과 payload 없음) 가볍다.
- *
- * 실패를 빈 목록으로 그리지 않는다 — 서버 장애가 "진단한 적 없음"으로 보이면 안 된다.
- */
-function useAnalysisHistory() {
-  const [items, setItems] = useState<AnalysisJobSummary[]>([])
-  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [reloadKey, setReloadKey] = useState(0)
-
-  useEffect(() => {
-    let cancelled = false
-    setStatus('loading')
-    listAnalyses(null, 5)
-      .then((page) => {
-        if (cancelled) return
-        setItems(page.items)
-        setNextCursor(page.next_cursor)
-        setStatus('ok')
-      })
-      .catch(() => {
-        if (cancelled) return
-        setStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [reloadKey])
-
-  async function loadMore() {
-    if (!nextCursor || loadingMore) return
-    setLoadingMore(true)
-    try {
-      const page = await listAnalyses(nextCursor, 5)
-      setItems((prev) => [...prev, ...page.items])
-      setNextCursor(page.next_cursor)
-    } catch {
-      showToast('진단 내역을 더 불러오지 못했습니다.', 'error')
-    } finally {
-      setLoadingMore(false)
-    }
-  }
-
-  return {
-    items,
-    status,
-    hasMore: nextCursor !== null,
-    loadingMore,
-    loadMore,
-    retry: () => setReloadKey((key) => key + 1),
-  }
 }
 
 /** 최근 상담 내역. 카드 2개짜리 그리드라 최신 2개만 가져오고, 전체는 "전체보기"(=/chat)로 보낸다. */

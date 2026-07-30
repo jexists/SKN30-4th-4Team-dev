@@ -86,6 +86,8 @@ _ACTIVE_PREDICATE = text(_in_list("status", sorted(ACTIVE_STATUSES)))
 _QUEUED_PREDICATE = text(f"status = '{JobStatus.QUEUED.value}'")
 _RUNNING_PREDICATE = text(f"status = '{JobStatus.RUNNING.value}'")
 _HAS_IDEMPOTENCY_KEY = text("idempotency_key IS NOT NULL")
+#: 사용자가 지우지 않은 작업. 목록 인덱스에만 건다 — 큐·중복 방지 인덱스는 아래 주석 참고.
+_ALIVE_PREDICATE = text("deleted_at IS NULL")
 
 
 class AnalysisJob(Base):
@@ -126,6 +128,8 @@ class AnalysisJob(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+    # 사용자가 목록에서 지운 작업. 행은 남긴다(soft delete) — 조회 경로가 걸러낸다.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint(_in_list("status", JobStatus), name="analysis_job_status_check"),
@@ -133,7 +137,16 @@ class AnalysisJob(Base):
             f"stage IS NULL OR {_in_list('stage', JobStage)}", name="analysis_job_stage_check"
         ),
         CheckConstraint("progress BETWEEN 0 AND 100", name="analysis_job_progress_check"),
-        Index("idx_analysis_job_user", "user_id", "created_at"),
+        # 목록은 살아 있는 행만 본다 — 지운 작업을 훑지 않게 인덱스에 조건을 넣는다.
+        Index(
+            "idx_analysis_job_user_alive",
+            "user_id",
+            "created_at",
+            postgresql_where=_ALIVE_PREDICATE,
+            sqlite_where=_ALIVE_PREDICATE,
+        ),
+        # ⚠️ 아래 큐·중복 방지 인덱스에는 deleted_at 조건을 넣지 않는다. 지워진 작업이라도
+        #    진행 중이면 워커가 정상적으로 끝맺어야 하고, 진행 중 1건 제약도 그대로여야 한다.
         # 워커가 다음 작업을 고를 때 훑는 인덱스 — 대기 중인 행만 담는다.
         Index(
             "idx_analysis_job_queue",
@@ -198,6 +211,10 @@ class AnalysisResult(Base):
     # AnalysisResultOut 전문. 마스킹 PDF 는 용량 때문에 넣지 않는다.
     payload: Mapped[dict[str, Any]] = mapped_column(JsonB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # 사용자가 목록에서 제목을 고칠 수 있어 "언제 고쳤는지" 가 필요하다.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
 
     __table_args__ = (
         CheckConstraint(

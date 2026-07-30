@@ -1,4 +1,4 @@
-"""분석 작업 API — 접수(202)·목록·상세.
+"""분석 작업 API — 접수(202)·목록·상세·제목 수정·삭제.
 
 분석은 **여기서 실행하지 않는다.** 검증하고 파일을 스풀한 뒤 analysis_job 행 하나를 만들고
 바로 응답한다. 실제 처리는 services/analysis_jobs/runner.py 의 워커가 큐에서 집어간다.
@@ -17,7 +17,8 @@ from app.api.deps import RequireMember
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.db.session import get_app_db
-from app.models.analysis_job import AnalysisJob, AnalysisResult, JobStatus
+from app.models.analysis_job import ACTIVE_STATUSES, AnalysisJob, AnalysisResult, JobStatus
+from app.models.auth import utcnow
 from app.repositories.analysis_job import AnalysisJobRepository
 from app.schemas.analysis import (
     AnalysisErrorOut,
@@ -25,6 +26,7 @@ from app.schemas.analysis import (
     AnalysisJobOut,
     AnalysisJobSummaryOut,
     AnalysisResultOut,
+    UpdateAnalysisTitleIn,
 )
 from app.schemas.common import ApiResponse, Page, success_response
 from app.services.analysis_jobs import spool
@@ -127,21 +129,80 @@ def get_analysis(job_id: str, user: RequireMember, db: AppDb) -> ApiResponse[Ana
     """
     uid = claims_user_id(user)
     repo = AnalysisJobRepository(db)
+    job = _get_owned_or_404(repo, job_id, uid)
+    result = repo.get_result(job.id) if job.status == JobStatus.SUCCEEDED else None
+    return success_response(_detail_out(job, result))
+
+
+@router.put("/{job_id}/title", response_model=ApiResponse[AnalysisJobSummaryOut])
+def update_analysis_title(
+    job_id: str, body: UpdateAnalysisTitleIn, user: RequireMember, db: AppDb
+) -> ApiResponse[AnalysisJobSummaryOut]:
+    """목록에 보이는 제목을 사용자가 고친다.
+
+    제목은 산출물(analysis_result)의 컬럼이다 — 아직 결과가 없는 작업(진행 중·실패)은 고칠
+    자리가 없으므로 409 로 거절한다. 목록에서도 그 행에는 '제목 수정' 메뉴를 띄우지 않는다.
+    """
+    uid = claims_user_id(user)
+    repo = AnalysisJobRepository(db)
+    job = _get_owned_or_404(repo, job_id, uid)
+
+    result = repo.get_result(job.id)
+    if result is None:
+        raise AppError("제목을 수정할 수 없습니다", "아직 분석 결과가 없는 기록입니다.", 409)
+
+    result.title = body.title
+    result.updated_at = utcnow()
+    db.commit()
+    db.refresh(result)
+    # message 는 토스트 문구다 — 프론트가 화면마다 따로 심지 않도록 서버가 소유한다.
+    return success_response(_summary_out(job, result), message="분석 제목을 수정했습니다.")
+
+
+@router.delete("/{job_id}", response_model=ApiResponse[AnalysisJobSummaryOut])
+def delete_analysis(
+    job_id: str, user: RequireMember, db: AppDb
+) -> ApiResponse[AnalysisJobSummaryOut]:
+    """목록에서 지운다 — soft delete 라 deleted_at 만 찍고 행도 산출물도 남긴다.
+
+    조회 경로(get_owned·_owned)가 이미 deleted_at IS NULL 로 거르므로 이후 접근은 전부 404 다.
+    (db.delete() 를 쓰면 analysis_result 가 ON DELETE CASCADE 로 함께 날아간다 — 쓰지 않는다.)
+
+    **진행 중인 작업은 지울 수 없다.** 워커도 DB 의 uq_analysis_job_active 도 deleted_at 을
+    모르기 때문에, 숨겨둔 채로 돌고 있는 작업이 있으면 그 회원은 새 분석을 시작할 수 없다.
+    """
+    uid = claims_user_id(user)
+    repo = AnalysisJobRepository(db)
+    job = _get_owned_or_404(repo, job_id, uid)
+
+    if job.status in ACTIVE_STATUSES:
+        raise AppError("삭제할 수 없습니다", "분석이 끝난 뒤에 삭제할 수 있습니다.", 409)
+
+    now = utcnow()
+    job.deleted_at = now
+    job.updated_at = now
+    db.commit()
+    db.refresh(job)
+    return success_response(
+        _summary_out(job, repo.get_result(job.id)), message="분석 기록을 삭제했습니다."
+    )
+
+
+# ── 조립 ──────────────────────────────────────────────────────────────
+
+
+def _get_owned_or_404(repo: AnalysisJobRepository, job_id: str, user_id: uuid.UUID) -> AnalysisJob:
+    """없는 작업·남의 작업·이미 지운 작업·잘못된 UUID 를 한 문구의 404 로 묶는다."""
     try:
         jid = uuid.UUID(job_id)
     except ValueError as e:
         raise AppError("분석을 찾을 수 없습니다", _JOB_NOT_FOUND, 404) from e
 
-    job = repo.get_owned(jid, uid)
+    job = repo.get_owned(jid, user_id)
     if job is None:
         # 남의 작업도 404 다 — 403 이면 "그 id 는 존재한다" 를 알려주는 셈이다.
         raise AppError("분석을 찾을 수 없습니다", _JOB_NOT_FOUND, 404)
-
-    result = repo.get_result(jid) if job.status == JobStatus.SUCCEEDED else None
-    return success_response(_detail_out(job, result))
-
-
-# ── 조립 ──────────────────────────────────────────────────────────────
+    return job
 
 
 def _read_uploads(uploads: list[UploadFile]) -> list[tuple[str, bytes]]:

@@ -296,8 +296,19 @@ CREATE TABLE IF NOT EXISTS analysis_job (
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_analysis_job_user ON analysis_job (user_id, created_at DESC);
+-- 사용자가 목록에서 지운 분석. 행은 남기고 deleted_at 만 찍는다(chat_room·notification 과 같은 규칙).
+-- result 가 아니라 job 에 두는 이유: 목록은 analysis_job 기준이고, 실패한 분석에는
+-- analysis_result 행이 아예 없다. 두 곳이 같은 사실을 표현하면 불일치만 생긴다.
+ALTER TABLE analysis_job ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+-- 목록 조회가 지운 행을 훑지 않도록 살아 있는 행만 담는다. 아래 alive 인덱스가 대체하므로
+-- 예전 전체 인덱스는 지운다(같은 컬럼을 두 번 갱신할 이유가 없다).
+CREATE INDEX IF NOT EXISTS idx_analysis_job_user_alive
+    ON analysis_job (user_id, created_at DESC) WHERE deleted_at IS NULL;
+DROP INDEX IF EXISTS idx_analysis_job_user;
 -- 워커가 다음 작업을 고를 때 훑는 인덱스 — 대기 중인 행만 담는다.
+-- ⚠️ 큐 관련 인덱스에는 deleted_at 조건을 넣지 않는다. 지워진 작업이라도 진행 중이면
+--    워커가 정상적으로 끝맺어야 하고, uq_analysis_job_active 도 마찬가지다.
 CREATE INDEX IF NOT EXISTS idx_analysis_job_queue
     ON analysis_job (queued_at) WHERE status = 'QUEUED';
 -- lease 가 만료된 좀비 작업을 회수할 때 훑는 인덱스.
@@ -330,3 +341,10 @@ CREATE TABLE IF NOT EXISTS analysis_result (
 );
 CREATE INDEX IF NOT EXISTS idx_analysis_result_user
     ON analysis_result (user_id, created_at DESC);
+
+-- 목록에서 제목을 고칠 수 있게 되면서 "언제 고쳤는지" 가 필요해졌다.
+-- 기존 행은 생성 시각으로 백필한 뒤 NOT NULL 로 조인다.
+ALTER TABLE analysis_result ADD COLUMN IF NOT EXISTS updated_at timestamptz;
+UPDATE analysis_result SET updated_at = created_at WHERE updated_at IS NULL;
+ALTER TABLE analysis_result ALTER COLUMN updated_at SET DEFAULT now();
+ALTER TABLE analysis_result ALTER COLUMN updated_at SET NOT NULL;

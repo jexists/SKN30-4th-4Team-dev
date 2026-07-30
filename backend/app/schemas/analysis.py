@@ -7,9 +7,17 @@ DB 모델은 models/analysis_job.py. 여기에는 **마스킹 PDF 가 없다** �
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.document import ContractLlmAnalysis
+
+
+class UpdateAnalysisTitleIn(BaseModel):
+    """분석 제목 수정 요청. 앞뒤 공백은 제거하고, 공백만 있으면 min_length 에서 422."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str = Field(min_length=1, max_length=200)
 
 
 class AnalysisDocumentOut(BaseModel):

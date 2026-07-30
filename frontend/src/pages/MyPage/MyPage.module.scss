@@ -208,8 +208,10 @@
   & + & {
     border-top: 1px solid v.$border-subtle;
   }
+  /* $page-bg 를 쓰면 흰 카드에 구멍이 뚫려 페이지 바닥이 보이는 것처럼 읽힌다 —
+     표면 위 행 hover 는 한 단계 진한 $pill (design.md §1). */
   &:hover {
-    background: v.$page-bg;
+    background: v.$pill;
   }
 }
 .historyLoadMore {
@@ -225,8 +227,9 @@
   cursor: pointer;
   transition: background 0.15s ease;
 
+  /* 내역 카드 안의 전폭 행이라 .historyItem 과 같은 hover 를 쓴다. */
   &:hover {
-    background: v.$page-bg;
+    background: v.$pill;
   }
   &:disabled {
     color: v.$slate;
@@ -287,14 +290,19 @@
   background: v.$red-soft;
   color: v.$red;
 }
+/* 링크(성공)와 버튼(실패 — 토스트만 띄운다)이 같은 모습이어야 목록 오른쪽이 어긋나지 않는다.
+   그래서 버튼 기본 스타일(padding·background)을 여기서 지운다. */
 .historyDetail {
   display: grid;
   place-items: center;
   width: 38px;
   height: 38px;
+  padding: 0;
   border-radius: 10px;
   border: 1px solid v.$border-strong;
+  background: v.$surface;
   color: v.$navy-800;
+  cursor: pointer;
   transition:
     background 0.15s ease,
     color 0.15s ease;
@@ -349,12 +357,13 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  /* 제목이 1줄이든 2줄이든 카드가 항상 같은 높이를 차지하게 한다 —
-     그래야 카드마다 다른 "상담 이어서 하기" 버튼 위치가 항상 맞춰진다. */
-  min-height: 2.8em;
+  /* 예전엔 min-height 로 제목을 2줄 자리에 붙잡아 버튼 높이를 맞췄다 — 제목이 1줄이면
+     본문과 사이가 벌어져 보였다. 지금은 .consultCta 의 margin-top: auto 가 버튼을 바닥에
+     붙이므로, 제목은 자기 높이만 쓰고 본문이 바로 이어진다. */
 }
 .consultExcerpt {
-  margin: 8px 0 0;
+  /* 아래 여백은 여기서 준다 — CTA 는 margin-top: auto 로 바닥에 붙어 자기 여백을 못 갖는다. */
+  margin: 8px 0 20px;
   font-size: 13.5px;
   line-height: 1.6;
   color: v.$slate;
@@ -363,12 +372,14 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
+/* margin-top: auto — 카드 맨 아래에 붙는다. 인용문이 1줄인 카드와 2줄인 카드가 섞여도
+   버튼 높이가 나란히 맞는다(그리드가 카드 높이를 같게 늘려 준다). */
 .consultCta {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-top: 20px;
+  margin-top: auto;
   padding: 12px;
   border-radius: 10px;
   background: v.$pill;

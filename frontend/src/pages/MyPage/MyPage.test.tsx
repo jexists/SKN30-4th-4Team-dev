@@ -16,6 +16,7 @@ const listRooms = vi.hoisted(() => vi.fn())
 const setCurrentUser = vi.fn()
 const signInWithPassword = vi.hoisted(() => vi.fn())
 const updateUser = vi.hoisted(() => vi.fn())
+const showToast = vi.hoisted(() => vi.fn())
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => useAuth() }))
 vi.mock('../../hooks/useCurrentUser', () => ({
@@ -30,6 +31,8 @@ vi.mock('../../api/chatHistory', () => ({ listRooms }))
 vi.mock('../../config/supabase', () => ({
   supabase: { auth: { signInWithPassword, updateUser } },
 }))
+// 토스트는 App 레이아웃이 그린다 — 이 화면 테스트에서는 호출됐는지만 본다.
+vi.mock('../../components/Toast/toastStore', () => ({ showToast, dismissToast: vi.fn() }))
 
 describe('MyPage 프로필', () => {
   beforeEach(() => {
@@ -58,7 +61,7 @@ describe('MyPage 프로필', () => {
     )
 
     expect(useCurrentUser).toHaveBeenCalledWith('access-token')
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('홈실드 님')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('홈실드')
     expect(screen.queryByText('김철수')).not.toBeInTheDocument()
   })
 
@@ -332,6 +335,51 @@ describe('MyPage 최근 진단 내역 — 더 보기', () => {
 
     expect(await screen.findByText('유일한 항목')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '더 보기' })).not.toBeInTheDocument()
+  })
+
+  // 버튼을 없애면 행마다 오른쪽 폭이 달라진다 — 자리는 두고 이유만 토스트로 알린다.
+  it('실패한 기록은 리포트로 이동하지 않고 토스트로 이유를 알린다', async () => {
+    const user = userEvent.setup()
+    listAnalyses.mockResolvedValueOnce({
+      items: [job('job-1', '실패한 기록')],
+      next_cursor: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('실패한 기록')
+    const open = screen.getByRole('button', { name: '실패한 기록 진단 리포트 보기' })
+    expect(screen.queryByRole('link', { name: '실패한 기록 진단 리포트 보기' })).toBeNull()
+
+    await user.click(open)
+
+    expect(showToast).toHaveBeenCalledWith(
+      '분석에 실패한 기록이라 리포트를 열 수 없습니다.',
+      'error',
+    )
+  })
+
+  it('성공한 기록은 리포트 링크로 이동한다', async () => {
+    listAnalyses.mockResolvedValueOnce({
+      items: [{ ...job('job-2', '성공한 기록'), status: 'SUCCEEDED' as const, risk_level: 'LOW' }],
+      next_cursor: null,
+    })
+
+    render(
+      <MemoryRouter>
+        <MyPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('성공한 기록')
+    expect(screen.getByRole('link', { name: '성공한 기록 진단 리포트 보기' })).toHaveAttribute(
+      'href',
+      '/risk-report/job-2',
+    )
   })
 })
 

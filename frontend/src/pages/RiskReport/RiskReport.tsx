@@ -1,24 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import apartmentImg from '../../../assets/images/apartment.png'
 import officetelImg from '../../../assets/images/efficiency_apartment.png'
 import houseImg from '../../../assets/images/house.png'
 import villaImg from '../../../assets/images/multiplex_housing.png'
-import { getAnalysis, listAnalyses } from '../../api/analyses'
+import {
+  ANALYSIS_TITLE_MAX,
+  deleteAnalysis,
+  getAnalysis,
+  updateAnalysisTitle,
+} from '../../api/analyses'
 import { isRetryable } from '../../api/apiErrorHandler'
 import { ErrorState } from '../../components/ErrorState/ErrorState'
+import { Modal } from '../../components/Modal/Modal'
 import {
   Building,
   Check,
   ClipboardCheck,
   Download,
+  Edit,
   Info,
+  MoreVertical,
   Pin,
+  Trash,
   Warn,
 } from '../../components/icons'
+import {
+  analysisTitle,
+  formatAnalyzedAt,
+  isAnalysisFailed,
+  riskBadge,
+  useAnalysisHistory,
+} from '../../hooks/useAnalysisHistory'
 import { markAnalysisFinished, markResourceNotificationsRead } from '../../hooks/useNotifications'
-import type { AnalysisJobDetail, AnalysisResult, AnalysisStage } from '../../types/analysis'
+import type {
+  AnalysisJobDetail,
+  AnalysisJobSummary,
+  AnalysisResult,
+  AnalysisStage,
+} from '../../types/analysis'
 import { isTerminal } from '../../types/analysis'
 import type { RiskSeverity } from '../../types/document'
 import styles from './RiskReport.module.scss'
@@ -28,6 +49,9 @@ import styles from './RiskReport.module.scss'
  *
  * 예전엔 `location.state` 로 결과를 받아 **새로고침하면 사라졌다.** 지금은 URL 의 jobId 가
  * 유일한 입력이고 결과는 서버에 있다 — 링크를 공유하거나 알림에서 들어와도 같은 화면이 뜬다.
+ *
+ * jobId 가 없는 `/risk-report` 는 **지금까지 분석한 목록**이다. 예전엔 가장 최근 결과로
+ * 곧바로 리다이렉트했는데, 그러면 이전 분석을 보려고 마이페이지까지 돌아가야 했다.
  *
  * 분석은 30초~2분짜리라 결과 화면에 알림보다 먼저 도착할 수 있다. 그래서 이 화면 자체가
  * 진행 상태를 그리고 폴링한다 — 막다른 길을 만들지 않기 위함이다.
@@ -82,55 +106,45 @@ const SEVERITY_TONE: Record<RiskSeverity, ClauseTone> = {
 
 export function RiskReport() {
   const { jobId } = useParams<{ jobId?: string }>()
-  // 헤더의 "위험 보고서" 내비는 id 없이 들어온다 — 가장 최근 결과로 보낸다.
-  return jobId ? <JobReport jobId={jobId} /> : <LatestReportRedirect />
+  // 헤더의 "위험 보고서" 내비는 id 없이 들어온다 — 분석 목록을 보여준다.
+  return jobId ? <JobReport jobId={jobId} /> : <AnalysisHistoryPanel />
 }
 
-// ── /risk-report (id 없음) ─────────────────────────────────────────────
+// ── /risk-report (id 없음) — 지금까지 분석한 목록 ───────────────────────
 
-function LatestReportRedirect() {
+/**
+ * 진행 중·실패한 분석도 목록에 남긴다. 진행 중 항목을 누르면 `/risk-report/:jobId` 의
+ * 진행 화면이 이어서 폴링하므로 어느 항목도 막다른 길이 아니다.
+ *
+ * 목록 마크업은 마이페이지 "최근 진단 내역" 과 비슷하지만 톤이 달라 각자 그린다.
+ * 세 번째 화면이 같은 목록을 요구하면 `components/AnalysisHistoryList` 로 뽑을 자리다.
+ */
+function AnalysisHistoryPanel() {
   const navigate = useNavigate()
-  const [latestId, setLatestId] = useState<string | null>(null)
-  const [status, setStatus] = useState<'loading' | 'empty' | 'error'>('loading')
-  const [error, setError] = useState<unknown>(null)
-  const [reloadKey, setReloadKey] = useState(0)
+  const { items, status, error, hasMore, loadingMore, loadMore, applyTitle, removeItem, retry } =
+    useAnalysisHistory(5)
+  // 열려 있는 모달은 한 번에 하나다 — 어떤 항목에 대한 무슨 작업인지만 들고 있는다.
+  const [dialog, setDialog] = useState<{ kind: 'rename' | 'delete'; job: AnalysisJobSummary } | null>(
+    null,
+  )
 
-  useEffect(() => {
-    let cancelled = false
-    setStatus('loading')
-    listAnalyses(null, 20)
-      .then((page) => {
-        if (cancelled) return
-        const newest = page.items.find((item) => item.status === 'SUCCEEDED')
-        if (newest) setLatestId(newest.id)
-        else setStatus('empty')
-      })
-      .catch((caught) => {
-        if (cancelled) return
-        setError(caught)
-        setStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [reloadKey])
+  if (status === 'loading') return <LoadingPanel label="분석 기록을 불러오고 있습니다" />
 
-  if (latestId) return <Navigate replace to={`/risk-report/${latestId}`} />
-
+  // 실패를 빈 목록으로 그리지 않는다 — 서버 장애가 "분석한 적 없음"으로 보이면 안 된다.
   if (status === 'error') {
     return (
       <CenteredPanel>
         <ErrorState
           variant="plain"
           message="분석 기록을 불러오지 못했습니다."
-          onRetry={isRetryable(error) ? () => setReloadKey((key) => key + 1) : undefined}
+          onRetry={isRetryable(error) ? retry : undefined}
           action={{ label: '분석하러 가기', onClick: () => navigate('/analyze') }}
         />
       </CenteredPanel>
     )
   }
 
-  if (status === 'empty') {
+  if (items.length === 0) {
     return (
       <CenteredPanel>
         <h1 className={styles.stateTitle}>아직 분석한 계약서가 없습니다.</h1>
@@ -144,7 +158,317 @@ function LatestReportRedirect() {
     )
   }
 
-  return <LoadingPanel label="최근 분석 결과를 찾고 있습니다" />
+  return (
+    <div className={styles.page}>
+      <div className={styles.container}>
+        <header className={styles.listHead}>
+          <h1 className={styles.title}>최근 진단 내역</h1>
+          {/* 목록이 길어져도 스크롤 없이 다음 분석으로 갈 수 있게 헤더에 둔다. */}
+          <Link to="/analyze" className={styles.listCta}>
+            새 계약서 분석하기
+          </Link>
+        </header>
+
+        <div className={styles.list}>
+          {items.map((job) => (
+            <HistoryRow
+              key={job.id}
+              job={job}
+              onRename={() => setDialog({ kind: 'rename', job })}
+              onDelete={() => setDialog({ kind: 'delete', job })}
+            />
+          ))}
+          {hasMore && (
+            <button
+              type="button"
+              className={styles.loadMore}
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+            >
+              {loadingMore ? '불러오는 중입니다...' : '더 보기'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {dialog?.kind === 'rename' && (
+        <RenameAnalysisModal
+          job={dialog.job}
+          onClose={() => setDialog(null)}
+          onSaved={(title) => {
+            applyTitle(dialog.job.id, title)
+            setDialog(null)
+          }}
+        />
+      )}
+      {dialog?.kind === 'delete' && (
+        <DeleteAnalysisModal
+          job={dialog.job}
+          onClose={() => setDialog(null)}
+          onDeleted={() => {
+            removeItem(dialog.job.id)
+            setDialog(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * 목록의 한 줄.
+ *
+ * **실패한 분석은 누를 수 없다** — 열어도 보여줄 리포트가 없고, 실패 화면으로 보내면 목록으로
+ * 돌아오는 걸음만 늘어난다. 그래서 링크가 아니라 그냥 줄로 그린다(알림 목록과 같은 규칙).
+ * 대신 ⋮ 메뉴는 모든 행에 있어 **오른쪽 폭이 같다** — 실패 행만 배지가 밀려 보이지 않는다.
+ *
+ * 링크(`<a>`) 안에는 버튼을 넣을 수 없으므로 행을 감싸는 div 를 두고 메뉴를 그 바깥에 둔다.
+ */
+function HistoryRow({
+  job,
+  onRename,
+  onDelete,
+}: {
+  job: AnalysisJobSummary
+  onRename: () => void
+  onDelete: () => void
+}) {
+  const title = analysisTitle(job)
+  const badge = riskBadge(job)
+  const failed = isAnalysisFailed(job)
+
+  const main = (
+    <>
+      <span className={styles.listRowText}>
+        <span className={styles.listTitle}>{title}</span>
+        <span className={styles.listDate}>진단 일시: {formatAnalyzedAt(job.created_at)}</span>
+      </span>
+      {/* 등급이 없는 상태(분석 중·실패)는 level_* 가 없어 기본 pill 모습이 된다. */}
+      <span className={[styles.levelPill, styles[`level_${badge.tone}`]].filter(Boolean).join(' ')}>
+        {badge.label}
+      </span>
+    </>
+  )
+
+  return (
+    <div className={styles.listRow}>
+      {failed ? (
+        <div className={`${styles.listRowMain} ${styles.listRowStatic}`}>{main}</div>
+      ) : (
+        <Link
+          to={`/risk-report/${job.id}`}
+          className={styles.listRowMain}
+          aria-label={`${title} 리포트 보기`}
+        >
+          {main}
+        </Link>
+      )}
+      {/* 제목은 산출물에 있다 — 결과가 없는 실패 기록은 고칠 자리가 없어 삭제만 준다. */}
+      <RowMenu title={title} onRename={failed ? undefined : onRename} onDelete={onDelete} />
+    </div>
+  )
+}
+
+/** ⋮ 메뉴. 바깥을 누르거나 Escape 로 닫힌다 — 채팅 사이드바(ChatRoomItem)와 같은 규칙이다. */
+function RowMenu({
+  title,
+  onRename,
+  onDelete,
+}: {
+  title: string
+  onRename?: () => void
+  onDelete: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div className={styles.rowMenu} ref={rootRef}>
+      <button
+        type="button"
+        className={`${styles.rowMenuTrigger} ${open ? styles.rowMenuTriggerOpen : ''}`}
+        aria-label={`${title} 옵션`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <MoreVertical />
+      </button>
+
+      {open && (
+        <div className={styles.menu} role="menu">
+          {onRename && (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.menuItem}
+              onClick={() => {
+                setOpen(false)
+                onRename()
+              }}
+            >
+              <Edit />
+              제목 수정
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            className={`${styles.menuItem} ${styles.menuItemDanger}`}
+            onClick={() => {
+              setOpen(false)
+              onDelete()
+            }}
+          >
+            <Trash />
+            삭제
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 제목 수정·삭제 모달.
+ *
+ * 실패 원인은 client.ts 의 공통 오류 모달이 알린다 — 여기선 진행 상태만 풀고 모달을 열어 둬
+ * 사용자가 그대로 다시 시도할 수 있게 한다(채팅방 모달과 같은 규칙).
+ */
+function RenameAnalysisModal({
+  job,
+  onClose,
+  onSaved,
+}: {
+  job: AnalysisJobSummary
+  onClose: () => void
+  onSaved: (title: string) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [title, setTitle] = useState(analysisTitle(job))
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmed = title.trim()
+    if (!trimmed || saving) return
+
+    setSaving(true)
+    try {
+      const updated = await updateAnalysisTitle(job.id, trimmed)
+      onSaved(updated.title ?? trimmed)
+    } catch {
+      // 공통 오류 모달이 원인을 말한다.
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open
+      title="분석 제목 수정"
+      onClose={() => !saving && onClose()}
+      initialFocusRef={inputRef}
+    >
+      <form className={styles.dialogForm} onSubmit={(event) => void handleSubmit(event)}>
+        <label htmlFor="analysis-title">분석 제목</label>
+        <input
+          id="analysis-title"
+          ref={inputRef}
+          className={styles.dialogInput}
+          defaultValue={analysisTitle(job)}
+          maxLength={ANALYSIS_TITLE_MAX}
+          onChange={(event) => setTitle(event.target.value)}
+        />
+        <div className={styles.dialogActions}>
+          <button
+            type="button"
+            className={styles.dialogCancel}
+            disabled={saving}
+            onClick={onClose}
+          >
+            취소
+          </button>
+          <button type="submit" className={styles.dialogSubmit} disabled={saving || !title.trim()}>
+            {saving ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function DeleteAnalysisModal({
+  job,
+  onClose,
+  onDeleted,
+}: {
+  job: AnalysisJobSummary
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      await deleteAnalysis(job.id)
+      onDeleted()
+    } catch {
+      // 공통 오류 모달이 원인을 말한다(진행 중이라 지울 수 없는 경우 포함).
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <Modal open title="분석 기록 삭제" onClose={() => !deleting && onClose()}>
+      <div className={styles.dialogForm}>
+        <p className={styles.dialogText}>
+          {analysisTitle(job)} 기록을 삭제하시겠습니까?
+          <span>삭제한 기록은 복구할 수 없습니다.</span>
+        </p>
+        <div className={styles.dialogActions}>
+          <button
+            type="button"
+            className={styles.dialogCancel}
+            disabled={deleting}
+            onClick={onClose}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            className={styles.dialogDanger}
+            disabled={deleting}
+            onClick={() => void handleDelete()}
+          >
+            {deleting ? '삭제 중...' : '삭제'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
 }
 
 // ── /risk-report/:jobId ────────────────────────────────────────────────

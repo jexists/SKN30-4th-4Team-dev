@@ -72,3 +72,12 @@ npm run format         # Prettier
 > **결과 화면은 URL 로 산다.** 예전 `/risk-report` 는 `location.state` 로 결과를 받아 새로고침하면
 > 사라졌다. 지금은 `:jobId` 가 유일한 입력이고 결과는 서버에 있다 — 링크 공유·알림 클릭·
 > 새로고침이 모두 같은 화면을 연다. 화면 데이터를 라우터 state 에만 싣지 않는다.
+>
+> `/risk-report` (id 없음) = **분석 목록**, `/risk-report/:jobId` = 그 분석의 결과(또는 진행 화면).
+> 예전엔 id 없이 들어오면 최근 결과로 리다이렉트해 이전 분석을 볼 길이 없었다. 목록·마이페이지가
+> 공유하는 조회 로직은 `hooks/useAnalysisHistory.ts` 하나뿐이다(`analysisTitle`·`riskBadge` 포함).
+>
+> 목록의 ⋮ 메뉴에서 **제목 수정·삭제**를 한다. 삭제는 soft delete 라 서버에 행이 남고 목록에서만
+> 사라진다. 제목은 산출물(`analysis_result.title`)에 있으므로 **결과가 없는 실패 기록은 삭제만**
+> 된다. 수정·삭제 결과는 재조회하지 않고 훅의 `applyTitle`·`removeItem` 으로 목록에 반영한다
+> (재조회하면 "더 보기" 로 쌓은 페이지가 되감긴다).

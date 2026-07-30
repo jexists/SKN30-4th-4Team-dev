@@ -145,16 +145,18 @@ erDiagram
         timestamptz finished_at "nullable"
         timestamptz created_at
         timestamptz updated_at
+        timestamptz deleted_at "nullable, soft delete"
     }
     analysis_result {
         uuid id PK
         uuid job_id FK "UNIQUE"
         uuid user_id FK "app_user"
-        text title "nullable"
+        text title "nullable, 사용자가 수정 가능"
         text summary "nullable"
         text risk_level "nullable, LOW|MEDIUM|HIGH"
         jsonb payload "마스킹 PDF 제외"
         timestamptz created_at
+        timestamptz updated_at
     }
     document {
         uuid id PK
@@ -381,6 +383,8 @@ ASSISTANT 답변이 참조한 지식베이스 청크를 기록 → **출처 인�
 | heartbeat_at | TIMESTAMPTZ | NULL | 마지막 생존 신호 |
 | queued_at / started_at / finished_at | TIMESTAMPTZ | | 큐 진입·시작·종료 시각 |
 | created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 |
+| deleted_at | TIMESTAMPTZ | NULL | 사용자가 목록에서 지운 시각 (Soft Delete) |
+| — | | INDEX(user_id, created_at DESC) WHERE deleted_at IS NULL | 내 목록(지운 것 제외) |
 | — | | INDEX(queued_at) WHERE status='QUEUED' | 다음 작업 선점 |
 | — | | INDEX(lease_expires_at) WHERE status='RUNNING' | 만료 임대 회수 |
 | — | | UNIQUE(user_id) WHERE status IN ('QUEUED','RUNNING') | 회원당 진행 중 1건 |
@@ -398,11 +402,14 @@ ASSISTANT 답변이 참조한 지식베이스 청크를 기록 → **출처 인�
 | id | UUID | PK | 결과 ID |
 | job_id | UUID | FK→`analysis_job`, UNIQUE | 작업 ID (1:1) |
 | user_id | UUID | FK→`app_user` | 소유자 (조회 시 소유권 검증) |
-| title | TEXT | NULL | 목록용 제목 |
+| title | TEXT | NULL | 목록용 제목. **사용자가 목록에서 수정할 수 있다** |
 | summary | TEXT | NULL | 목록용 요약 |
 | risk_level | TEXT | NULL, CHECK(`LOW`\|`MEDIUM`\|`HIGH`) | 목록용 위험 등급 |
 | payload | JSONB | | 리포트 전체. **마스킹 PDF 는 저장하지 않는다** |
-| created_at | TIMESTAMPTZ | | 생성 일시 |
+| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 (제목 수정 시각) |
+
+> **삭제는 작업(`analysis_job.deleted_at`)에만 있다.** 결과는 작업을 통해서만 닿으므로 두 곳이
+> 같은 사실을 표현하면 불일치가 생긴다. 실패한 분석에는 결과 행이 아예 없기도 하다.
 
 ### 12. document — 지식베이스 원문 메타 ★신규
 RAG 검색 대상인 법령·판례·가이드 원문의 메타데이터.

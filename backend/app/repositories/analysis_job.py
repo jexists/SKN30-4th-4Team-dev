@@ -46,7 +46,12 @@ class AnalysisJobRepository:
         return job
 
     def find_active(self, user_id: uuid.UUID) -> AnalysisJob | None:
-        """진행 중인 작업. 있으면 새 요청을 409 로 막는다."""
+        """진행 중인 작업. 있으면 새 요청을 409 로 막는다.
+
+        **여기엔 deleted_at 필터를 걸지 않는다** — 워커 경로(claim_next·fail_active)와 DB 의
+        uq_analysis_job_active 도 삭제 여부를 모르기 때문이다. 필터를 걸면 "숨겨졌지만 아직
+        도는 작업" 때문에 새 분석이 영영 409 로 막힌다(그래서 라우터가 진행 중 삭제를 거절한다).
+        """
         return self.db.execute(
             select(AnalysisJob)
             .where(AnalysisJob.user_id == user_id, AnalysisJob.status.in_(_ACTIVE))
@@ -61,9 +66,18 @@ class AnalysisJobRepository:
         ).scalar_one_or_none()
 
     def get_owned(self, job_id: uuid.UUID, user_id: uuid.UUID) -> AnalysisJob | None:
-        """내 작업만. 남의 작업은 None → 라우터가 404 로 만든다(존재 여부 비노출)."""
+        """내 작업만, 그리고 지우지 않은 것만.
+
+        남의 작업도 지운 작업도 None → 라우터가 404 로 만든다(존재 여부 비노출).
+        **사용자 조회 경로의 soft delete 필터는 여기와 `_owned` 두 곳이 전부다** — 목록·상세·
+        제목 수정·삭제가 모두 이 둘을 거치므로 규칙이 갈라지지 않는다.
+        """
         return self.db.execute(
-            select(AnalysisJob).where(AnalysisJob.id == job_id, AnalysisJob.user_id == user_id)
+            select(AnalysisJob).where(
+                AnalysisJob.id == job_id,
+                AnalysisJob.user_id == user_id,
+                AnalysisJob.deleted_at.is_(None),
+            )
         ).scalar_one_or_none()
 
     def get_result(self, job_id: uuid.UUID) -> AnalysisResult | None:
@@ -75,7 +89,7 @@ class AnalysisJobRepository:
         return (
             select(AnalysisJob, AnalysisResult)
             .outerjoin(AnalysisResult, AnalysisResult.job_id == AnalysisJob.id)
-            .where(AnalysisJob.user_id == user_id)
+            .where(AnalysisJob.user_id == user_id, AnalysisJob.deleted_at.is_(None))
         )
 
     def list_by_user(
