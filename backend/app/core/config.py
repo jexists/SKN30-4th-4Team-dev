@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     AVATAR_BUCKET: str = "avatars"
     AVATAR_MAX_FILE_MB: int = 5
+    # 분석 원본은 워커 프로세스가 달라도 읽을 수 있도록 private Storage에 잠시 보관한다.
+    ANALYSIS_INPUT_BUCKET: str = "analysis-inputs"
+    ANALYSIS_STORAGE_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0)
 
     # Supabase Auth JWT 검증용(HS256 대칭키). 대시보드 → Settings → API → JWT Settings → JWT Secret.
     # 프로젝트가 비대칭키(ES256/RS256)를 쓰면 이 값 없이 SUPABASE_URL 의 JWKS 로 검증한다.

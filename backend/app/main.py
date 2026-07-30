@@ -50,11 +50,11 @@ def _warmup() -> None:
 
 
 def _recover_analysis_jobs() -> None:
-    """이전 프로세스가 남긴 분석 작업을 정리한다.
+    """이전 프로세스가 남긴 만료 lease 를 복구한다.
 
-    업로드 원본이 임시 디렉터리에만 있어 재시작하면 사라진다 — 되살릴 수 없으므로 재큐잉이
-    아니라 FAILED 로 닫고 사용자에게 실패 알림을 보낸다. 워밍업과 마찬가지로 **실패해도
-    기동을 막지 않는다**(DB 가 잠깐 안 되더라도 서버는 떠야 한다).
+    공유 저장소의 입력은 재시작 뒤에도 남는다. 대기 작업과 lease 가 살아 있는 실행 작업은
+    건드리지 않고, 만료 작업만 재큐잉하거나 시도 한도에 따라 실패 처리한다. 워밍업과 마찬가지로
+    **실패해도 기동을 막지 않는다**(DB 가 잠깐 안 되더라도 서버는 떠야 한다).
     """
     if AppSessionLocal is None:
         return
@@ -64,7 +64,7 @@ def _recover_analysis_jobs() -> None:
         with AppSessionLocal() as db:
             recover_on_startup(db)
     except Exception:
-        log.exception("중단된 분석 작업 정리 실패 — 서비스는 계속한다")
+        log.exception("만료된 분석 작업 복구 실패 — 서비스는 계속한다")
 
 
 @asynccontextmanager

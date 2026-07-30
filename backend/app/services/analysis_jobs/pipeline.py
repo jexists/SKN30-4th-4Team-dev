@@ -6,7 +6,6 @@
 
 import logging
 from collections.abc import Callable, Sequence
-from pathlib import Path
 
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -20,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 #: (stage, progress) 를 받는 콜백. 워커가 DB 에 진행률을 반영하는 데 쓴다.
 StageCallback = Callable[[str, int], None]
+FileLoader = Callable[[int], bytes]
 
 # OCR 이 전체 시간의 대부분이라 진행률의 대부분(10~70%)을 여기에 배분한다.
 _OCR_START = 10
@@ -27,15 +27,16 @@ _OCR_END = 70
 
 
 def run_analysis(
-    spool_dir: Path,
     file_names: Sequence[str],
     *,
+    load_file: FileLoader,
     on_stage: StageCallback | None = None,
 ) -> AnalysisResultOut:
-    """스풀된 파일들을 OCR·마스킹한 뒤 한 번에 분석한다.
+    """업로드된 파일들을 OCR·마스킹한 뒤 한 번에 분석한다.
 
-    파일은 `spool_dir/000`, `001` … 로 업로드 순서대로 저장돼 있고, 원본 이름은 file_names 가
-    같은 순서로 들고 있다(파일명에 든 이상한 문자가 디스크 경로로 새지 않게 한 분리).
+    파일 바이트는 `load_file(0)`, `load_file(1)` … 로 업로드 순서대로 읽고, 원본 이름은
+    file_names 가 같은 순서로 들고 있다. 저장 위치는 파이프라인이 알지 않으므로 워커 재시작이나
+    다른 호스트로의 작업 이관에도 같은 코드를 쓸 수 있다.
 
     실패는 전부 AppError 로 나간다 — `code` 가 5xx/429 면 워커가 재시도하고, 4xx 면 즉시
     실패로 닫는다(재시도해도 결과가 같은 사용자 입력 문제).
@@ -51,22 +52,30 @@ def run_analysis(
 
     notify(JobStage.OCR, _OCR_START)
     for index, filename in enumerate(file_names, start=1):
-        path = spool_dir / f"{index - 1:03d}"
-        if not path.exists():
-            # 스풀이 사라졌다 = 프로세스가 바뀌었다. 재시도해도 살아나지 않는다.
-            raise AppError(
-                "분석 파일 없음",
-                "업로드한 파일을 찾지 못했습니다. 다시 업로드해 주세요.",
-                422,
-            )
-        result = worker.process_for_analysis(filename, path.read_bytes())
+        # 실패했을 때 "몇 번째에서 멈췄는지"를 로그만 보고 알 수 있어야 한다.
+        logger.info("OCR 처리 시작 %d/%d", index, total)
+        result = worker.process_for_analysis(filename, load_file(index - 1))
         if not result.text_safe_for_analysis:
+            logger.warning(
+                "개인정보 잔존으로 분석 중단 %d/%d scope=%s review_required=%s",
+                index,
+                total,
+                sorted(result.redaction_scope),
+                result.review_required,
+            )
             raise AppError(
                 "개인정보 검토 필요",
                 f"{index}번째 서류에서 개인정보가 남아 있어 종합 분석을 중단했습니다.",
                 422,
             )
         if len(result.sanitized_text) > settings.CONTRACT_ANALYSIS_MAX_CHARS:
+            logger.warning(
+                "인식 텍스트 상한 초과 %d/%d chars=%d limit=%d",
+                index,
+                total,
+                len(result.sanitized_text),
+                settings.CONTRACT_ANALYSIS_MAX_CHARS,
+            )
             raise AppError(
                 "서류 분석 실패",
                 f"{index}번째 서류의 인식 내용이 분석 가능한 길이를 초과했습니다.",

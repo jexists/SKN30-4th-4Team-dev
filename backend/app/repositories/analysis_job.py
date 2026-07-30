@@ -35,8 +35,10 @@ class AnalysisJobRepository:
         *,
         file_names: Sequence[str],
         idempotency_key: str | None = None,
+        job_id: uuid.UUID | None = None,
     ) -> AnalysisJob:
         job = AnalysisJob(
+            id=job_id or uuid.uuid4(),
             user_id=user_id,
             file_names=list(file_names),
             idempotency_key=idempotency_key,
@@ -48,7 +50,7 @@ class AnalysisJobRepository:
     def find_active(self, user_id: uuid.UUID) -> AnalysisJob | None:
         """진행 중인 작업. 있으면 새 요청을 409 로 막는다.
 
-        **여기엔 deleted_at 필터를 걸지 않는다** — 워커 경로(claim_next·fail_active)와 DB 의
+        **여기엔 deleted_at 필터를 걸지 않는다** — 워커 경로(claim_next·lease 복구)와 DB 의
         uq_analysis_job_active 도 삭제 여부를 모르기 때문이다. 필터를 걸면 "숨겨졌지만 아직
         도는 작업" 때문에 새 분석이 영영 409 로 막힌다(그래서 라우터가 진행 중 삭제를 거절한다).
         """
@@ -252,46 +254,73 @@ class AnalysisJobRepository:
     # ── 복구 ────────────────────────────────────────────────────────
 
     def fail_active(self, *, code: str, message: str) -> list[tuple[uuid.UUID, uuid.UUID]]:
-        """남아 있는 QUEUED/RUNNING 을 전부 FAILED 로. 기동 시 한 번 부른다.
-
-        재큐잉하지 않는 이유: 업로드 원본이 임시 디렉터리에만 있어 프로세스와 함께 사라졌다.
-        입력 없이 되살릴 수 없으므로 정직하게 실패로 닫고 사용자에게 재시도를 안내한다.
-
-        반환값은 (job_id, user_id) 목록 — 호출부가 실패 알림을 만들 수 있게.
-        """
+        """남아 있는 QUEUED/RUNNING 을 전부 FAILED 로 닫는다."""
         return self._fail_where(AnalysisJob.status.in_(_ACTIVE), code=code, message=message)
 
-    def fail_expired_leases(self, *, code: str, message: str) -> list[tuple[uuid.UUID, uuid.UUID]]:
-        """lease 가 끊긴 RUNNING 작업을 회수한다(워커가 죽었거나 멈춘 경우)."""
-        return self._fail_where(
+    def requeue_expired_leases(self, *, max_attempts: int) -> int:
+        """재시도 여지가 있는 만료 RUNNING 작업을 다시 QUEUED 로 돌린다.
+
+        UPDATE 자체에도 만료·상태·시도 횟수 조건을 모두 둔다. SELECT 뒤 상태가 바뀌는 식의
+        경쟁 창이 없어, 동시에 복구하는 여러 워커 중 실제 조건을 만족한 행만 갱신된다.
+        """
+        now = datetime.now(UTC)
+        recovered = self.db.execute(
+            update(AnalysisJob)
+            .where(
+                AnalysisJob.status == JobStatus.RUNNING.value,
+                AnalysisJob.lease_expires_at.is_not(None),
+                AnalysisJob.lease_expires_at < now,
+                AnalysisJob.attempt_count < max_attempts,
+            )
+            .values(
+                status=JobStatus.QUEUED.value,
+                locked_by=None,
+                lease_expires_at=None,
+                heartbeat_at=None,
+                queued_at=now,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        self.db.commit()
+        return recovered.rowcount or 0
+
+    def fail_expired_leases(
+        self,
+        *,
+        code: str,
+        message: str,
+        min_attempts: int | None = None,
+    ) -> list[tuple[uuid.UUID, uuid.UUID]]:
+        """재시도 한도를 소진한, lease 가 끊긴 RUNNING 작업을 실패로 닫는다."""
+        condition = (
             (AnalysisJob.status == JobStatus.RUNNING.value)
             & (AnalysisJob.lease_expires_at.is_not(None))
-            & (AnalysisJob.lease_expires_at < datetime.now(UTC)),
-            code=code,
-            message=message,
+            & (AnalysisJob.lease_expires_at < datetime.now(UTC))
         )
+        if min_attempts is not None:
+            condition &= AnalysisJob.attempt_count >= min_attempts
+        return self._fail_where(condition, code=code, message=message)
 
     def _fail_where(
         self, condition, *, code: str, message: str
     ) -> list[tuple[uuid.UUID, uuid.UUID]]:
-        rows = list(
-            self.db.execute(select(AnalysisJob.id, AnalysisJob.user_id).where(condition)).all()
-        )
-        if not rows:
-            return []
         now = utcnow()
-        self.db.execute(
-            update(AnalysisJob)
-            .where(AnalysisJob.id.in_([r[0] for r in rows]))
-            .values(
-                status=JobStatus.FAILED.value,
-                error_code=code,
-                error_message=message,
-                finished_at=now,
-                updated_at=now,
-                lease_expires_at=None,
-            )
-            .execution_options(synchronize_session=False)
+        rows = list(
+            self.db.execute(
+                update(AnalysisJob)
+                .where(condition)
+                .values(
+                    status=JobStatus.FAILED.value,
+                    error_code=code,
+                    error_message=message,
+                    finished_at=now,
+                    updated_at=now,
+                    lease_expires_at=None,
+                )
+                .returning(AnalysisJob.id, AnalysisJob.user_id)
+                .execution_options(synchronize_session=False)
+            ).all()
         )
         self.db.commit()
         return [(r[0], r[1]) for r in rows]

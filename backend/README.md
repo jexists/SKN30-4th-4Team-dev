@@ -56,8 +56,10 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 | `WARMUP_ON_STARTUP` | 기동 시 임베딩 모델·챗봇 엔진 백그라운드 워밍업 여부 (기본 `true`) |
 | `CORS_ORIGINS` | 허용 origin, 쉼표 구분 |
 | `SUPABASE_URL` | 프로젝트 URL. JWKS 공개키 출처로도 쓰임 (비밀값 아님) |
-| `SUPABASE_KEY` | service role 키 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 서버 전용 service role 키. 클라이언트에 노출 금지 |
 | `SUPABASE_JWT_SECRET` | HS256(레거시) 검증용. 비대칭키 프로젝트면 불필요 |
+| `ANALYSIS_INPUT_BUCKET` | 분석 원본을 임시 보관하는 private Storage 버킷(기본 `analysis-inputs`) |
+| `ANALYSIS_STORAGE_TIMEOUT_SECONDS` | 분석 원본 Storage 요청 제한 시간(기본 60초) |
 | `OPENAI_API_KEY` | LLM 호출용 |
 | `OCR_WORKER_URL` | 로컬 OCR worker 주소. 로컬 직접 실행 시 `http://127.0.0.1:8100` |
 | `OCR_WORKER_PROCESS_TIMEOUT_SECONDS` | 계약서 OCR 요청 제한 시간(초) |
@@ -67,8 +69,14 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 
 ## 계약서 분석 API
 
-`POST /api/v1/documents/analyze`는 인증이 필요한 multipart 업로드 API입니다.
+`POST /api/v1/analyses`는 인증이 필요한 multipart 업로드 API입니다.
 같은 `file` 필드를 반복하면 최대 `CONTRACT_MAX_FILES`개의 서류를 전달할 수 있습니다.
+분석 원본은 `{user_id}/{job_id}/{index}` 키로 private Supabase Storage에 저장하므로 여러
+백엔드 인스턴스 중 어느 워커가 작업을 선점해도 같은 파일을 읽을 수 있습니다. Dashboard의
+Storage에서 `analysis-inputs` 버킷을 **private**으로 미리 만들고, 백엔드에
+`SUPABASE_SERVICE_ROLE_KEY`를 설정해야 합니다. 버킷에서 MIME 제한을 사용한다면
+`application/pdf`, `image/png`, `image/jpeg`를 허용해야 합니다. 원본은 작업 성공 또는
+최종 실패 뒤 삭제됩니다.
 백엔드는 모든 서류를 OCR worker로 순차 처리하고, 문서별로 구분한 개인정보 치환
 텍스트만 한 번의 종합 분석 입력으로 사용합니다. 원본 OCR 텍스트와 마스킹 PDF는
 LLM 입력에 포함되지 않습니다. 응답의 `documents`에는 문서별 마스킹 결과가 있으며,

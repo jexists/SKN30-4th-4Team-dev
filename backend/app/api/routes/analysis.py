@@ -1,7 +1,8 @@
 """분석 작업 API — 접수(202)·목록·상세·제목 수정·삭제.
 
-분석은 **여기서 실행하지 않는다.** 검증하고 파일을 스풀한 뒤 analysis_job 행 하나를 만들고
-바로 응답한다. 실제 처리는 services/analysis_jobs/runner.py 의 워커가 큐에서 집어간다.
+분석은 **여기서 실행하지 않는다.** 검증하고 파일을 공유 입력 저장소에 올린 뒤
+analysis_job 행 하나를 만들고 바로 응답한다. 실제 처리는 services/analysis_jobs/runner.py 의
+워커가 큐에서 집어간다.
 """
 
 import logging
@@ -29,7 +30,7 @@ from app.schemas.analysis import (
     UpdateAnalysisTitleIn,
 )
 from app.schemas.common import ApiResponse, Page, success_response
-from app.services.analysis_jobs import spool
+from app.services.analysis_jobs import input_store
 from app.services.auth import claims_user_id
 from app.services.notification import notify_analysis_started
 
@@ -76,31 +77,41 @@ def start_analysis(
 
     payloads = _read_uploads(file)
 
-    # job_id 를 먼저 정해 파일을 다 쓴 **뒤에** 행을 만든다. 순서를 뒤집으면 워커가 파일이
+    # job_id 를 먼저 정해 파일을 다 올린 **뒤에** 행을 만든다. 순서를 뒤집으면 워커가 입력이
     # 아직 없는 QUEUED 를 집어갈 수 있다.
     job_id = uuid.uuid4()
-    directory = spool.create(job_id)
-    try:
-        for index, (_, content) in enumerate(payloads):
-            spool.store(directory, index, content)
+    input_store.store_all(uid, job_id, payloads)
 
+    # flush 까지는 커밋 여부가 확실히 false 이므로 실패하면 입력도 지운다. 응답에 필요한
+    # ORM 값은 commit 전에 모두 읽어 둔다 — commit 뒤 refresh 는 "커밋은 됐지만 응답 조립이
+    # 실패한" 애매한 상태를 만들고, 워커가 이미 선점한 행을 refresh 할 수도 있다.
+    try:
         job = repo.create(
             uid,
+            job_id=job_id,
             file_names=[name for name, _ in payloads],
             idempotency_key=idempotency_key,
         )
-        job.id = job_id
-        db.commit()
-        db.refresh(job)
+        db.flush()
+        response = success_response(_job_out(job))
     except Exception:
-        spool.discard(job_id)
+        db.rollback()
+        input_store.discard(uid, job_id, count=len(payloads))
+        raise
+
+    # commit 예외는 서버가 성공 응답을 받지 못했어도 DB 쪽 커밋은 완료됐을 수 있다. 이때
+    # 입력을 지우면 실제로 존재하는 QUEUED 가 영구 실패하므로 보수적으로 남겨 둔다.
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
         raise
 
     # 작업이 커밋된 뒤에 알림 — 실패해도 접수는 유효하다(서비스가 예외를 삼킨다).
     notify_analysis_started(db, uid, job_id)
     # message 를 비우는 이유: 프론트가 안내 Modal 을 띄우므로 토스트까지 뜨면
     # 같은 말이 두 번 나온다.
-    return success_response(_job_out(job))
+    return response
 
 
 @router.get("", response_model=ApiResponse[Page[AnalysisJobSummaryOut]])

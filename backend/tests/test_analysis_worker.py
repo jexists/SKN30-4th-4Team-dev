@@ -30,6 +30,14 @@ def _fast_retries(monkeypatch):
     monkeypatch.setattr(settings, "ANALYSIS_JOB_MAX_ATTEMPTS", 3)
 
 
+@pytest.fixture(autouse=True)
+def discarded_inputs(monkeypatch):
+    """테스트가 원격 Storage 를 건드리지 않게 하고 최종 정리 시점을 관찰한다."""
+    calls: list[tuple[uuid.UUID, uuid.UUID, int]] = []
+    monkeypatch.setattr(runner.input_store, "discard", lambda *args: calls.append(args))
+    return calls
+
+
 @pytest.fixture()
 def session_factory():
     engine = create_engine(
@@ -116,7 +124,9 @@ def test_active_job_blocks_a_second_one(session_factory, user):
 # ── 성공 ──────────────────────────────────────────────────────────────
 
 
-def test_success_stores_result_and_notifies(session_factory, user, monkeypatch):
+def test_success_stores_result_and_notifies(
+    session_factory, user, monkeypatch, discarded_inputs
+):
     job_id = _queue_job(session_factory, user)
     monkeypatch.setattr(pipeline, "run_analysis", lambda *a, **k: _fake_result())
 
@@ -137,6 +147,7 @@ def test_success_stores_result_and_notifies(session_factory, user, monkeypatch):
         assert result.payload["analysis"]["summary"] == "요약"
 
     assert _notification_types(session_factory) == [NotificationType.ANALYSIS_COMPLETED]
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
 
 
 def test_risk_level_falls_back_to_low_when_no_high_or_medium(session_factory, user, monkeypatch):
@@ -152,7 +163,9 @@ def test_risk_level_falls_back_to_low_when_no_high_or_medium(session_factory, us
 # ── 실패·재시도 ────────────────────────────────────────────────────────
 
 
-def test_user_input_error_fails_immediately_without_retry(session_factory, user, monkeypatch):
+def test_user_input_error_fails_immediately_without_retry(
+    session_factory, user, monkeypatch, discarded_inputs
+):
     """4xx 는 몇 번을 해도 결과가 같다 — 재시도하면 사용자만 기다린다."""
     job_id = _queue_job(session_factory, user)
     calls = []
@@ -170,9 +183,12 @@ def test_user_input_error_fails_immediately_without_retry(session_factory, user,
     assert job.error_code == "422"
     assert job.error_message == "개인정보가 남아 있습니다."
     assert _notification_types(session_factory) == [NotificationType.ANALYSIS_FAILED]
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
 
 
-def test_transient_error_is_retried_then_fails(session_factory, user, monkeypatch):
+def test_transient_error_is_retried_then_fails(
+    session_factory, user, monkeypatch, discarded_inputs
+):
     job_id = _queue_job(session_factory, user)
     calls = []
 
@@ -188,15 +204,17 @@ def test_transient_error_is_retried_then_fails(session_factory, user, monkeypatc
     assert job.status == JobStatus.FAILED
     assert job.attempt_count == settings.ANALYSIS_JOB_MAX_ATTEMPTS
     assert _notification_types(session_factory) == [NotificationType.ANALYSIS_FAILED]
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
 
 
-def test_transient_error_then_success(session_factory, user, monkeypatch):
+def test_transient_error_then_success(session_factory, user, monkeypatch, discarded_inputs):
     job_id = _queue_job(session_factory, user)
     calls = []
 
     def flaky(*args, **kwargs):
         calls.append(1)
         if len(calls) == 1:
+            assert discarded_inputs == [], "프로세스 내부 재시도 전에 입력을 지웠다"
             raise AppError("OCR 서버 연결 실패", "잠시 후 다시 시도해 주세요.", 503)
         return _fake_result()
 
@@ -206,6 +224,28 @@ def test_transient_error_then_success(session_factory, user, monkeypatch):
     assert len(calls) == 2
     assert _job(session_factory, job_id).status == JobStatus.SUCCEEDED
     assert _notification_types(session_factory) == [NotificationType.ANALYSIS_COMPLETED]
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
+
+
+def test_worker_loads_inputs_by_user_job_and_index(session_factory, user, monkeypatch):
+    job_id = _queue_job(session_factory, user)
+    loads = []
+
+    def load(load_user_id, load_job_id, index):
+        loads.append((load_user_id, load_job_id, index))
+        return b"stored-input"
+
+    def analyze(file_names, *, load_file, on_stage):
+        assert file_names == FILE_NAMES
+        assert load_file(0) == b"stored-input"
+        return _fake_result()
+
+    monkeypatch.setattr(runner.input_store, "load", load)
+    monkeypatch.setattr(pipeline, "run_analysis", analyze)
+
+    runner.AnalysisWorker(session_factory).run_once()
+
+    assert loads == [(user, job_id, 0)]
 
 
 def test_unexpected_exception_never_leaks_internals_to_the_user(session_factory, user, monkeypatch):
@@ -228,20 +268,25 @@ def test_unexpected_exception_never_leaks_internals_to_the_user(session_factory,
 # ── 복구 ──────────────────────────────────────────────────────────────
 
 
-def test_startup_recovery_fails_orphaned_jobs(session_factory, user):
-    """재시작하면 업로드 원본이 사라진다 — 재큐잉이 아니라 실패로 닫아야 한다."""
+def test_startup_recovery_preserves_queued_and_live_jobs(session_factory, user):
     job_id = _queue_job(session_factory, user)
 
     with session_factory() as db:
-        assert runner.recover_on_startup(db) == 1
+        assert runner.recover_on_startup(db) == 0
+    assert _job(session_factory, job_id).status == JobStatus.QUEUED
+
+    with session_factory() as db:
+        AnalysisJobRepository(db).claim_next("live-worker", lease_seconds=3600)
+    with session_factory() as db:
+        assert runner.recover_on_startup(db) == 0
 
     job = _job(session_factory, job_id)
-    assert job.status == JobStatus.FAILED
-    assert job.error_code == "SERVER_RESTARTED"
-    assert _notification_types(session_factory) == [NotificationType.ANALYSIS_FAILED]
+    assert job.status == JobStatus.RUNNING
+    assert job.locked_by == "live-worker"
+    assert _notification_types(session_factory) == []
 
 
-def test_expired_lease_is_reclaimed_as_failed(session_factory, user):
+def test_expired_lease_is_requeued_and_claimed_by_another_worker(session_factory, user):
     job_id = _queue_job(session_factory, user)
     with session_factory() as db:
         AnalysisJobRepository(db).claim_next("w1", lease_seconds=60)
@@ -254,8 +299,62 @@ def test_expired_lease_is_reclaimed_as_failed(session_factory, user):
         assert runner.recover_expired_leases(db) == 1
 
     job = _job(session_factory, job_id)
+    assert job.status == JobStatus.QUEUED
+    assert job.locked_by is None
+    assert job.lease_expires_at is None
+    assert job.heartbeat_at is None
+    assert job.attempt_count == 1
+
+    with session_factory() as db:
+        reclaimed = AnalysisJobRepository(db).claim_next("w2", lease_seconds=60)
+    assert reclaimed is not None
+    assert reclaimed.id == job_id
+    assert reclaimed.status == JobStatus.RUNNING
+    assert reclaimed.locked_by == "w2"
+    assert reclaimed.attempt_count == 2
+
+
+def test_expired_lease_at_attempt_limit_fails_and_discards_inputs(
+    session_factory, user, discarded_inputs
+):
+    job_id = _queue_job(session_factory, user)
+    with session_factory() as db:
+        AnalysisJobRepository(db).claim_next("w1", lease_seconds=60)
+    with session_factory() as db:
+        job = db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id)).scalar_one()
+        job.attempt_count = settings.ANALYSIS_JOB_MAX_ATTEMPTS
+        job.lease_expires_at = datetime.now(UTC) - timedelta(minutes=5)
+        db.commit()
+
+    with session_factory() as db:
+        assert runner.recover_expired_leases(db) == 1
+
+    job = _job(session_factory, job_id)
     assert job.status == JobStatus.FAILED
     assert job.error_code == "LEASE_EXPIRED"
+    assert _notification_types(session_factory) == [NotificationType.ANALYSIS_FAILED]
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
+
+
+def test_expired_lease_recovery_is_idempotent(
+    session_factory, user, discarded_inputs
+):
+    job_id = _queue_job(session_factory, user)
+    with session_factory() as db:
+        AnalysisJobRepository(db).claim_next("w1", lease_seconds=60)
+    with session_factory() as db:
+        job = db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id)).scalar_one()
+        job.attempt_count = settings.ANALYSIS_JOB_MAX_ATTEMPTS
+        job.lease_expires_at = datetime.now(UTC) - timedelta(minutes=5)
+        db.commit()
+
+    with session_factory() as db:
+        assert runner.recover_expired_leases(db) == 1
+    with session_factory() as db:
+        assert runner.recover_expired_leases(db) == 0
+
+    assert _notification_types(session_factory) == [NotificationType.ANALYSIS_FAILED]
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
 
 
 def test_live_lease_is_left_alone(session_factory, user):

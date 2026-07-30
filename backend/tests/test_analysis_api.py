@@ -5,21 +5,36 @@ from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.api.deps import require_user
 from app.core.config import settings
 from app.main import app
 from app.models.analysis_job import AnalysisJob, AnalysisResult, JobStatus
 from app.models.notification import Notification, NotificationType
-from app.services.analysis_jobs import spool
+from app.repositories.analysis_job import AnalysisJobRepository
+from app.services.analysis_jobs import input_store
 
 PDF = ("contract.pdf", b"fake-pdf", "application/pdf")
 
 
 @pytest.fixture(autouse=True)
-def _isolated_spool(tmp_path, monkeypatch):
-    """스풀을 테스트별 임시 폴더로 — 진짜 temp 디렉터리를 어지럽히지 않는다."""
-    monkeypatch.setattr(spool, "SPOOL_ROOT", tmp_path / "spool")
+def fake_input_store(monkeypatch):
+    """외부 Storage 대신 메모리 fake 를 써 API 테스트가 네트워크에 닿지 않게 한다."""
+    state = {"stored": {}, "discarded": [], "events": []}
+
+    def store_all(user_id, job_id, payloads):
+        state["events"].append(("store", job_id))
+        state["stored"][(user_id, job_id)] = list(payloads)
+
+    def discard(user_id, job_id, count=None):
+        state["events"].append(("discard", job_id))
+        state["discarded"].append((user_id, job_id, count))
+        state["stored"].pop((user_id, job_id), None)
+
+    monkeypatch.setattr(input_store, "store_all", store_all)
+    monkeypatch.setattr(input_store, "discard", discard)
+    return state
 
 
 @pytest.fixture()
@@ -57,13 +72,25 @@ def test_accepts_immediately_with_202_and_job_id(member, db_sessionmaker):
         assert job.file_names == ["contract.pdf"]
 
 
-def test_files_are_spooled_before_the_job_becomes_visible(member, db_sessionmaker):
-    """워커가 파일 없는 QUEUED 를 집어가면 안 된다."""
-    client, _ = member
+def test_files_are_stored_before_the_job_becomes_visible(
+    member, fake_input_store, monkeypatch
+):
+    """워커가 입력 없는 QUEUED 를 집어가면 안 된다."""
+    client, user_id = member
+    original_create = AnalysisJobRepository.create
+
+    def create_after_store(repo, user_id, **kwargs):
+        job_id = kwargs["job_id"]
+        assert (user_id, job_id) in fake_input_store["stored"]
+        fake_input_store["events"].append(("create", job_id))
+        return original_create(repo, user_id, **kwargs)
+
+    monkeypatch.setattr(AnalysisJobRepository, "create", create_after_store)
 
     job_id = uuid.UUID(_post(client).json()["data"]["id"])
 
-    assert (spool.spool_dir(job_id) / "000").read_bytes() == b"fake-pdf"
+    assert fake_input_store["events"] == [("store", job_id), ("create", job_id)]
+    assert fake_input_store["stored"][(user_id, job_id)] == [("contract.pdf", b"fake-pdf")]
 
 
 def test_creates_started_notification_pointing_at_the_job(member, db_sessionmaker):
@@ -148,14 +175,62 @@ def test_rejects_oversized_file(member):
     assert response.status_code == 413
 
 
-def test_invalid_input_leaves_no_job_and_no_spool(member, db_sessionmaker):
+def test_invalid_input_leaves_no_job_and_no_stored_input(
+    member, db_sessionmaker, fake_input_store
+):
     client, _ = member
 
     _post(client, files=[("file", ("contract.hwp", b"x", "application/octet-stream"))])
 
     with db_sessionmaker() as db:
         assert db.execute(select(AnalysisJob)).scalars().all() == []
-    assert not spool.SPOOL_ROOT.exists() or not any(spool.SPOOL_ROOT.iterdir())
+    assert fake_input_store["stored"] == {}
+
+
+def test_precommit_db_failure_rolls_back_and_discards_input(
+    member, db_sessionmaker, fake_input_store, monkeypatch
+):
+    client, _ = member
+    original_create = AnalysisJobRepository.create
+
+    def fail_after_add(repo, user_id, **kwargs):
+        original_create(repo, user_id, **kwargs)
+        raise RuntimeError("pre-commit failure")
+
+    monkeypatch.setattr(AnalysisJobRepository, "create", fail_after_add)
+
+    with pytest.raises(RuntimeError, match="pre-commit failure"):
+        _post(client)
+
+    with db_sessionmaker() as db:
+        assert db.execute(select(AnalysisJob)).scalars().all() == []
+    assert fake_input_store["stored"] == {}
+    assert fake_input_store["discarded"][0][2] == 1
+
+
+def test_uncertain_commit_failure_keeps_input(
+    member, db_sessionmaker, fake_input_store, monkeypatch
+):
+    """DB 가 커밋한 뒤 응답만 끊긴 경우 입력을 지워 정상 QUEUED 를 망가뜨리면 안 된다."""
+    client, user_id = member
+    original_commit = Session.commit
+
+    def commit_then_lose_ack(db):
+        original_commit(db)
+        raise RuntimeError("commit acknowledgement lost")
+
+    monkeypatch.setattr(Session, "commit", commit_then_lose_ack)
+
+    with pytest.raises(RuntimeError, match="commit acknowledgement lost"):
+        _post(client)
+
+    assert len(fake_input_store["stored"]) == 1
+    (stored_user_id, job_id), payloads = next(iter(fake_input_store["stored"].items()))
+    assert stored_user_id == user_id
+    assert payloads == [("contract.pdf", b"fake-pdf")]
+    assert fake_input_store["discarded"] == []
+    with db_sessionmaker() as db:
+        assert db.execute(select(AnalysisJob.id)).scalar_one() == job_id
 
 
 # ── 조회·소유권 ───────────────────────────────────────────────────────

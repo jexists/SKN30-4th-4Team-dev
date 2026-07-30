@@ -13,6 +13,7 @@ from app.db.base import Base
 from app.db.session import get_app_db, get_db
 from app.main import app
 from app.repositories.auth import AGREEMENT_VERSION, AuthRepository
+from app.services.analysis_jobs import spool
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -32,6 +33,19 @@ def _no_startup_warmup():
         mp.setattr(settings, "WARMUP_ON_STARTUP", False)
         mp.setattr(settings, "ANALYSIS_WORKER_ENABLED", False)
         yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_spool(tmp_path, monkeypatch):
+    """레거시 로컬 스풀을 건드리는 테스트가 실제 TEMP 를 지우지 못하게 격리한다.
+
+    분석 런타임은 이제 private Storage 를 사용하지만, 남아 있는 레거시 유틸이나 회귀 테스트가
+    `spool.purge_all()` 을 직접 호출하더라도 같은 머신의 TEMP 에 영향을 주면 안 된다.
+
+    SPOOL_ROOT 은 `spool_dir()`·`purge_all()` 이 호출 시점에 읽는 모듈 전역이라
+    setattr 만으로 충분하다.
+    """
+    monkeypatch.setattr(spool, "SPOOL_ROOT", tmp_path / "skn30-analysis")
 
 
 @pytest.fixture()
