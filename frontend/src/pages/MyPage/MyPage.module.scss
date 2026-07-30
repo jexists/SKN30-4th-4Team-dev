@@ -343,7 +343,15 @@
   margin: 10px 0 0;
   font-size: 15.5px;
   font-weight: 700;
+  line-height: 1.4;
   color: v.$ink;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  /* 제목이 1줄이든 2줄이든 카드가 항상 같은 높이를 차지하게 한다 —
+     그래야 카드마다 다른 "상담 이어서 하기" 버튼 위치가 항상 맞춰진다. */
+  min-height: 2.8em;
 }
 .consultExcerpt {
   margin: 8px 0 0;
