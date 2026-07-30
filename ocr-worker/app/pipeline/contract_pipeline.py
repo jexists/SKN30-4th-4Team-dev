@@ -42,8 +42,11 @@ class ContractProcessingPipeline:
             spotted = self.engine.spot_page(page.path, page.index)
             page_regions: list[MaskRegion] = []
             sanitized_regions: list[str] = []
-            for region in spotted.regions:
-                matches = self.detector.detect(region.text)
+            for region_index, region in enumerate(spotted.regions):
+                previous_text = (
+                    spotted.regions[region_index - 1].text if region_index > 0 else ""
+                )
+                matches = self.detector.detect_region(region.text, previous_text)
                 for match in matches:
                     page_regions.append(map_match_to_region(region, match))
                 sanitized = sanitize_text(region.text, matches)

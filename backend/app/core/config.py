@@ -63,6 +63,7 @@ class Settings(BaseSettings):
 
     # 사용자 계약서 OCR/마스킹은 별도 worker에서 실행한다.
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
+    OCR_WORKER_API_KEY: str = ""
     OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
     OCR_WORKER_PROCESS_TIMEOUT_SECONDS: float = 1200.0
     # 서류 종류(계약서·등기부등본·건축물대장)가 아니라 한 요청의 전체 파일 수 상한이다.

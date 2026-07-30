@@ -2,8 +2,21 @@ import base64
 
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 from app.pipeline.contract_pipeline import ContractProcessingPipeline, ProcessingResult
+
+
+def test_worker_api_key_is_required_when_configured(monkeypatch):
+    monkeypatch.setattr(settings, "OCR_WORKER_API_KEY", "runpod-secret")
+    client = TestClient(app)
+
+    assert client.get("/health").status_code == 401
+    assert client.get("/health", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert (
+        client.get("/health", headers={"X-API-Key": "runpod-secret"}).status_code
+        == 200
+    )
 
 
 def test_analysis_endpoint_returns_sanitized_text_and_masked_pdf(monkeypatch):

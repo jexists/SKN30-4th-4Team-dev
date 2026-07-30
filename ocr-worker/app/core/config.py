@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     OCR_DEVICE: str = "cpu"
 
     # Hugging Face snapshot 및 전체 파이프라인 보조 모델의 로컬 경로.
-    OCR_VL_MODEL_DIR: Path = Path("/models/paddleocr-vl-1.6")
+    # 비우면 pipeline_version에 맞는 공식 모델을 자동으로 내려받는다.
+    OCR_VL_MODEL_DIR: Path | None = None
     OCR_LAYOUT_MODEL_DIR: Path | None = None
     OCR_ORIENTATION_MODEL_DIR: Path | None = None
     OCR_UNWARP_MODEL_DIR: Path | None = None
@@ -37,6 +38,10 @@ class Settings(BaseSettings):
     OCR_MASK_MARGIN_PX: int = 4
     OCR_TESSERACT_LANG: str = "kor+eng"
     OCR_TESSERACT_PSM: int = 6
+
+    # 공개 네트워크에 Worker를 배포할 때 사용하는 공유 비밀키.
+    # 비어 있으면 로컬 개발 호환을 위해 인증을 요구하지 않는다.
+    OCR_WORKER_API_KEY: str = ""
 
 
 @lru_cache

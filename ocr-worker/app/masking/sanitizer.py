@@ -9,7 +9,6 @@ PLACEHOLDERS: dict[PiiType, str] = {
     PiiType.EMAIL: "[이메일]",
     PiiType.BANK_ACCOUNT: "[계좌번호]",
     PiiType.NAME: "[이름]",
-    PiiType.ADDRESS: "[주소]",
 }
 
 

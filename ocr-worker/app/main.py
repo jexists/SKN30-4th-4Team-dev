@@ -1,4 +1,5 @@
 import logging
+import secrets
 import tempfile
 from base64 import b64encode
 from dataclasses import dataclass
@@ -6,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Annotated
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app.core.config import settings
@@ -17,7 +18,21 @@ from app.pipeline.contract_pipeline import ContractProcessingPipeline, Processin
 from app.schemas import AnalysisReadyResponse
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="Contract OCR/Masking Worker")
+
+
+def require_worker_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
+    """RunPod 등 공개 배포에서 공유 키가 일치하는 요청만 허용한다."""
+    expected = settings.OCR_WORKER_API_KEY
+    if not expected:
+        return
+    if x_api_key is None or not secrets.compare_digest(x_api_key, expected):
+        raise HTTPException(401, "유효한 OCR Worker API 키가 필요합니다.")
+
+
+app = FastAPI(
+    title="Contract OCR/Masking Worker",
+    dependencies=[Depends(require_worker_api_key)],
+)
 engine = (
     TesseractEngine(settings)
     if settings.OCR_PROVIDER == "tesseract"

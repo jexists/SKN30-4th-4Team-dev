@@ -16,10 +16,19 @@ logger = logging.getLogger(__name__)
 class OcrWorkerClient:
     """내부 OCR worker의 상태 확인과 계약서 처리 API를 호출한다."""
 
+    @staticmethod
+    def _auth_headers() -> dict[str, str]:
+        if not settings.OCR_WORKER_API_KEY:
+            return {}
+        return {"X-API-Key": settings.OCR_WORKER_API_KEY}
+
     def health(self) -> OcrWorkerHealth:
         url = f"{settings.OCR_WORKER_URL.rstrip('/')}/health"
+        request = Request(url, headers=self._auth_headers())
         try:
-            with urlopen(url, timeout=settings.OCR_WORKER_TIMEOUT_SECONDS) as response:  # noqa: S310
+            with urlopen(  # noqa: S310
+                request, timeout=settings.OCR_WORKER_TIMEOUT_SECONDS
+            ) as response:
                 payload = json.loads(response.read())
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise AppError(
@@ -54,7 +63,10 @@ class OcrWorkerClient:
             url,
             data=body,
             method="POST",
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                **self._auth_headers(),
+            },
         )
         try:
             with urlopen(  # noqa: S310

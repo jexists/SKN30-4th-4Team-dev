@@ -1,0 +1,38 @@
+FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HOME=/workspace \
+    HF_HOME=/workspace/.cache/huggingface \
+    OCR_PROVIDER=paddle_vl \
+    OCR_PIPELINE_VERSION=v1.6 \
+    OCR_ENGINE=transformers \
+    OCR_DEVICE=gpu:0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libgl1 \
+        libglib2.0-0 \
+        python3 \
+        python3-pip \
+        python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements-runpod.txt ./
+RUN python3 -m pip install --break-system-packages \
+        paddlepaddle-gpu==3.3.0 \
+        --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/ \
+    && python3 -m pip install --break-system-packages -r requirements-runpod.txt
+
+COPY app ./app
+
+EXPOSE 8100
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
+    CMD python3 -c "import os,urllib.request; r=urllib.request.Request('http://127.0.0.1:8100/health',headers={'X-API-Key':os.getenv('OCR_WORKER_API_KEY','')}); urllib.request.urlopen(r,timeout=5)" || exit 1
+
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100"]

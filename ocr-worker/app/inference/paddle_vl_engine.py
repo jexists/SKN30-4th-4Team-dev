@@ -47,10 +47,9 @@ class PaddleVlEngine:
                         ),
                     )
                 else:
-                    kwargs.update(
-                        engine=self.settings.OCR_ENGINE,
-                        vl_rec_model_dir=str(self.settings.OCR_VL_MODEL_DIR),
-                    )
+                    kwargs["engine"] = self.settings.OCR_ENGINE
+                    if self.settings.OCR_VL_MODEL_DIR:
+                        kwargs["vl_rec_model_dir"] = str(self.settings.OCR_VL_MODEL_DIR)
                 optional_dirs = {
                     "layout_detection_model_dir": self.settings.OCR_LAYOUT_MODEL_DIR,
                     "doc_orientation_classify_model_dir": self.settings.OCR_ORIENTATION_MODEL_DIR,
