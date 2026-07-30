@@ -1,0 +1,84 @@
+# RunPod GPU 용 OCR 워커 이미지를 GitHub 에서 빌드해 GHCR 로 푸시한다.
+#
+# 왜 로컬에서 빌드하지 않나:
+#   Dockerfile.runpod 는 CUDA 12.6 베이스 + torch(CUDA) + paddlepaddle-gpu 로
+#   12~15GB 가 된다. 개발용 노트북에서는 디스크가 버티지 못하고, 빌드 도중
+#   Docker 저장소가 깨지는 일까지 있었다. 이 이미지는 여기서만 빌드한다.
+#
+# 빌드 결과: ghcr.io/<owner>/<repo>/ocr-worker:latest
+# 이 값을 RunPod Template 의 Container Image 에 넣는다.
+name: OCR Worker 이미지 (RunPod GPU)
+
+on:
+  # 필요할 때 Actions 탭에서 직접 실행한다.
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'ocr-worker/**'
+      - '.github/workflows/ocr-worker-image.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # GitHub 러너의 기본 여유 디스크로는 이 이미지가 들어가지 않는다.
+      # 이 저장소가 쓰지 않는 사전 설치 툴체인을 지워 20GB 이상을 확보한다.
+      - name: 러너 디스크 확보
+        run: |
+          echo "--- 정리 전 ---"; df -h /
+          sudo rm -rf /usr/share/dotnet \
+                      /usr/local/lib/android \
+                      /opt/ghc \
+                      /usr/local/share/boost \
+                      /usr/local/share/powershell \
+                      /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          echo "--- 정리 후 ---"; df -h /
+
+      # GHCR 은 이미지 경로에 대문자를 허용하지 않는다.
+      # 저장소 이름(SKN30-4th-4Team)에 대문자가 있으므로 반드시 소문자로 바꾼다.
+      - name: 이미지 이름 계산
+        id: img
+        run: |
+          name="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ocr-worker"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "이미지: $name"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 레이어 캐시(type=gha)는 쓰지 않는다 — 이미지가 저장소 캐시 한도(10GB)를 넘어
+      # 매번 캐시가 밀려나면서 오히려 실패 원인이 된다. 이 이미지는 자주 바뀌지 않으므로
+      # 전체 빌드(20~30분)를 감수하는 편이 안정적이다.
+      - name: 빌드 & 푸시
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ocr-worker
+          file: ./ocr-worker/Dockerfile.runpod
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.img.outputs.name }}:latest
+            ${{ steps.img.outputs.name }}:${{ github.sha }}
+
+      - name: 다음 단계 안내
+        run: |
+          echo "RunPod Template 의 Container Image 에 아래 값을 넣으세요:"
+          echo "  ${{ steps.img.outputs.name }}:latest"
+          echo ""
+          echo "첫 푸시 직후 GHCR 패키지는 private 입니다. RunPod 이 당겨오려면"
+          echo "패키지를 public 으로 바꾸거나, RunPod 에 레지스트리 자격증명을 등록하세요."
