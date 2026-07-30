@@ -63,7 +63,12 @@ npm run lint           # ESLint
 npm run format         # Prettier
 ```
 
-## 화면(사이트맵) — 현재 스텁
+## 화면(사이트맵)
 
-`/`, `/analyze`(+`/analyze/:id`), `/chat`(+`/chat/:id`), `/login`, `/onboarding`, `/mypage`, `/terms`, `/privacy`
+`/`, `/analyze`, `/risk-report`(+`/risk-report/:jobId`), `/notifications`, `/chat`(+`/chat/:id`),
+`/login`, `/signup`, `/mypage`, `/terms`, `/privacy`, `/legal-basis`, `/support`
 화면 추가: `pages/` 에 폴더 만들고 `routes.tsx` 에 등록.
+
+> **결과 화면은 URL 로 산다.** 예전 `/risk-report` 는 `location.state` 로 결과를 받아 새로고침하면
+> 사라졌다. 지금은 `:jobId` 가 유일한 입력이고 결과는 서버에 있다 — 링크 공유·알림 클릭·
+> 새로고침이 모두 같은 화면을 연다. 화면 데이터를 라우터 state 에만 싣지 않는다.
