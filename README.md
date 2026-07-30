@@ -24,6 +24,15 @@
 - **디자인 시스템**: 색상·타이포·spacing·radius 등을 토큰화([`design.md`](design.md))해 화면 전반의 일관성을 유지합니다.
 - **테스트·배포 자동화**: pytest(백엔드)·Vitest(프론트엔드) 테스트, Docker Compose 기반 배포, CodeRabbit 자동 코드리뷰, PR/머지 Discord 알림.
 
+## 🛠️ 기술 스택
+| 구분 | 기술 |
+|------|------|
+| Frontend | React, TypeScript, Vite, SCSS |
+| Backend | FastAPI, SQLAlchemy, Pydantic |
+| AI·OCR | LangGraph, OpenAI, PaddleOCR-VL |
+| Database·Auth | Supabase PostgreSQL, pgvector, Supabase Auth |
+| Infra | Docker Compose, Nginx, AWS EC2, RunPod, GitHub Actions |
+
 ## 📂 폴더 구조
 | 폴더 | 설명 |
 |------|------|
@@ -45,18 +54,73 @@
 - 🗂️ [폴더·파일 구조](docs/폴더%20파일%20구조.md)
 - 🔒 [계약서 OCR·개인정보 마스킹](docs/ocr-masking.md)
 
-## 👥 팀
-| 이름 | GitHub |
-|------|--------|
-| jexists | [@jexists](https://github.com/jexists) |
-| 천성배 | [@SEONGBAE0201](https://github.com/SEONGBAE0201) |
-| Jinnam | _작성 예정_ |
-| 정민규 | _작성 예정_ |
+## 👥 팀원 및 역할 분담
 
-> 커밋 이력 기준으로 채웠습니다 — 담당 역할(백엔드/프론트/기획 등)과 누락된 GitHub 계정은 채워주세요.
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="25%">
+        <a href="https://github.com/hikago">
+          <img src="https://avatars.githubusercontent.com/hikago?size=160" width="100" alt="김진남 프로필"><br>
+          <strong>김진남</strong>
+        </a><br><br>
+        <img src="https://img.shields.io/badge/RAG_%C2%B7_DevOps-17224A?style=flat-square" alt="RAG · DevOps">
+      </td>
+      <td align="center" width="25%">
+        <a href="https://github.com/dosupdebongu">
+          <img src="https://avatars.githubusercontent.com/dosupdebongu?size=160" width="100" alt="정민규 프로필"><br>
+          <strong>정민규</strong>
+        </a><br><br>
+        <img src="https://img.shields.io/badge/OCR_%C2%B7_AI_PIPELINE-17224A?style=flat-square" alt="OCR · AI Pipeline">
+      </td>
+      <td align="center" width="25%">
+        <a href="https://github.com/jexists">
+          <img src="https://avatars.githubusercontent.com/jexists?size=160" width="100" alt="정주애 프로필"><br>
+          <strong>정주애</strong>
+        </a><br><br>
+        <img src="https://img.shields.io/badge/PM_%C2%B7_FULL_STACK-17224A?style=flat-square" alt="PM · Full Stack">
+      </td>
+      <td align="center" width="25%">
+        <a href="https://github.com/SEONGBAE0201">
+          <img src="https://avatars.githubusercontent.com/SEONGBAE0201?size=160" width="100" alt="천성배 프로필"><br>
+          <strong>천성배</strong>
+        </a><br><br>
+        <img src="https://img.shields.io/badge/FRONTEND_%C2%B7_UI%2FUX-17224A?style=flat-square" alt="Frontend · UI/UX">
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <sub>팀장<br>RAG 챗봇 개발<br>Docker·EC2 배포</sub>
+      </td>
+      <td align="center">
+        <sub>발표<br>계약서 OCR·분석<br>RunPod 배포</sub>
+      </td>
+      <td align="center">
+        <sub>프로젝트 관리<br>API 설계·연동<br>프론트·백엔드 통합</sub>
+      </td>
+      <td align="center">
+        <sub>주요 페이지 설계<br>UI/UX 디자인<br>스토리보드</sub>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ## ⚙️ 설치 및 실행
 ▶ **[시작 가이드 (docs/setup.md)](docs/setup.md)** — 첫 설정·실행 (Mac/Windows)
 - 백엔드: [backend/README.md](backend/README.md)
 - 프론트엔드: [frontend/README.md](frontend/README.md)
 - OCR worker: [ocr-worker/README.md](ocr-worker/README.md)
+
+## 💬 회고록
+
+### 김진남
+>
+
+### 정민규
+>
+
+### 정주애
+>
+
+### 천성배
+>

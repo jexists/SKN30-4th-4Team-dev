@@ -1,143 +1,141 @@
-# ERD — 데이터 모델 설계
+# ERD — 현재 코드 기준 데이터 모델
 
-> **AI 계약서 분석 & 챗봇 서비스** 의 DB 엔티티(테이블)와 관계.
-> 확정되면 `backend/app/models/` 에 SQLAlchemy 모델로, 마이그레이션은 Alembic 으로 반영합니다.
-> 규칙은 [conventions.md](./conventions.md), 데이터 흐름은 [architecture.md](./architecture.md) 참고.
+> 검토일: 2026-07-30
+> 범위: `backend/app/models/`, `backend/app/repositories/`, `backend/app/services/`,
+> `backend/app/api/`, `backend/sql/`, RAG 검색·색인 코드
 
-## 초안 설계 이미지 (v1)
+이 문서는 현재 프로젝트 코드가 실제로 읽고 쓰는 테이블을 정리합니다.
+운영 PostgreSQL 스키마는 [`backend/sql/schema.sql`](../backend/sql/schema.sql)을 우선 기준으로
+삼고, SQLAlchemy 모델 및 런타임 참조를 교차 확인했습니다. RAG 테이블 `legal_chunks`는
+주 스키마가 아니라 [`backend/test/ingest_kure.py`](../backend/test/ingest_kure.py)의 DDL과
+[`backend/app/services/retrieval/search.py`](../backend/app/services/retrieval/search.py)의
+조회 코드를 기준으로 작성했습니다.
 
-> 아래 이미지는 최초 손설계(9개 테이블) 입니다. **이 문서 본문은 이 초안을 리뷰·보완한 최종본**(13개 테이블 — RAG 지식DB·약관 동의·답변 근거 추가, `auth.users` 참조, 단수 네이밍, 제약·인덱스 보강)입니다. 변경 내역은 하단 [설계 노트](#설계-노트-초안-대비-변경) 참고.
+> 이 검토는 저장소 코드 기준입니다. 실제 배포 DB를 introspection한 결과는 아니므로,
+> 아래 삭제 후보를 DB에서 제거하기 전에는 운영 데이터 존재 여부와 저장소 밖의 참조를 별도로
+> 확인해야 합니다.
 
-![ERD 초안 v1 — AI 계약서 분석 & 챗봇 서비스](assets/erd_v1.png)
+## 1. 검토 결과
 
-## 공통 규칙
+### 현재 ERD의 주요 문제점
 
-- **PK**: `UUID` (`gen_random_uuid()`).
-- **시간**: `TIMESTAMPTZ` — UTC 로 저장, 표시 시점에 로컬 변환 (conventions.md 규칙).
-- **네이밍**: 테이블·컬럼 `snake_case` **단수**. 단 `user` 는 SQL 예약어라 사용자 테이블만 **`app_user`**.
-  (API 경로 `/api/v1/users` 는 REST 관례상 복수 유지 — 테이블과 별개 레이어)
-- **인증**: 로그인·이메일·소셜 정보는 Supabase **`auth.users`** 가 관리. `app_user.id` 가 `auth.users(id)` 를 참조하는 **앱 확장 테이블**.
-- **공통 컬럼**: `created_at`·`updated_at`. 사용자가 삭제하는 엔티티엔 `deleted_at`(soft delete).
-- **지식베이스(RAG)**: `document` → `document_chunk`(pgvector 임베딩). 오프라인 배치(`backend/pipeline/`)가 적재.
+| 구분 | 확인된 문제 | 정리 결과 |
+|---|---|---|
+| 현행·미사용 모델 혼재 | DDL에만 있고 실행 코드가 사용하지 않는 6개 테이블이 현행 엔티티처럼 표시됨 | 현행 ERD에서 분리하고 삭제 후보로 명시 |
+| RAG 스키마 불일치 | 문서는 `document` → `document_chunk`를 설명하지만 런타임은 `legal_chunks`를 조회 | `legal_chunks`를 현행 테이블로 추가 |
+| 누락 컬럼 | `chat_room.analysis_job_id`가 상세 표와 관계도에 없음 | 컬럼·FK·관계 추가 |
+| 관계 누락 | `app_user` → `analysis_result`, `analysis_job` → `chat_room` 관계가 없음 | 실제 FK 기준으로 추가 |
+| 관계 차수 오류 | `profile`, `analysis_result`를 필수 1:1처럼 설명 | 부모 기준 `1 : 0..1`로 수정 |
+| 타입·NULL 표현 불명확 | 여러 컬럼을 한 행으로 묶어 서로 다른 NULL 조건을 구분할 수 없고, `progress`·`attempt_count`가 `INTEGER`로 표시됨 | 컬럼을 분리하고 실제 DDL의 `SMALLINT`, NULL, 기본값 반영 |
+| 오래된 동작 설명 | 분석 입력이 임시 디렉터리에만 있어 재시작 시 실패한다고 설명 | 현재 비공개 공유 저장소와 lease 기반 복구 흐름으로 수정 |
+| 문서 상태 오류 | “모델 작성 및 Alembic 반영 예정”이라고 되어 있으나 모델은 이미 존재하고 Alembic은 없음 | 현재 SQL 스크립트 기반 관리 상태로 수정 |
+| 테이블 수·번호 불일치 | 13개라고 설명하지만 상세에는 15개가 있고 `11-a`, `11-b` 번호가 섞임 | 현행 10개 테이블로 재분류하고 순서 통일 |
 
-## 관계 다이어그램
+### 현행 테이블
+
+| 영역 | 테이블 | 사용 근거 |
+|---|---|---|
+| 인증·회원 | `app_user`, `profile`, `user_agreement`, `login_history` | 인증 모델·리포지토리·카카오 인증 서비스 |
+| 분석 | `analysis_job`, `analysis_result` | 분석 API·리포지토리·백그라운드 워커 |
+| 채팅 | `chat_room`, `chat_message` | 채팅 API·이력 저장 |
+| 알림 | `notification` | 알림 API·리포지토리·분석/가입 알림 서비스 |
+| RAG | `legal_chunks` | 런타임 유사도 검색과 KURE-v1 색인 스크립트 |
+
+### 삭제 후보
+
+아래 항목은 **현행 ERD에서는 제외**하지만, 이 문서 작업에서 실제 DB 테이블이나
+`backend/sql/schema.sql`의 DDL을 삭제하지는 않았습니다.
+
+| 테이블 | 삭제 후보 사유 | 확인해야 할 사항 |
+|---|---|---|
+| `message_source` | ORM 모델, 리포지토리, 서비스, API에서 참조하지 않음. 현재 채팅 답변의 검색 근거도 DB에 저장하지 않음 | 출처 저장 기능 도입 계획과 기존 행 존재 여부 |
+| `feedback` | ORM 모델과 피드백 API·서비스가 없음 | 향후 사용자 피드백 기능 도입 여부와 기존 행 존재 여부 |
+| `contract` | 현재 다중 파일 분석은 `analysis_job`을 사용하며 이 테이블을 읽거나 쓰는 코드가 없음 | 과거 단일 계약서 데이터의 이관·보존 필요 여부 |
+| `contract_analysis` | 현재 결과는 `analysis_result`에 저장되고 이 테이블을 참조하는 코드가 없음 | `contract`와 함께 과거 결과 이관 여부 |
+| `document` | 현재 RAG 검색·색인은 `legal_chunks`를 사용하며 이 테이블을 참조하지 않음 | 향후 원문 정규화 모델로 전환할 계획과 기존 데이터 여부 |
+| `document_chunk` | 런타임 검색 대상이 `legal_chunks`이며 이 테이블을 참조하지 않음 | `message_source` 도입 계획, 기존 벡터 데이터 이관 여부 |
+
+삭제 여부를 확정할 때는 운영 DB 행 수, 외부 배치·대시보드·SQL 직접 조회, 백업 및 데이터
+이관 경로를 확인한 뒤 별도 마이그레이션으로 처리해야 합니다.
+
+### 추가·수정된 항목
+
+| 대상 | 변경 내용 | 코드 근거 |
+|---|---|---|
+| `legal_chunks` | 현행 RAG 테이블과 전체 컬럼·인덱스 추가 | 검색 코드의 고정 테이블명과 색인 DDL |
+| `chat_room.analysis_job_id` | nullable FK 및 부분 인덱스 추가 | `schema.sql`, 채팅 문서 첨부 API |
+| `analysis_job` | `SMALLINT`, 상태·단계 CHECK, 각 타임스탬프의 NULL 여부, 기본값 수정 | 모델 및 `schema.sql` |
+| `analysis_result.updated_at` | 누락된 NOT NULL 컬럼과 기본값 추가 | 모델 및 `schema.sql` 후속 ALTER |
+| `notification` | `dedupe_key`, 부분 인덱스, 이벤트별 UNIQUE 규칙 정리 | 모델 및 `schema.sql` |
+| 관계 | `analysis_job` → `chat_room`, `app_user` → `analysis_result` 추가 | 실제 FK |
+| 선택 관계 | `profile`, `analysis_result`를 `1 : 0..1`로 수정 | 자식 FK는 필수지만 부모 행 생성 시 자식 존재를 강제하지 않음 |
+
+## 2. 공통 규칙
+
+- 앱 데이터 테이블의 PK는 `UUID`이며 기본값은 대부분 `gen_random_uuid()`입니다.
+  `app_user.id`는 Supabase `auth.users.id`를 그대로 사용합니다.
+- RAG 테이블 `legal_chunks.id`만 `BIGSERIAL` PK를 사용합니다.
+- 시각은 `TIMESTAMPTZ`로 저장합니다.
+- 테이블·컬럼 이름은 `snake_case` 단수형입니다.
+- 로그인·이메일·소셜 계정 원본은 Supabase `auth.users`가 관리하고 `app_user`가 앱 전용
+  확장 정보를 보관합니다.
+- PostgreSQL 운영 스키마는 현재 Alembic이 아니라 `backend/sql/*.sql` 스크립트로 관리됩니다.
+- `legal_chunks`는 `RAG_DB_URL`을 사용하며, 값이 없으면 `APP_DB_URL`을 재사용합니다.
+  따라서 앱 DB와 물리적으로 같을 수도, 별도 DB일 수도 있습니다.
+
+## 3. 관계 다이어그램
 
 ```mermaid
 erDiagram
+    auth_users {
+        uuid id PK "Supabase Auth 외부 엔티티"
+    }
     app_user {
-        uuid id PK "auth.users(id) 참조"
-        text username UK "서비스 핸들"
+        uuid id PK,FK
+        text username UK "nullable"
         timestamptz created_at
         timestamptz updated_at
-        boolean is_deleted "탈퇴 여부, default false"
-        timestamptz deleted_at "nullable, soft delete"
+        boolean is_deleted
+        timestamptz deleted_at "nullable"
     }
     profile {
         uuid id PK
-        uuid user_id FK "UNIQUE, app_user"
-        text nickname
+        uuid user_id FK,UK
+        text nickname "nullable"
         timestamptz nickname_updated_at "nullable"
         text profile_image "nullable"
-        boolean notify_report_complete "기본 true"
+        boolean notify_report_complete
         timestamptz created_at
         timestamptz updated_at
     }
     user_agreement {
         uuid id PK
-        uuid user_id FK "app_user"
-        text agreement_type "terms|privacy|marketing"
-        text version "약관 버전"
+        uuid user_id FK
+        text agreement_type
+        text version
         boolean is_agreed
         timestamptz agreed_at
     }
     login_history {
         uuid id PK
-        uuid user_id FK "app_user"
-        inet client_ip
-        text device
+        uuid user_id FK
+        inet client_ip "nullable"
+        text device "nullable"
         timestamptz login_at
-    }
-    chat_room {
-        uuid id PK
-        uuid user_id FK "app_user"
-        text title "nullable"
-        timestamptz created_at
-        timestamptz last_chat_at "마지막 대화"
-        timestamptz updated_at "레코드 수정"
-        timestamptz title_updated_at "nullable"
-        timestamptz deleted_at "nullable"
-    }
-    chat_message {
-        uuid id PK
-        uuid chat_room_id FK "chat_room"
-        text role "USER|ASSISTANT|SYSTEM"
-        text content
-        integer response_time "nullable, ms"
-        timestamptz created_at
-    }
-    message_source {
-        uuid id PK
-        uuid chat_message_id FK "chat_message"
-        uuid document_chunk_id FK "nullable, document_chunk"
-        float score "nullable, 유사도"
-        smallint rank "nullable, 표시순서"
-        timestamptz created_at
-    }
-    feedback {
-        uuid id PK
-        uuid chat_message_id FK "UNIQUE"
-        uuid user_id FK "app_user"
-        smallint rating "1 | -1"
-        text comment "nullable"
-        timestamptz created_at
-    }
-    contract {
-        uuid id PK
-        uuid user_id FK "app_user"
-        text title
-        text file_name
-        text storage_path "Supabase Storage"
-        text mime_type
-        bigint file_size
-        text ocr_text "nullable"
-        text analysis_status "UPLOADING~FAILED"
-        timestamptz created_at
-        timestamptz updated_at
-        timestamptz deleted_at "nullable"
-    }
-    contract_analysis {
-        uuid id PK
-        uuid contract_id FK "UNIQUE"
-        text summary
-        jsonb analysis_result
-        timestamptz created_at
-        timestamptz updated_at
-    }
-    notification {
-        uuid id PK
-        uuid user_id FK "app_user"
-        text type "GENERAL|WELCOME|ANALYSIS_*"
-        text resource_type "nullable, ANALYSIS_JOB"
-        uuid resource_id "nullable"
-        text title
-        text content
-        text dedupe_key "nullable, user_id 와 UNIQUE"
-        timestamptz read_at "nullable = 안읽음"
-        timestamptz deleted_at "nullable = 살아있음"
-        timestamptz created_at
     }
     analysis_job {
         uuid id PK
-        uuid user_id FK "app_user"
-        text idempotency_key "nullable, user_id 와 UNIQUE"
-        text status "QUEUED|RUNNING|SUCCEEDED|FAILED|CANCELLED"
-        text stage "nullable, UPLOADING~COMPLETED"
-        integer progress "0~100"
-        integer attempt_count
+        uuid user_id FK
+        text idempotency_key "nullable"
+        text status
+        text stage "nullable"
+        smallint progress
+        smallint attempt_count
         jsonb file_names
+        boolean notify
         text error_code "nullable"
         text error_message "nullable"
-        text locked_by "nullable, 워커 식별자"
+        text locked_by "nullable"
         timestamptz lease_expires_at "nullable"
         timestamptz heartbeat_at "nullable"
         timestamptz queued_at
@@ -145,331 +143,336 @@ erDiagram
         timestamptz finished_at "nullable"
         timestamptz created_at
         timestamptz updated_at
-        timestamptz deleted_at "nullable, soft delete"
+        timestamptz deleted_at "nullable"
     }
     analysis_result {
         uuid id PK
-        uuid job_id FK "UNIQUE"
-        uuid user_id FK "app_user"
-        text title "nullable, 사용자가 수정 가능"
+        uuid job_id FK,UK
+        uuid user_id FK
+        text title "nullable"
         text summary "nullable"
-        text risk_level "nullable, LOW|MEDIUM|HIGH"
-        jsonb payload "마스킹 PDF 제외"
+        text risk_level "nullable"
+        jsonb payload
         timestamptz created_at
         timestamptz updated_at
     }
-    document {
+    chat_room {
         uuid id PK
-        text title
-        text doc_type "LAW|PRECEDENT|GUIDE|FAQ"
-        text source "nullable, 출처/URL"
-        text source_ref "nullable, 조항 식별자"
+        uuid user_id FK
+        uuid analysis_job_id FK "nullable"
+        text title "nullable"
         timestamptz created_at
+        timestamptz last_chat_at
         timestamptz updated_at
+        timestamptz title_updated_at "nullable"
+        timestamptz deleted_at "nullable"
     }
-    document_chunk {
+    chat_message {
         uuid id PK
-        uuid document_id FK "document"
-        integer chunk_index
+        uuid chat_room_id FK
+        text role
         text content
-        integer token_count "nullable"
-        vector embedding "pgvector, dim=N"
-        text embedding_model "nullable"
-        jsonb metadata "nullable"
+        jsonb attachments "nullable"
+        integer response_time "nullable"
+        timestamptz created_at
+    }
+    notification {
+        uuid id PK
+        uuid user_id FK
+        text type
+        text resource_type "nullable"
+        uuid resource_id "nullable, logical reference"
+        text title
+        text content
+        text dedupe_key "nullable"
+        timestamptz read_at "nullable"
+        timestamptz deleted_at "nullable"
+        timestamptz created_at
+    }
+    legal_chunks {
+        bigserial id PK
+        text content
+        vector embedding "1024 dimensions"
+        text source_type "nullable"
+        text doc_title "nullable"
+        text authority "nullable"
+        text issue "nullable"
+        text source_id "nullable"
+        integer chunk_index
+        integer n_chunks
+        jsonb metadata
         timestamptz created_at
     }
 
+    auth_users ||--o| app_user : "extended_by"
     app_user ||--o| profile : "has"
     app_user ||--o{ user_agreement : "agrees"
     app_user ||--o{ login_history : "logs"
-    app_user ||--o{ chat_room : "owns"
-    app_user ||--o{ contract : "uploads"
-    app_user ||--o{ notification : "receives"
     app_user ||--o{ analysis_job : "requests"
-    app_user ||--o{ feedback : "writes"
+    app_user ||--o{ analysis_result : "owns"
+    app_user ||--o{ chat_room : "owns"
+    app_user ||--o{ notification : "receives"
     analysis_job ||--o| analysis_result : "produces"
+    analysis_job o|--o{ chat_room : "attached_to"
     chat_room ||--o{ chat_message : "contains"
-    chat_message ||--o| feedback : "rated_by"
-    chat_message ||--o{ message_source : "cites"
-    contract ||--o| contract_analysis : "analyzed_as"
-    document ||--o{ document_chunk : "split_into"
-    document_chunk ||--o{ message_source : "cited_in"
 ```
 
----
+`notification.resource_id`는 `resource_type='ANALYSIS_JOB'`일 때 분석 작업 ID를 담지만
+DB FK는 아닙니다. `legal_chunks`도 현재 채팅 메시지와 FK로 연결되지 않으며 검색 결과는
+답변 생성 시점에만 사용됩니다.
 
-## 엔티티 상세
+## 4. 엔티티 상세
 
-### 1. app_user — 앱 사용자
-Supabase `auth.users` 의 확장 테이블. 로그인·이메일·소셜 정보는 `auth.users` 가 보유하고, 여기엔 앱 전용 필드만 둡니다.
+### 4.1 `app_user` — 앱 사용자
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK, FK→`auth.users(id)` | Supabase Auth 사용자 ID 재사용 |
-| username | TEXT | UNIQUE | 서비스 핸들 (닉네임과 역할 구분) |
-| created_at | TIMESTAMPTZ | | 가입 일시 |
-| updated_at | TIMESTAMPTZ | | 수정 일시 |
-| is_deleted | BOOLEAN | NOT NULL, DEFAULT false | 회원 탈퇴 여부 |
-| deleted_at | TIMESTAMPTZ | NULL | 탈퇴(soft delete) 일시 |
+Supabase `auth.users`의 앱 확장 정보를 저장합니다. 회원 탈퇴는 행을 삭제하지 않고
+`is_deleted`와 `deleted_at`으로 표시합니다.
 
-> `email`·`social_id`·`social_type` 은 `auth.users` 가 관리 → 중복 저장 안 함(필요 시 join/동기화).
->
-> **회원 탈퇴는 Soft Delete 다.** 조회는 반드시 `AuthRepository` 를 거쳐 탈퇴 회원을 걸러낸다.
-> 탈퇴 후 3일이 지난 회원을 완전 삭제하는 배치는 **미구현** — [`회원탈퇴.md`](회원탈퇴.md) 참고.
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, FK → `auth.users.id`, ON DELETE CASCADE | Auth 사용자 ID |
+| `username` | TEXT | 허용 | UNIQUE | 서비스 핸들 |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
+| `updated_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 수정 시각 |
+| `is_deleted` | BOOLEAN | 불가 | DEFAULT `false` | 탈퇴 여부 |
+| `deleted_at` | TIMESTAMPTZ | 허용 |  | 탈퇴 시각 |
 
-### 2. profile — 프로필
-표시용 정보. 로그인 정보(`app_user`)와 분리.
+인덱스: `idx_app_user_withdrawn (deleted_at) WHERE is_deleted`
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 프로필 ID |
-| user_id | UUID | FK→`app_user`, UNIQUE | 사용자 ID (1:1) |
-| nickname | TEXT | | 닉네임 |
-| nickname_updated_at | TIMESTAMPTZ | NULL | 닉네임 변경 일시 |
-| profile_image | TEXT | NULL | 프로필 이미지 URL |
-| notify_report_complete | BOOLEAN | NOT NULL, 기본 true | 위험 보고서 생성 완료 알림 수신 여부 |
-| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시(닉네임·프로필 사진·알림 설정 변경 시 갱신) |
+### 4.2 `profile` — 사용자 프로필
 
-### 3. user_agreement — 약관·동의 이력
-온보딩(이용약관·개인정보 동의)과 마케팅 수신 동의를 **버전·시점과 함께** 보관.
+닉네임, 프로필 이미지, 위험 보고서 완료 알림 수신 설정을 저장합니다.
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 동의 기록 ID |
-| user_id | UUID | FK→`app_user` | 사용자 ID |
-| agreement_type | TEXT | CHECK(`terms`\|`privacy`\|`marketing`) | 동의 종류 |
-| version | TEXT | | 동의한 약관 버전 |
-| is_agreed | BOOLEAN | | 동의 여부 |
-| agreed_at | TIMESTAMPTZ | | 동의 일시 |
-| — | | UNIQUE(user_id, agreement_type, version) | 버전별 1건 |
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 프로필 ID |
+| `user_id` | UUID | 불가 | FK → `app_user.id`, UNIQUE, ON DELETE CASCADE | 사용자 ID |
+| `nickname` | TEXT | 허용 |  | 표시 닉네임 |
+| `nickname_updated_at` | TIMESTAMPTZ | 허용 |  | 닉네임 수정 시각 |
+| `profile_image` | TEXT | 허용 |  | 프로필 이미지 공개 URL |
+| `notify_report_complete` | BOOLEAN | 불가 | DEFAULT `true` | 분석 완료 알림 수신 여부 |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
+| `updated_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 수정 시각 |
 
-> 초안의 `users.ad_agree` 는 `agreement_type='marketing'` 행으로 흡수.
+### 4.3 `user_agreement` — 약관 동의 이력
 
-### 4. login_history — 로그인 이력
+이용약관, 개인정보 처리방침, 마케팅 수신 동의를 버전별로 저장합니다.
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 로그인 기록 ID |
-| user_id | UUID | FK→`app_user` | 사용자 ID |
-| client_ip | INET | | 접속 IP |
-| device | TEXT | | 접속 기기 |
-| login_at | TIMESTAMPTZ | | 로그인 일시 |
-| — | | INDEX(user_id, login_at DESC) | 최신 이력 조회 |
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 동의 기록 ID |
+| `user_id` | UUID | 불가 | FK → `app_user.id`, ON DELETE CASCADE | 사용자 ID |
+| `agreement_type` | TEXT | 불가 | CHECK (`terms`, `privacy`, `marketing`) | 동의 종류 |
+| `version` | TEXT | 불가 |  | 약관 버전 |
+| `is_agreed` | BOOLEAN | 불가 |  | 동의 여부 |
+| `agreed_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 동의 시각 |
 
-### 5. chat_room — 채팅방
+제약: `UNIQUE (user_id, agreement_type, version)`
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 채팅방 ID |
-| user_id | UUID | FK→`app_user` | 생성 사용자 |
-| title | TEXT | NULL | 채팅방 제목 |
-| created_at | TIMESTAMPTZ | | 생성 일시 |
-| last_chat_at | TIMESTAMPTZ | | 마지막 대화 일시 (없으면 생성 일시) |
-| updated_at | TIMESTAMPTZ | | 레코드 수정 일시 |
-| title_updated_at | TIMESTAMPTZ | NULL | 제목 수정 일시 |
-| deleted_at | TIMESTAMPTZ | NULL | 삭제 일시 |
-| — | | INDEX(user_id, last_chat_at DESC) | 최신순 목록 |
+### 4.4 `login_history` — 로그인 이력
 
-### 6. chat_message — 대화 메시지
+로그인 시 사용자, IP, 기기 정보를 기록합니다. 현재 애플리케이션에서 이력 추가가 연결된
+경로는 카카오 인증 흐름입니다.
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 메시지 ID |
-| chat_room_id | UUID | FK→`chat_room` | 채팅방 ID |
-| role | TEXT | CHECK(`USER`\|`ASSISTANT`\|`SYSTEM`) | 발화 주체 |
-| content | TEXT | | 메시지 내용 |
-| response_time | INTEGER | NULL | AI 응답 시간(ms, ASSISTANT 만) |
-| created_at | TIMESTAMPTZ | | 생성 일시 |
-| — | | INDEX(chat_room_id, created_at) | 방별 순서 조회 |
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 로그인 기록 ID |
+| `user_id` | UUID | 불가 | FK → `app_user.id`, ON DELETE CASCADE | 사용자 ID |
+| `client_ip` | INET | 허용 |  | 접속 IP |
+| `device` | TEXT | 허용 |  | 접속 기기 |
+| `login_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 로그인 시각 |
 
-### 7. message_source — 답변 근거(인용) ★신규
-ASSISTANT 답변이 참조한 지식베이스 청크를 기록 → **출처 인용 표시** + 검색 품질 관찰.
+인덱스: `idx_login_history_user (user_id, login_at DESC)`
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 근거 ID |
-| chat_message_id | UUID | FK→`chat_message` | 대상 ASSISTANT 메시지 |
-| document_chunk_id | UUID | FK→`document_chunk`, NULL | 인용된 청크 |
-| score | FLOAT | NULL | 검색 유사도 점수 |
-| rank | SMALLINT | NULL | 표시 순서 |
-| created_at | TIMESTAMPTZ | | 생성 일시 |
-| — | | INDEX(chat_message_id) | 메시지별 근거 조회 |
+### 4.5 `analysis_job` — AI 분석 작업
 
-### 8. feedback — 답변 피드백
+다중 파일 분석 요청과 실행 상태를 저장하며, 테이블 자체가 비동기 작업 큐 역할을 합니다.
+워커는 `FOR UPDATE SKIP LOCKED`로 작업을 선점합니다. 입력 파일은 비공개 공유 저장소에
+보관되며, 만료된 lease는 남은 시도 횟수에 따라 재큐잉하거나 실패 처리합니다.
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 피드백 ID |
-| chat_message_id | UUID | FK→`chat_message`, **UNIQUE** | 대상 AI 메시지 (답변당 1건) |
-| user_id | UUID | FK→`app_user` | 작성 사용자 |
-| rating | SMALLINT | CHECK(rating IN (-1, 1)) | 1=좋아요, -1=싫어요 |
-| comment | TEXT | NULL | 추가 의견 |
-| created_at | TIMESTAMPTZ | | 작성 일시 |
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 작업 ID |
+| `user_id` | UUID | 불가 | FK → `app_user.id`, ON DELETE CASCADE | 요청 사용자 |
+| `idempotency_key` | TEXT | 허용 |  | 요청 재전송 방지 키 |
+| `status` | TEXT | 불가 | DEFAULT `QUEUED`, CHECK (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`) | 작업 상태 |
+| `stage` | TEXT | 허용 | CHECK (`UPLOADING`, `OCR`, `ANALYZING`, `RAG`, `LLM`, `SAVING`, `COMPLETED`) | 진행 단계 |
+| `progress` | SMALLINT | 불가 | DEFAULT `0`, CHECK (`0`~`100`) | 진행률 |
+| `attempt_count` | SMALLINT | 불가 | DEFAULT `0` | 실행 시도 횟수 |
+| `file_names` | JSONB | 불가 | DEFAULT `[]` | 원본 파일명 목록 |
+| `notify` | BOOLEAN | 불가 | DEFAULT `true` | 결과를 알림으로 알릴지. 채팅 첨부는 `false` |
+| `error_code` | TEXT | 허용 |  | 실패 코드 |
+| `error_message` | TEXT | 허용 |  | 사용자 표시 실패 메시지 |
+| `locked_by` | TEXT | 허용 |  | 선점 워커 식별자 |
+| `lease_expires_at` | TIMESTAMPTZ | 허용 |  | 작업 임대 만료 시각 |
+| `heartbeat_at` | TIMESTAMPTZ | 허용 |  | 마지막 생존 신호 시각 |
+| `queued_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 큐 진입 시각 |
+| `started_at` | TIMESTAMPTZ | 허용 |  | 실행 시작 시각 |
+| `finished_at` | TIMESTAMPTZ | 허용 |  | 실행 종료 시각 |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
+| `updated_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 수정 시각 |
+| `deleted_at` | TIMESTAMPTZ | 허용 |  | 사용자 목록에서 숨긴 시각 |
 
-> `UNIQUE(chat_message_id)` 로 "답변당 피드백 최대 1개(0~1)" 를 DB 레벨에서 강제.
+인덱스·제약:
 
-### 9. contract — 계약서
+- `idx_analysis_job_user_alive (user_id, created_at DESC) WHERE deleted_at IS NULL`
+- `idx_analysis_job_queue (queued_at) WHERE status = 'QUEUED'`
+- `idx_analysis_job_lease (lease_expires_at) WHERE status = 'RUNNING'`
+- `UNIQUE (user_id) WHERE status IN ('QUEUED', 'RUNNING')`
+- `UNIQUE (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 계약서 ID |
-| user_id | UUID | FK→`app_user` | 업로드 사용자 |
-| title | TEXT | | 계약서 제목 |
-| file_name | TEXT | | 원본 파일명 |
-| storage_path | TEXT | | Supabase Storage 경로 |
-| mime_type | TEXT | | 파일 형식(MIME) |
-| file_size | BIGINT | | 파일 크기(Byte) |
-| ocr_text | TEXT | NULL | OCR 추출 텍스트 |
-| analysis_status | TEXT | CHECK(`UPLOADING`\|`OCR`\|`ANALYZING`\|`COMPLETED`\|`FAILED`) | 분석 상태 |
-| created_at / updated_at | TIMESTAMPTZ | | 업로드·수정 일시 |
-| deleted_at | TIMESTAMPTZ | NULL | 삭제 일시 (일관성 위해 추가) |
-| — | | INDEX(user_id, created_at DESC) | 내 계약서 목록 |
+### 4.6 `analysis_result` — AI 분석 결과
 
-### 10. contract_analysis — AI 분석 결과
-동일 계약서를 반복 분석하지 않도록 결과를 재사용.
+성공한 분석 작업의 결과를 저장합니다. 목록 조회용 요약 컬럼과 전체 리포트 `payload`를
+분리합니다. 마스킹 PDF 바이너리는 저장하지 않습니다.
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 분석 결과 ID |
-| contract_id | UUID | FK→`contract`, UNIQUE | 계약서 ID (1:1) |
-| summary | TEXT | | 분석 요약 |
-| analysis_result | JSONB | | 상세 분석 결과(JSON) |
-| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 |
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 결과 ID |
+| `job_id` | UUID | 불가 | FK → `analysis_job.id`, UNIQUE, ON DELETE CASCADE | 작업 ID |
+| `user_id` | UUID | 불가 | FK → `app_user.id`, ON DELETE CASCADE | 소유 사용자 |
+| `title` | TEXT | 허용 |  | 사용자가 수정할 수 있는 목록 제목 |
+| `summary` | TEXT | 허용 |  | 목록용 요약 |
+| `risk_level` | TEXT | 허용 | CHECK (`LOW`, `MEDIUM`, `HIGH`) | 위험 등급 |
+| `payload` | JSONB | 불가 |  | 분석 리포트 전체 |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
+| `updated_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 수정 시각 |
 
-### 11. notification — 알림
+인덱스: `idx_analysis_result_user (user_id, created_at DESC)`
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 알림 ID |
-| user_id | UUID | FK→`app_user` | 수신 사용자 |
-| type | TEXT | CHECK(`GENERAL`\|`WELCOME`\|`ANALYSIS_STARTED`\|`ANALYSIS_COMPLETED`\|`ANALYSIS_FAILED`) | 알림 종류 |
-| resource_type | TEXT | NULL, CHECK(`ANALYSIS_JOB`) | 연결 대상 종류 |
-| resource_id | UUID | NULL | 연결 대상 ID |
-| title | TEXT | | 알림 제목 |
-| content | TEXT | | 알림 내용 |
-| dedupe_key | TEXT | NULL | 중복 생성 방지 키 |
-| read_at | TIMESTAMPTZ | NULL | 읽은 시각 (NULL = 안읽음) |
-| deleted_at | TIMESTAMPTZ | NULL | soft delete 시각 (NULL = 살아있음) |
-| created_at | TIMESTAMPTZ | | 생성 일시 |
-| — | | INDEX(user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL | 전체 탭 커서 조회 |
-| — | | INDEX(user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL AND read_at IS NULL | 안읽음 탭 + Badge |
-| — | | UNIQUE(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL | 같은 사건 알림 1건 |
+`job_id`가 UNIQUE이므로 작업당 결과는 최대 1개입니다. 실패·대기·진행 중인 작업에는 결과가
+없으므로 `analysis_job` 기준 관계는 `1 : 0..1`입니다.
 
-> **`is_read`·`is_deleted` 불리언을 두지 않는다.** `read_at`/`deleted_at` 이 같은 사실을 더 많은
-> 정보와 함께 표현한다. 두 컬럼이 한 사실을 나눠 가지면 `is_read=true` 인데 `read_at IS NULL`
-> 같은 불일치가 생기고, 갱신할 때마다 둘을 같이 써야 한다.
->
-> **`dedupe_key` 는 삭제된 행도 본다.** 사용자가 가입 축하 알림을 지운 뒤 트리거가 다시 돌아도
-> 중복이 생기지 않아야 하므로, 이 UNIQUE 인덱스에는 일부러 `deleted_at IS NULL` 을 넣지 않았다.
-> 분석 알림은 `analysis:{job_id}:{status}` 를 키로 쓴다.
+### 4.7 `chat_room` — 채팅방
 
-### 11-a. analysis_job — AI 분석 작업(비동기 큐) ★신규
-분석 요청 1건 = 이 테이블 1행. **DB 자체가 작업 큐**이며 인프로세스 워커가
-`FOR UPDATE SKIP LOCKED` 로 선점한다(Redis/Celery 미도입).
+사용자의 채팅방과 선택적으로 첨부된 분석 작업을 저장합니다. 삭제는 `deleted_at`을 사용하는
+소프트 삭제입니다.
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 작업 ID (= `/risk-report/:jobId`) |
-| user_id | UUID | FK→`app_user` | 요청자 |
-| idempotency_key | TEXT | NULL | 클라이언트가 준 재전송 방지 키 |
-| status | TEXT | CHECK(`QUEUED`\|`RUNNING`\|`SUCCEEDED`\|`FAILED`\|`CANCELLED`) | 상태 머신 |
-| stage | TEXT | NULL, CHECK(`UPLOADING`~`COMPLETED`) | 진행 단계(참고용) |
-| progress | INTEGER | CHECK(0~100) | 진행률 |
-| attempt_count | INTEGER | | 시도 횟수 (일시적 오류만 재시도) |
-| file_names | JSONB | | 업로드 원본 파일명 목록 |
-| error_code / error_message | TEXT | NULL | 실패 사유 (message 는 그대로 사용자에게 보인다) |
-| locked_by | TEXT | NULL | 선점한 워커 식별자 |
-| lease_expires_at | TIMESTAMPTZ | NULL | 임대 만료 — 지나면 좀비로 보고 FAILED 처리 |
-| heartbeat_at | TIMESTAMPTZ | NULL | 마지막 생존 신호 |
-| queued_at / started_at / finished_at | TIMESTAMPTZ | | 큐 진입·시작·종료 시각 |
-| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 |
-| deleted_at | TIMESTAMPTZ | NULL | 사용자가 목록에서 지운 시각 (Soft Delete) |
-| — | | INDEX(user_id, created_at DESC) WHERE deleted_at IS NULL | 내 목록(지운 것 제외) |
-| — | | INDEX(queued_at) WHERE status='QUEUED' | 다음 작업 선점 |
-| — | | INDEX(lease_expires_at) WHERE status='RUNNING' | 만료 임대 회수 |
-| — | | UNIQUE(user_id) WHERE status IN ('QUEUED','RUNNING') | 회원당 진행 중 1건 |
-| — | | UNIQUE(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL | 재전송 방지 |
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 채팅방 ID |
+| `user_id` | UUID | 불가 | FK → `app_user.id`, ON DELETE CASCADE | 소유 사용자 |
+| `analysis_job_id` | UUID | 허용 | FK → `analysis_job.id`, ON DELETE SET NULL | 첨부 분석 작업 |
+| `title` | TEXT | 허용 |  | 채팅방 제목 |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
+| `last_chat_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 마지막 대화 시각 |
+| `updated_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 레코드 수정 시각 |
+| `title_updated_at` | TIMESTAMPTZ | 허용 |  | 제목 수정 시각 |
+| `deleted_at` | TIMESTAMPTZ | 허용 |  | 삭제 시각 |
 
-> **재시작하면 진행 중 작업은 재큐잉이 아니라 FAILED 다.** 업로드 원본을 임시 디렉터리에만
-> 두므로 되살릴 수 없다. 재시도는 워커가 살아 있는 동안의 일시적 오류(429·5xx)에 한해
-> 지수 백오프로만 한다.
+인덱스:
 
-### 11-b. analysis_result — 분석 결과 ★신규
-작업과 1:1. 목록 조회가 수십 KB 짜리 `payload` 를 읽지 않도록 `title`·`risk_level` 을 따로 둔다.
+- `idx_chat_room_user_last_chat (user_id, last_chat_at DESC)`
+- `idx_chat_room_analysis_job (analysis_job_id) WHERE analysis_job_id IS NOT NULL`
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 결과 ID |
-| job_id | UUID | FK→`analysis_job`, UNIQUE | 작업 ID (1:1) |
-| user_id | UUID | FK→`app_user` | 소유자 (조회 시 소유권 검증) |
-| title | TEXT | NULL | 목록용 제목. **사용자가 목록에서 수정할 수 있다** |
-| summary | TEXT | NULL | 목록용 요약 |
-| risk_level | TEXT | NULL, CHECK(`LOW`\|`MEDIUM`\|`HIGH`) | 목록용 위험 등급 |
-| payload | JSONB | | 리포트 전체. **마스킹 PDF 는 저장하지 않는다** |
-| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 (제목 수정 시각) |
+`analysis_job_id`는 UNIQUE가 아니므로 하나의 분석 작업을 여러 채팅방에 첨부할 수 있습니다.
 
-> **삭제는 작업(`analysis_job.deleted_at`)에만 있다.** 결과는 작업을 통해서만 닿으므로 두 곳이
-> 같은 사실을 표현하면 불일치가 생긴다. 실패한 분석에는 결과 행이 아예 없기도 하다.
+### 4.8 `chat_message` — 채팅 메시지
 
-### 12. document — 지식베이스 원문 메타 ★신규
-RAG 검색 대상인 법령·판례·가이드 원문의 메타데이터.
+채팅방의 사용자·어시스턴트·시스템 메시지를 저장합니다.
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 문서 ID |
-| title | TEXT | | 문서 제목 |
-| doc_type | TEXT | CHECK(`LAW`\|`PRECEDENT`\|`GUIDE`\|`FAQ` …) | 문서 유형 |
-| source | TEXT | NULL | 출처/URL |
-| source_ref | TEXT | NULL | 법령 조항 식별자 등 |
-| created_at / updated_at | TIMESTAMPTZ | | 생성·수정 일시 |
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 메시지 ID |
+| `chat_room_id` | UUID | 불가 | FK → `chat_room.id`, ON DELETE CASCADE | 채팅방 ID |
+| `role` | TEXT | 불가 | CHECK (`USER`, `ASSISTANT`, `SYSTEM`) | 발화 주체 |
+| `content` | TEXT | 불가 |  | 메시지 내용 |
+| `attachments` | JSONB | 허용 |  | 함께 보낸 첨부 `[{name, kind}]`. 이름·종류만 저장 |
+| `response_time` | INTEGER | 허용 |  | AI 응답 시간(ms) |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
 
-### 13. document_chunk — 청크 + 벡터 임베딩 ★신규
-문서를 검색 단위로 자른 청크. 임베딩은 **별도 테이블이 아니라 이 행의 `vector` 컬럼**으로 저장(pgvector 표준).
+인덱스: `idx_chat_message_room (chat_room_id, created_at)`
 
-| 컬럼 | 타입 | 키/제약 | 설명 |
-|------|------|---------|------|
-| id | UUID | PK | 청크 ID |
-| document_id | UUID | FK→`document` | 원문 ID |
-| chunk_index | INTEGER | | 문서 내 순서 |
-| content | TEXT | | 청크 텍스트 |
-| token_count | INTEGER | NULL | 토큰 수 |
-| embedding | VECTOR(N) | | pgvector 임베딩 (차원 N 은 모델 확정 후) |
-| embedding_model | TEXT | NULL | 임베딩 모델명 (교체 대비) |
-| metadata | JSONB | NULL | 부가 정보 |
-| created_at | TIMESTAMPTZ | | 생성 일시 |
-| — | | INDEX USING hnsw (embedding vector_cosine_ops) | 벡터 유사도 검색 |
+`attachments`는 "어느 메시지에 무엇을 붙여 보냈는가"라는 **대화 기록**입니다. "지금 이 대화가
+무슨 계약서를 읽는가"는 `chat_room.analysis_job_id`가 들고 있으며, 둘은 어긋날 수 있습니다 —
+새 계약서를 첨부하면 방은 최신 것만 참고하지만 옛 메시지의 첨부 표시는 그대로 남습니다.
+원본 파일은 분석이 끝나면 삭제되므로 이름과 종류만 남습니다.
 
-> `backend/pipeline/build_index.py` 가 `data/` 원본 → 청킹 → 임베딩 → 이 테이블에 적재.
+### 4.9 `notification` — 사용자 알림
 
----
+가입 및 분석 시작·완료·실패 알림을 저장합니다. 읽음과 삭제 상태는 각각 nullable
+타임스탬프로 표현합니다.
 
-## 관계 요약
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | UUID | 불가 | PK, DEFAULT `gen_random_uuid()` | 알림 ID |
+| `user_id` | UUID | 불가 | FK → `app_user.id`, ON DELETE CASCADE | 수신 사용자 |
+| `type` | TEXT | 불가 | DEFAULT `GENERAL`, CHECK (`GENERAL`, `WELCOME`, `ANALYSIS_STARTED`, `ANALYSIS_COMPLETED`, `ANALYSIS_FAILED`) | 알림 종류 |
+| `resource_type` | TEXT | 허용 | CHECK (`ANALYSIS_JOB`) | 연결 대상 종류 |
+| `resource_id` | UUID | 허용 | FK 없음 | 연결 대상 ID |
+| `title` | TEXT | 불가 |  | 알림 제목 |
+| `content` | TEXT | 불가 |  | 알림 내용 |
+| `dedupe_key` | TEXT | 허용 |  | 같은 사건의 중복 알림 방지 키 |
+| `read_at` | TIMESTAMPTZ | 허용 |  | 읽은 시각; NULL이면 안 읽음 |
+| `deleted_at` | TIMESTAMPTZ | 허용 |  | 삭제 시각; NULL이면 활성 |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
 
-| Parent | Child | 관계 | 설명 |
-|--------|-------|------|------|
-| app_user | profile | 1 : 1 | 사용자당 프로필 하나 |
-| app_user | user_agreement | 1 : N | 약관/개인정보/마케팅 동의 이력 |
-| app_user | login_history | 1 : N | 로그인 시마다 기록 |
-| app_user | chat_room | 1 : N | 사용자당 채팅방 여러 개 |
-| chat_room | chat_message | 1 : N | 채팅방에 메시지 여러 개 |
-| chat_message | feedback | 1 : 0~1 | 답변당 피드백 최대 하나 (UNIQUE) |
-| chat_message | message_source | 1 : N | 답변당 근거 청크 여러 개 |
-| document_chunk | message_source | 1 : N | 한 청크가 여러 답변에 인용 |
-| app_user | contract | 1 : N | 사용자당 계약서 여러 개 |
-| contract | contract_analysis | 1 : 1 | 계약서당 분석 결과 하나 |
-| app_user | notification | 1 : N | 사용자에게 알림 여러 개 |
-| app_user | analysis_job | 1 : N | 사용자당 분석 작업 여러 개 (진행 중은 1건) |
-| analysis_job | analysis_result | 1 : 1 | 작업당 결과 하나 (성공 시에만) |
-| document | document_chunk | 1 : N | 문서 → 청크 분할 |
+인덱스·제약:
 
----
+- `idx_notification_user_created (user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL`
+- `idx_notification_user_unread (user_id, created_at DESC, id DESC) WHERE deleted_at IS NULL AND read_at IS NULL`
+- `UNIQUE (user_id, dedupe_key) WHERE dedupe_key IS NOT NULL`
 
-## 설계 노트 (초안 대비 변경)
+`resource_id`는 다형 참조를 위한 논리 키입니다. 현재 값은 분석 작업 ID지만 FK가 없으므로
+DB가 대상 존재 여부나 소유자 일치를 강제하지 않습니다.
 
-- **신규 테이블**: `user_agreement`(약관 동의), `document`·`document_chunk`(RAG 지식베이스), `message_source`(답변 근거).
-- **`users` → `app_user`**: `user` 는 SQL 예약어 → `app_user`. Supabase `auth.users(id)` 참조, 중복 auth 필드(email·social_id·social_type) 제거.
-- **네이밍**: 테이블 이름 전부 단수로 통일.
-- **타입·제약 보강**: 모든 `TIMESTAMP` → `TIMESTAMPTZ`, enum성 컬럼에 CHECK, `feedback`/`contract_analysis` 에 UNIQUE, FK·조회용 INDEX 명시.
-- **soft delete 일관성**: `contract` 에도 `deleted_at` 추가.
+### 4.10 `legal_chunks` — 법률 RAG 청크
 
-> 다음 단계: 이 문서를 기준으로 `backend/app/models/` 에 SQLAlchemy 모델 작성 + Alembic 마이그레이션. (pgvector 확장은 Supabase 대시보드에서 활성화)
+법령·판례·해설·가이드 문서를 KURE-v1 임베딩과 함께 저장합니다. 런타임은 pgvector의
+코사인 거리 연산으로 이 테이블을 직접 검색합니다.
+
+| 컬럼 | 타입 | NULL | 키·제약 / 기본값 | 설명 |
+|---|---|---:|---|---|
+| `id` | BIGSERIAL | 불가 | PK | 청크 ID |
+| `content` | TEXT | 불가 |  | 청크 본문 |
+| `embedding` | VECTOR(1024) | 불가 |  | KURE-v1 임베딩 |
+| `source_type` | TEXT | 허용 |  | 법령·판례·해설 등 출처 유형 |
+| `doc_title` | TEXT | 허용 |  | 문서 제목 |
+| `authority` | TEXT | 허용 |  | 법적 권위 분류 |
+| `issue` | TEXT | 허용 |  | 검색 필터용 쟁점 |
+| `source_id` | TEXT | 허용 |  | 원문 식별자 |
+| `chunk_index` | INTEGER | 불가 | DEFAULT `0` | 문서 또는 레코드 내 청크 순서 |
+| `n_chunks` | INTEGER | 불가 | DEFAULT `1` | 원문에서 생성된 총 청크 수 |
+| `metadata` | JSONB | 불가 | DEFAULT `{}` | 출처별 가변 메타데이터 |
+| `created_at` | TIMESTAMPTZ | 불가 | DEFAULT `now()` | 생성 시각 |
+
+인덱스:
+
+- `legal_chunks_embedding_idx USING hnsw (embedding vector_cosine_ops)`
+- `legal_chunks_source_type_idx (source_type)`
+- `legal_chunks_issue_idx (issue)`
+
+이 테이블에는 다른 현행 테이블을 참조하는 FK가 없습니다. 기본 색인 도구는
+`legal_chunks`를 사용하지만 `--table` 옵션으로 다른 테이블명을 지정할 수 있으므로, 운영
+배치에서는 런타임의 고정 조회 대상과 같은 이름을 사용해야 합니다.
+
+## 5. 관계 요약
+
+| 부모 | 자식 | 관계 | FK 및 삭제 규칙 |
+|---|---|---|---|
+| `auth.users` | `app_user` | 1 : 0..1 | `app_user.id` → `auth.users.id`, CASCADE |
+| `app_user` | `profile` | 1 : 0..1 | `profile.user_id`, UNIQUE, CASCADE |
+| `app_user` | `user_agreement` | 1 : 0..N | `user_agreement.user_id`, CASCADE |
+| `app_user` | `login_history` | 1 : 0..N | `login_history.user_id`, CASCADE |
+| `app_user` | `analysis_job` | 1 : 0..N | `analysis_job.user_id`, CASCADE |
+| `app_user` | `analysis_result` | 1 : 0..N | `analysis_result.user_id`, CASCADE |
+| `app_user` | `chat_room` | 1 : 0..N | `chat_room.user_id`, CASCADE |
+| `app_user` | `notification` | 1 : 0..N | `notification.user_id`, CASCADE |
+| `analysis_job` | `analysis_result` | 1 : 0..1 | `analysis_result.job_id`, UNIQUE, CASCADE |
+| `analysis_job` | `chat_room` | 1 : 0..N | `chat_room.analysis_job_id`, nullable, SET NULL |
+| `chat_room` | `chat_message` | 1 : 0..N | `chat_message.chat_room_id`, CASCADE |
+
+## 6. 코드와 DDL 관리 시 주의점
+
+- PostgreSQL에서는 `schema.sql`이 스키마를 소유하고 애플리케이션 시작 시
+  `Base.metadata.create_all()`을 실행하지 않습니다. 일부 ORM 모델은 FK·CHECK를 의도적으로
+  생략하므로 운영 관계 확인에는 DDL을 우선해야 합니다.
+- `legal_chunks` DDL은 주 `schema.sql`이 아니라 색인 스크립트에 있습니다. 스키마 변경 이력과
+  배포 재현성을 위해 향후 하나의 버전 마이그레이션 체계로 통합할 필요가 있습니다.
+- `notification.resource_id`는 FK가 아니므로 애플리케이션에서 대상 작업의 존재와 소유권을
+  검증해야 합니다.
+- `analysis_result.user_id`는 `analysis_job.user_id`와 같은 소유자를 중복 저장하지만, 두 값의
+  일치를 강제하는 복합 FK나 CHECK는 현재 없습니다.
+- 삭제 후보 6개 테이블은 코드에서 사용하지 않더라도 `schema.sql` 실행 시 생성됩니다.
+  제거를 확정하면 문서만 고치는 것이 아니라 데이터 검증, DDL 변경, 배포 마이그레이션을
+  함께 수행해야 합니다.
