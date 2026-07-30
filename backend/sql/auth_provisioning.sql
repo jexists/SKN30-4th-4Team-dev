@@ -32,9 +32,11 @@ begin
   -- 가입 축하 알림. 이메일 가입은 프론트가 Supabase Auth 를 직접 부르고 백엔드를 거치지
   -- 않으므로(이메일 인증이 켜져 있으면 세션조차 없다) 알림을 만들 수 있는 지점이 여기뿐이다.
   -- 카카오 가입은 위에서 return 했고, 가입 완료 API 가 같은 문구로 만든다.
-  -- 중복은 uq_notification_welcome 부분 UNIQUE 인덱스가 막는다 (sql/schema.sql).
-  insert into public.notification (user_id, title, content)
-    values (new.id, '회원가입을 축하합니다.', 'AI 분석으로 안전한 계약을 시작해보세요.')
+  -- 중복은 uq_notification_dedupe (user_id, dedupe_key) 가 막는다 (sql/schema.sql).
+  -- dedupe_key 를 빠뜨리면 그 방어가 통째로 풀리므로 반드시 'welcome' 을 함께 넣는다.
+  insert into public.notification (user_id, type, dedupe_key, title, content)
+    values (new.id, 'WELCOME', 'welcome',
+            '회원가입을 축하합니다.', 'AI 분석으로 안전한 계약을 시작해보세요.')
     on conflict do nothing;
 
   return new;
