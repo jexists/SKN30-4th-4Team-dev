@@ -17,15 +17,20 @@ from app.repositories.auth import AGREEMENT_VERSION, AuthRepository
 
 @pytest.fixture(scope="session", autouse=True)
 def _no_startup_warmup():
-    """테스트 내내 기동 워밍업을 끈다 (KURE-v1 ~2GB 다운로드·오프라인 CI 실패 방지).
+    """테스트 내내 기동 워밍업과 분석 워커를 끈다.
+
+    워밍업: KURE-v1 ~2GB 다운로드·오프라인 CI 실패 방지.
+    분석 워커: 켜두면 테스트마다 폴링 스레드가 뜨고, 격리 DB 가 아니라 실제 APP_DB_URL 을
+    본다. 워커 자체는 tests/test_analysis_worker.py 가 자기 인스턴스를 만들어 검증한다.
 
     client 픽스처가 `with TestClient(app)` 로 테스트마다 lifespan 을 실행하므로, 끄지 않으면
-    모델 로드가 테스트 수만큼 시도된다. settings 는 lru_cache 싱글턴이고 app.main import 시점에
+    위 초기화가 테스트 수만큼 시도된다. settings 는 lru_cache 싱글턴이고 app.main import 시점에
     이미 만들어져 있어 환경변수를 나중에 바꿔도 반영되지 않는다 → 속성을 직접 바꾼다
     (test_auth.py 의 monkeypatch.setattr(config.settings, ...) 와 같은 방식).
     """
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(settings, "WARMUP_ON_STARTUP", False)
+        mp.setattr(settings, "ANALYSIS_WORKER_ENABLED", False)
         yield
 
 

@@ -7,13 +7,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  (ERD 모델 메타데이터 등록)
-from app.api.routes import auth, chat, documents, health, me
+from app.api.routes import analysis, auth, chat, documents, health, me, notification
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.security import describe_verification_mode
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import AppSessionLocal, engine
 from app.services.retrieval import close_pool as close_retrieval_pool
 
 setup_logging()
@@ -49,6 +49,24 @@ def _warmup() -> None:
         log.exception("임베딩 모델 기동 워밍업 실패 — 서비스는 계속한다")
 
 
+def _recover_analysis_jobs() -> None:
+    """이전 프로세스가 남긴 분석 작업을 정리한다.
+
+    업로드 원본이 임시 디렉터리에만 있어 재시작하면 사라진다 — 되살릴 수 없으므로 재큐잉이
+    아니라 FAILED 로 닫고 사용자에게 실패 알림을 보낸다. 워밍업과 마찬가지로 **실패해도
+    기동을 막지 않는다**(DB 가 잠깐 안 되더라도 서버는 떠야 한다).
+    """
+    if AppSessionLocal is None:
+        return
+    try:
+        from app.services.analysis_jobs.runner import recover_on_startup
+
+        with AppSessionLocal() as db:
+            recover_on_startup(db)
+    except Exception:
+        log.exception("중단된 분석 작업 정리 실패 — 서비스는 계속한다")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """기동/종료 훅. 무거운 초기화는 데몬 스레드로 넘겨 startup 을 절대 막지 않는다.
@@ -61,9 +79,27 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         threading.Thread(target=_warmup, name="warmup", daemon=True).start()
     else:
         log.info("기동 워밍업 비활성(WARMUP_ON_STARTUP=false) — 첫 채팅 요청이 모델을 로드한다")
+
+    if settings.ANALYSIS_WORKER_ENABLED:
+        _recover_analysis_jobs()
+        try:
+            from app.services.analysis_jobs.runner import worker as analysis_worker
+
+            analysis_worker.start()
+        except Exception:
+            log.exception("분석 워커 기동 실패 — 분석 요청이 QUEUED 로 쌓인다")
+    else:
+        log.info("분석 워커 비활성(ANALYSIS_WORKER_ENABLED=false)")
+
     try:
         yield
     finally:
+        try:
+            from app.services.analysis_jobs.runner import worker as analysis_worker
+
+            analysis_worker.stop()
+        except Exception:
+            log.exception("분석 워커 종료 실패")
         # 우리가 잡고 있던 DB 커넥션과 psycopg 워커 스레드를 명시적으로 반납한다.
         # 없으면 --reload 재시작마다 Supabase pooler 슬롯이 timeout 까지 좀비로 남는다.
         close_retrieval_pool()
@@ -93,3 +129,5 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(me.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
+app.include_router(analysis.router, prefix="/api/v1")
+app.include_router(notification.router, prefix="/api/v1")

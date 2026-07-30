@@ -64,6 +64,23 @@ class Settings(BaseSettings):
     # 사용자 계약서 OCR/마스킹은 별도 worker에서 실행한다.
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_API_KEY: str = ""
+
+        # ── 분석 작업 큐 ────────────────────────────────────────────────
+    # 분석은 analysis_job 테이블을 큐로 삼아 백그라운드 워커가 처리한다(Redis 없음).
+    # 테스트·CI 는 반드시 꺼야 한다 — 켜두면 테스트마다 폴링 스레드가 뜬다.
+    ANALYSIS_WORKER_ENABLED: bool = True
+    # 동시 실행 1이 기본인 이유: ocr-worker 가 전역 Lock 으로 처리를 직렬화하므로 늘려도
+    # 처리량이 늘지 않고, 스레드마다 DB 커넥션과 KURE/OCR 메모리만 더 먹는다.
+    ANALYSIS_WORKER_CONCURRENCY: int = Field(default=1, ge=1, le=4)
+    ANALYSIS_POLL_INTERVAL_SECONDS: float = Field(default=2.0, gt=0)
+    # lease 는 **가장 긴 단일 블로킹 호출보다 길어야 한다.** 파일당 OCR 타임아웃이
+    # 1200초이므로 그보다 넉넉히 잡는다. 짧으면 멀쩡히 도는 작업을 좀비로 오인해 회수한다.
+    ANALYSIS_JOB_LEASE_SECONDS: int = Field(default=1800, gt=0)
+    # 일시적 오류(429·5xx·네트워크) 재시도 횟수. 워커가 살아 있는 동안만 유효하다.
+    ANALYSIS_JOB_MAX_ATTEMPTS: int = Field(default=3, ge=1, le=10)
+    ANALYSIS_RETRY_BASE_SECONDS: float = Field(default=2.0, gt=0)
+    ANALYSIS_RETRY_MAX_SECONDS: float = Field(default=30.0, gt=0)
+
     OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
     OCR_WORKER_PROCESS_TIMEOUT_SECONDS: float = 1200.0
     # 서류 종류(계약서·등기부등본·건축물대장)가 아니라 한 요청의 전체 파일 수 상한이다.

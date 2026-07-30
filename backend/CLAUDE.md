@@ -14,6 +14,7 @@
 - **SQLAlchemy 엔진은 하나뿐이다**(`app/db/session.py`). 예전에 스켈레톤용·앱용 엔진을 따로 두었다가 프로세스 하나가 pooler 슬롯을 2배로 먹어 장애가 났다. **새 `create_engine` 을 추가하지 않는다.**
 - **DB 커넥션을 풀 밖에서 열지 않는다.** RAG 검색도 모듈 단위 `psycopg_pool.ConnectionPool`(`services/retrieval/search.py`)에서 빌린다. 새 `psycopg.connect()` 를 런타임 코드에 넣지 않는다.
 - 프로세스당 상한 = `(DB_POOL_SIZE + DB_MAX_OVERFLOW) + RAG_POOL_MAX_SIZE` (기본 3+2+2 = 7). 올리기 전에 `(프로세스 수 × 상한) ≤ Max Pooler Clients × 50%` 를 계산한다.
+- **백그라운드 워커는 요청 세션을 물려받지 않고 자기 세션을 연다.** 요청의 `Session` 은 응답과 함께 닫히므로 분석 워커(`services/analysis_jobs/runner.py`)가 그걸 쓰면 죽은 커넥션을 만진다. 대신 같은 `AppSessionLocal` 에서 새 세션을 열고 `finally` 로 닫는다 — **엔진은 여전히 하나다.** 워커 동시성(`ANALYSIS_WORKER_CONCURRENCY`, 기본 1)은 위 상한 계산에 그대로 더해지므로 올릴 때 함께 따진다.
 - Postgres 에서는 **import 시점 `create_all()` 을 돌리지 않는다**(`main.py` 가 SQLite 일 때만 실행). 새 테이블은 `sql/schema.sql` 에 DDL 을 추가한다.
 - 커넥션 고갈·연결 끊김은 500 이 아니라 **503**("일시적인 접속 지연")으로 나간다(`core/exceptions.py`). 문법 오류·없는 테이블은 그대로 500 이다.
 
