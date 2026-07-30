@@ -80,9 +80,19 @@ exit            # 그룹 반영을 위해 재접속
 ## 3. 코드와 환경변수
 
 ```bash
-git clone <저장소 URL> homeshield
+git clone --depth 1 --branch main \
+  https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN30-4th-4Team.git homeshield
 cd homeshield
+ls   # deploy / docker-compose.prod.yml / ocr-worker 가 보여야 한다
 ```
+
+> **브랜치는 `main` 이다.** `/skn-remote` 가 개발 저장소의 `develop` 을 org 저장소의 `main` 으로
+> push 하기 때문이다. org 저장소에도 `develop` 브랜치가 남아 있지만 갱신되지 않는 낡은
+> 브랜치라, `--branch develop` 으로 받으면 `ocr-worker`·`deploy`·`docker-compose.prod.yml` 이
+> 통째로 빠진 트리를 받게 된다.
+>
+> `--depth 1` 은 히스토리를 받지 않는 옵션이다. 저장소가 200MB 가 넘어(대부분 `data/` 의
+> 공공 법령 PDF) 메모리가 작은 인스턴스에서는 전체 clone 중 OOM 으로 SSH 가 끊기기도 한다.
 
 > 비공개 저장소면 GitHub **Deploy Key** 를 만들어 등록하는 편이 개인 토큰보다 안전하다.
 
