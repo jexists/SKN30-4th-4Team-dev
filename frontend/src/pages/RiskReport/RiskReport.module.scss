@@ -13,6 +13,10 @@
 }
 
 /* ══════════════ 상태 화면 (로딩·진행·오류·빈 상태) ══════════════ */
+.statePage {
+  background: transparent;
+}
+
 /* 리포트가 아직/영영 없을 때 같은 자리를 채운다. 화면 한가운데를 통째로 쓰므로
    ErrorState 는 variant="plain" 으로 넘긴다(테두리가 허공에 뜬 띠처럼 보인다). */
 .statePanel {

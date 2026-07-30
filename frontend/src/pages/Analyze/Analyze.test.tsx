@@ -1,9 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { __resetNotificationStoreForTests } from '../../hooks/useNotifications'
+import { __resetNotificationStoreForTests, syncAnalysisOutcome } from '../../hooks/useNotifications'
 import { Analyze } from './Analyze'
 
 const startAnalysis = vi.hoisted(() => vi.fn())
@@ -43,15 +43,33 @@ async function uploadAllSlots(user: ReturnType<typeof userEvent.setup>) {
 }
 
 beforeEach(() => {
-  startAnalysis.mockResolvedValue({ id: 'job-1', status: 'QUEUED', created_at: '2026-07-30T00:00:00Z' })
+  startAnalysis.mockResolvedValue({
+    id: 'job-1',
+    status: 'QUEUED',
+    created_at: '2026-07-30T00:00:00Z',
+  })
 })
 
 afterEach(() => {
+  cleanup()
   __resetNotificationStoreForTests()
   vi.clearAllMocks()
 })
 
 describe('Analyze 분석 접수', () => {
+  it('서류 발급 사이트를 새 탭 링크로 안내한다', () => {
+    renderAnalyze()
+
+    expect(screen.getByRole('link', { name: '인터넷등기소(iros.go.kr)' })).toHaveAttribute(
+      'href',
+      'https://www.iros.go.kr/',
+    )
+    expect(screen.getByRole('link', { name: '정부24(plus.gov.kr)' })).toHaveAttribute(
+      'href',
+      'https://plus.gov.kr/',
+    )
+  })
+
   it('서류가 다 차기 전에는 진단 버튼이 잠겨 있다', () => {
     renderAnalyze()
 
@@ -68,6 +86,7 @@ describe('Analyze 분석 접수', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('약 30초~2분')
+    expect(dialog).toHaveTextContent('창을 닫아도 분석은 백그라운드에서 계속 진행됩니다.')
     expect(startAnalysis).toHaveBeenCalledTimes(1)
   })
 
@@ -84,7 +103,7 @@ describe('Analyze 분석 접수', () => {
   })
 
   // Modal 을 닫아도 진행 중임이 화면에 남아야 409 로 막히는 이유가 눈에 보인다.
-  it('Modal 을 닫아도 진행 상태와 결과 보기 링크가 남는다', async () => {
+  it('Modal 을 닫아도 파일과 진행 상태가 남고 결과 보기는 비활성이다', async () => {
     const user = userEvent.setup()
     renderAnalyze()
     await uploadAllSlots(user)
@@ -96,6 +115,25 @@ describe('Analyze 분석 접수', () => {
     await user.click(closeButtons[closeButtons.length - 1])
 
     expect(screen.getByRole('button', { name: '분석 진행 중...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '결과 보기' })).toBeDisabled()
+    expect(screen.queryByRole('link', { name: '결과 보기' })).not.toBeInTheDocument()
+    expect(screen.getByText('AI 분석 진행 중')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /제거$/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('파일 추가')).not.toBeInTheDocument()
+  })
+
+  it('완료 이벤트를 받으면 새로고침 없이 결과 보기로 전환한다', async () => {
+    const user = userEvent.setup()
+    renderAnalyze()
+    await uploadAllSlots(user)
+
+    await user.click(screen.getByRole('button', { name: 'OCR 진단하기' }))
+    await screen.findByRole('dialog')
+
+    act(() => syncAnalysisOutcome('job-1', 'SUCCEEDED'))
+
+    expect(screen.getByText('AI 분석이 완료되었습니다')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '분석 진행 중...' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '결과 보기' })).toHaveAttribute(
       'href',
       '/risk-report/job-1',

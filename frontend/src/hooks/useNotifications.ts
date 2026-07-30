@@ -1,11 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
 import { listAnalyses } from '../api/analyses'
-import {
-  getUnreadCount,
-  listNotifications,
-  markNotificationsRead,
-} from '../api/notifications'
+import { getUnreadCount, listNotifications, markNotificationsRead } from '../api/notifications'
 import { showToast } from '../components/Toast/toastStore'
 import { isTerminal } from '../types/analysis'
 import type { AppNotification } from '../types/notification'
@@ -33,8 +29,12 @@ interface State {
   unreadCount: number
   /** 진행 중인 분석이 있는지 — 폴링 주기와 종 아이콘 펄스를 정한다. */
   hasActiveAnalysis: boolean
+  /** 완료 알림을 받은 작업별 최종 상태 — 분석 화면도 Toast 와 같은 사실을 보게 한다. */
+  analysisOutcomes: Readonly<Record<string, AnalysisOutcome>>
   desktopEnabled: boolean
 }
+
+export type AnalysisOutcome = 'SUCCEEDED' | 'FAILED'
 
 function readPref(): boolean {
   try {
@@ -44,7 +44,12 @@ function readPref(): boolean {
   }
 }
 
-let state: State = { unreadCount: 0, hasActiveAnalysis: false, desktopEnabled: readPref() }
+let state: State = {
+  unreadCount: 0,
+  hasActiveAnalysis: false,
+  analysisOutcomes: {},
+  desktopEnabled: readPref(),
+}
 const listeners = new Set<() => void>()
 
 function emit() {
@@ -63,6 +68,7 @@ function setState(patch: Partial<State>) {
   if (
     next.unreadCount === state.unreadCount &&
     next.hasActiveAnalysis === state.hasActiveAnalysis &&
+    next.analysisOutcomes === state.analysisOutcomes &&
     next.desktopEnabled === state.desktopEnabled
   ) {
     return
@@ -86,6 +92,20 @@ export function useHasActiveAnalysis(): boolean {
     subscribe,
     () => state.hasActiveAnalysis,
     () => false,
+  )
+}
+
+/**
+ * 특정 작업의 완료/실패 알림 상태.
+ *
+ * Toast 와 화면이 서로 다른 로컬 state 를 갱신하면 한쪽만 완료되는 모순이 생긴다.
+ * 둘 다 이 알림 스토어에 기록된 동일한 이벤트를 사용한다.
+ */
+export function useAnalysisOutcome(jobId: string | null): AnalysisOutcome | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => (jobId ? (state.analysisOutcomes[jobId] ?? null) : null),
+    () => null,
   )
 }
 
@@ -142,6 +162,18 @@ export function markAnalysisFinished() {
 }
 
 /**
+ * WebSocket/SSE 등 다른 완료 이벤트 수단을 붙이더라도 같은 진입점을 사용한다.
+ * 현재는 알림 폴링이 호출하며, 작업 ID가 있어야 화면의 해당 분석만 갱신한다.
+ */
+export function syncAnalysisOutcome(jobId: string, outcome: AnalysisOutcome) {
+  const outcomes =
+    state.analysisOutcomes[jobId] === outcome
+      ? state.analysisOutcomes
+      : { ...state.analysisOutcomes, [jobId]: outcome }
+  setState({ hasActiveAnalysis: false, analysisOutcomes: outcomes })
+}
+
+/**
  * 어떤 리소스(분석 작업)의 알림을 읽음 처리한다. 결과 화면에 도착하면 부른다 —
  * 알림을 눌러 들어왔든 URL 로 직접 왔든, 이미 본 것이 배지에 남아 있으면 안 된다.
  *
@@ -150,9 +182,7 @@ export function markAnalysisFinished() {
 export async function markResourceNotificationsRead(resourceId: string) {
   try {
     const page = await listNotifications({ unread: true, limit: 50 })
-    const ids = page.items
-      .filter((item) => item.resource_id === resourceId)
-      .map((item) => item.id)
+    const ids = page.items.filter((item) => item.resource_id === resourceId).map((item) => item.id)
     if (!ids.length) return
     const result = await markNotificationsRead(ids)
     syncUnreadCount(result.unread_count)
@@ -189,7 +219,7 @@ function reset() {
   currentUser = null
   announced = new Set()
   primed = false
-  setState({ unreadCount: 0, hasActiveAnalysis: false })
+  setState({ unreadCount: 0, hasActiveAnalysis: false, analysisOutcomes: {} })
 }
 
 function intervalMs(): number {
@@ -233,7 +263,14 @@ async function announceNewEvents() {
     announced.add(item.id)
     if (!primed) continue // 첫 동기화 — 과거 알림이라 알리지 않는다
     if (item.type === 'ANALYSIS_COMPLETED' || item.type === 'ANALYSIS_FAILED') {
-      setState({ hasActiveAnalysis: false })
+      if (item.resource_id) {
+        syncAnalysisOutcome(
+          item.resource_id,
+          item.type === 'ANALYSIS_COMPLETED' ? 'SUCCEEDED' : 'FAILED',
+        )
+      } else {
+        setState({ hasActiveAnalysis: false })
+      }
       announce(item)
     }
   }
@@ -313,6 +350,11 @@ export function useNotificationPolling() {
 /** 테스트 전용 — 모듈 전역 상태를 초기화한다. */
 export function __resetNotificationStoreForTests() {
   reset()
-  state = { unreadCount: 0, hasActiveAnalysis: false, desktopEnabled: true }
+  state = {
+    unreadCount: 0,
+    hasActiveAnalysis: false,
+    analysisOutcomes: {},
+    desktopEnabled: true,
+  }
   emit()
 }

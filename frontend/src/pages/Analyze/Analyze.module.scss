@@ -1,5 +1,5 @@
-@use "../../styles/variables" as v;
-@use "../../styles/typography" as t;
+@use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
 
 .page {
   color: v.$ink;
@@ -351,6 +351,16 @@
     font-size: 14px;
     line-height: 1.6;
     color: v.$slate;
+
+    a {
+      color: v.$navy-800;
+      font-weight: 600;
+      text-underline-offset: 2px;
+
+      &:hover {
+        color: v.$navy-hover;
+      }
+    }
   }
 }
 .guideNum {
@@ -438,14 +448,31 @@
   gap: v.$space-3;
 }
 
-.resultLink {
+.resultButton {
   @include t.body-sm;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 10px 16px;
+  border: 1px solid v.$navy-800;
+  border-radius: 10px;
+  background: v.$white;
   color: v.$navy-800;
   font-weight: 600;
-  text-decoration: underline;
+  text-decoration: none;
+  cursor: pointer;
 
   &:hover {
+    background: v.$lavender;
     color: v.$navy-hover;
+  }
+
+  &:disabled {
+    border-color: v.$border-strong;
+    background: v.$surface-sunken;
+    color: v.$slate-light;
+    cursor: not-allowed;
   }
 }
 

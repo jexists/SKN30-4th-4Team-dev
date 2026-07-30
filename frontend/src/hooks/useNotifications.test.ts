@@ -1,9 +1,10 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   __resetNotificationStoreForTests,
   markAnalysisStarted,
+  useAnalysisOutcome,
   useNotificationPolling,
   useUnreadCount,
 } from './useNotifications'
@@ -41,6 +42,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  cleanup()
   __resetNotificationStoreForTests()
   vi.useRealTimers()
   vi.clearAllMocks()
@@ -84,6 +86,36 @@ describe('useNotificationPolling', () => {
 
     // 60초 동안 5초 간격이면 최소 열 번은 돈다(느린 주기라면 한 번뿐이다).
     expect(getUnreadCount.mock.calls.length).toBeGreaterThan(5)
+  })
+
+  it('완료 알림을 받으면 해당 작업의 완료 상태를 화면 구독자에게 전달한다', async () => {
+    const { result } = renderHook(() => {
+      useNotificationPolling()
+      return useAnalysisOutcome('job-1')
+    })
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    getUnreadCount.mockResolvedValue({ count: 1 })
+    listNotifications.mockResolvedValue({
+      items: [
+        {
+          id: 'notification-1',
+          type: 'ANALYSIS_COMPLETED',
+          title: 'AI 분석이 완료되었습니다.',
+          content: '',
+          resource_type: 'ANALYSIS_JOB',
+          resource_id: 'job-1',
+          read_at: null,
+          created_at: '2026-07-30T00:00:00Z',
+        },
+      ],
+      next_cursor: null,
+    })
+
+    act(() => markAnalysisStarted())
+    await act(() => vi.advanceTimersByTimeAsync(ACTIVE_MS))
+
+    expect(result.current).toBe('SUCCEEDED')
   })
 
   it('탭이 숨겨져 있으면 서버를 부르지 않는다', async () => {

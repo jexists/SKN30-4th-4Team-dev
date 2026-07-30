@@ -17,7 +17,7 @@ import {
   Upload,
 } from '../../components/icons'
 import { BRAND } from '../../config/env'
-import { markAnalysisStarted } from '../../hooks/useNotifications'
+import { markAnalysisStarted, useAnalysisOutcome } from '../../hooks/useNotifications'
 import styles from './Analyze.module.scss'
 import {
   ACCEPT_ATTR,
@@ -77,12 +77,27 @@ const GUIDE = [
   {
     step: '2',
     title: '등기부등본',
-    body: '대법원 인터넷등기소(iros.go.kr)에서 발급 가능합니다. 법적 효력 확인을 위해 "발급용" PDF 파일을 준비해 주세요.',
+    body: (
+      <>
+        대법원{' '}
+        <a href="https://www.iros.go.kr/" target="_blank" rel="noreferrer">
+          인터넷등기소(iros.go.kr)
+        </a>
+        에서 발급 가능합니다. 법적 효력 확인을 위해 &quot;발급용&quot; PDF 파일을 준비해 주세요.
+      </>
+    ),
   },
   {
     step: '3',
     title: '건축물대장',
-    body: '정부24(plus.gov.kr)에서 발급 가능합니다. 법적 효력 확인을 위해 "발급용" PDF 파일을 준비해 주세요.',
+    body: (
+      <>
+        <a href="https://plus.gov.kr/" target="_blank" rel="noreferrer">
+          정부24(plus.gov.kr)
+        </a>
+        에서 발급 가능합니다. 법적 효력 확인을 위해 &quot;발급용&quot; PDF 파일을 준비해 주세요.
+      </>
+    ),
   },
 ]
 
@@ -91,6 +106,7 @@ export function Analyze() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   // 접수된 작업 id. Modal 을 닫아도 남겨 두어 진행 중임을 화면에 계속 보여준다.
   const [startedJobId, setStartedJobId] = useState<string | null>(null)
+  const analysisOutcome = useAnalysisOutcome(startedJobId)
   const [modalOpen, setModalOpen] = useState(false)
   const idempotencyKey = useRef<string | null>(null)
   const [files, setFiles] = useState<Record<SlotKey, File[]>>({
@@ -102,9 +118,13 @@ export function Analyze() {
   const uploadedCount = SLOTS.filter((slot) => files[slot.key].length > 0).length
   const allUploaded = uploadedCount === SLOTS.length
   const totalCount = SLOTS.reduce((sum, slot) => sum + files[slot.key].length, 0)
+  const analysisStarted = startedJobId !== null
+  const analysisCompleted = analysisOutcome === 'SUCCEEDED'
+  const analysisFailed = analysisOutcome === 'FAILED'
+  const analysisRunning = analysisStarted && !analysisCompleted && !analysisFailed
 
   function addFiles(slot: SlotConfig, incoming: FileList | null) {
-    if (!incoming || incoming.length === 0) return
+    if (analysisStarted || !incoming || incoming.length === 0) return
     // 서류 한 종류가 여러 장으로 스캔돼 오는 일이 흔하므로 카드마다 파일을 여러 개 담는다.
     // 상한은 카드별이 아니라 전체 합계 — 백엔드 CONTRACT_MAX_FILES 와 같은 기준이다.
     const { files: merged, rejected } = mergeFiles(
@@ -121,6 +141,7 @@ export function Analyze() {
   }
 
   function removeFile(slot: SlotKey, key: string) {
+    if (analysisStarted) return
     idempotencyKey.current = null
     setFiles((prev) => ({ ...prev, [slot]: prev[slot].filter((file) => fileKey(file) !== key) }))
   }
@@ -129,7 +150,8 @@ export function Analyze() {
     // 백엔드는 파일을 순서대로 이어붙여 한 번에 분석한다 — 같은 서류의 장들이 흩어지지
     // 않도록 카드 단위로 묶어서 보낸다.
     const documents = SLOTS.flatMap((slot) => files[slot.key])
-    if (!allUploaded || isAnalyzing || startedJobId) return
+    if (!allUploaded || isAnalyzing || (analysisStarted && !analysisFailed)) return
+    if (analysisFailed) idempotencyKey.current = null
     setIsAnalyzing(true)
     try {
       // 같은 서류 묶음으로 다시 눌러도 분석이 두 번 돌지 않게 한다. 응답을 못 받았을 뿐
@@ -172,6 +194,7 @@ export function Analyze() {
                   dropIcon={slot.dropIcon}
                   inputId={slot.inputId}
                   files={files[slot.key]}
+                  locked={analysisStarted}
                   onAdd={(list) => addFiles(slot, list)}
                   onRemove={(fileId) => removeFile(slot.key, fileId)}
                 />
@@ -182,38 +205,66 @@ export function Analyze() {
               <div className={styles.statusLeft}>
                 <span
                   className={
-                    allUploaded ? `${styles.statusIcon} ${styles.statusIconDone}` : styles.statusIcon
+                    allUploaded
+                      ? `${styles.statusIcon} ${styles.statusIconDone}`
+                      : styles.statusIcon
                   }
                 >
                   <Check />
                 </span>
                 <div>
                   <p className={styles.statusTitle}>
-                    {uploadedCount}/{SLOTS.length} 서류 업로드 완료
+                    {analysisCompleted
+                      ? 'AI 분석이 완료되었습니다'
+                      : analysisFailed
+                        ? 'AI 분석을 완료하지 못했습니다'
+                        : analysisRunning
+                          ? 'AI 분석 진행 중'
+                          : `${uploadedCount}/${SLOTS.length} 서류 업로드 완료`}
                   </p>
                   <p className={styles.statusSub}>
-                    {allUploaded
-                      ? '모든 서류가 준비되었습니다'
-                      : `${SLOTS.length - uploadedCount}개 서류를 더 업로드해주세요`}
+                    {analysisCompleted
+                      ? '분석 결과를 바로 확인할 수 있습니다'
+                      : analysisFailed
+                        ? '업로드한 파일은 유지됩니다. 다시 분석을 시도해주세요'
+                        : analysisRunning
+                          ? '창을 닫아도 분석은 백그라운드에서 계속 진행됩니다'
+                          : allUploaded
+                            ? '모든 서류가 준비되었습니다'
+                            : `${SLOTS.length - uploadedCount}개 서류를 더 업로드해주세요`}
                   </p>
                 </div>
               </div>
               {/* 접수된 뒤에도 버튼을 잠근 채 남겨 둔다 — 왜 다시 못 누르는지(중복 방지)가
                   화면으로 설명되고, 알림을 놓쳐도 "결과 보기"로 되돌아갈 길이 생긴다. */}
               <div className={styles.statusActions}>
-                <button
-                  type="button"
-                  className={styles.diagnoseBtn}
-                  disabled={!allUploaded || isAnalyzing || startedJobId !== null}
-                  onClick={handleDiagnose}
-                >
-                  <Search />{' '}
-                  {startedJobId ? '분석 진행 중...' : isAnalyzing ? '접수 중...' : 'OCR 진단하기'}
-                </button>
-                {startedJobId && (
-                  <Link to={`/risk-report/${startedJobId}`} className={styles.resultLink}>
+                {analysisCompleted && startedJobId ? (
+                  <Link to={`/risk-report/${startedJobId}`} className={styles.resultButton}>
                     결과 보기
                   </Link>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.diagnoseBtn}
+                      disabled={!allUploaded || isAnalyzing || analysisRunning}
+                      onClick={handleDiagnose}
+                    >
+                      <Search />{' '}
+                      {isAnalyzing
+                        ? '접수 중...'
+                        : analysisFailed
+                          ? '다시 분석하기'
+                          : analysisRunning
+                            ? '분석 진행 중...'
+                            : 'OCR 진단하기'}
+                    </button>
+                    {analysisRunning && (
+                      <button type="button" className={styles.resultButton} disabled>
+                        결과 보기
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -236,12 +287,12 @@ export function Analyze() {
             <section className={styles.assureCard}>
               <h3>{BRAND.nameKo} 안전 보장</h3>
               <p>
-                {BRAND.nameKo} AI는 실거래가와 대법원 판례 데이터를 대조하여 계약 체결 전 '전세 사기'
-                위험을 선제적으로 감지합니다.
+                {BRAND.nameKo} AI는 실거래가와 대법원 판례 데이터를 대조하여 계약 체결 전 '전세
+                사기' 위험을 선제적으로 감지합니다.
               </p>
-              <Link to="/chat" className={styles.assureLink}>
+              {/* <Link to="/chat" className={styles.assureLink}>
                 분석 방법론 자세히 보기
-              </Link>
+              </Link> */}
               <Shield className={styles.assureMark} />
             </section>
           </div>
@@ -257,6 +308,7 @@ export function Analyze() {
         <div id="analysis-started-desc" className={styles.startedBody}>
           <p>분석에는 약 30초~2분 정도 소요될 수 있습니다.</p>
           <p>분석이 완료되면 알림으로 알려드리겠습니다.</p>
+          <p>창을 닫아도 분석은 백그라운드에서 계속 진행됩니다.</p>
           <p className={styles.startedHint}>
             기다리시는 동안 AI 상담을 이용해 궁금한 점을 물어보세요.
           </p>
@@ -281,11 +333,22 @@ type UploadCardProps = {
   dropIcon: ReactNode
   inputId: string
   files: File[]
+  locked: boolean
   onAdd: (list: FileList | null) => void
   onRemove: (key: string) => void
 }
 
-function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemove }: UploadCardProps) {
+function UploadCard({
+  title,
+  hint,
+  icon,
+  dropIcon,
+  inputId,
+  files,
+  locked,
+  onAdd,
+  onRemove,
+}: UploadCardProps) {
   // 드롭 영역과 "파일 추가" 영역이 같은 동작을 공유한다.
   const dropProps = {
     onDragOver: (event: React.DragEvent) => event.preventDefault(),
@@ -316,26 +379,32 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemo
             <ul className={styles.fileList} {...dropProps}>
               {files.map((file) => (
                 <li key={fileKey(file)} className={styles.fileRow}>
-                  <span className={styles.fileRowIcon}>{isPdf(file) ? <FileLines /> : <Doc />}</span>
+                  <span className={styles.fileRowIcon}>
+                    {isPdf(file) ? <FileLines /> : <Doc />}
+                  </span>
                   <span className={styles.fileName} title={file.name}>
                     {file.name}
                   </span>
                   <span className={styles.fileSize}>{formatFileSize(file.size)}</span>
-                  <button
-                    type="button"
-                    className={styles.fileRemove}
-                    aria-label={`${file.name} 제거`}
-                    onClick={() => onRemove(fileKey(file))}
-                  >
-                    <Close />
-                  </button>
+                  {!locked && (
+                    <button
+                      type="button"
+                      className={styles.fileRemove}
+                      aria-label={`${file.name} 제거`}
+                      onClick={() => onRemove(fileKey(file))}
+                    >
+                      <Close />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
-            <label htmlFor={inputId} className={styles.addZone} {...dropProps}>
-              <AddCircle />
-              <span>파일 추가</span>
-            </label>
+            {!locked && (
+              <label htmlFor={inputId} className={styles.addZone} {...dropProps}>
+                <AddCircle />
+                <span>파일 추가</span>
+              </label>
+            )}
           </>
         )}
       </div>
@@ -345,6 +414,7 @@ function UploadCard({ title, hint, icon, dropIcon, inputId, files, onAdd, onRemo
         type="file"
         multiple
         accept={ACCEPT_ATTR}
+        disabled={locked}
         className={styles.fileInput}
         onChange={(event) => {
           onAdd(event.target.files)

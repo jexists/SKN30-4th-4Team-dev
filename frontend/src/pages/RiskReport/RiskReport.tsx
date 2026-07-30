@@ -18,15 +18,8 @@ import {
   Share,
   Warn,
 } from '../../components/icons'
-import {
-  markAnalysisFinished,
-  markResourceNotificationsRead,
-} from '../../hooks/useNotifications'
-import type {
-  AnalysisJobDetail,
-  AnalysisResult,
-  AnalysisStage,
-} from '../../types/analysis'
+import { markAnalysisFinished, markResourceNotificationsRead } from '../../hooks/useNotifications'
+import type { AnalysisJobDetail, AnalysisResult, AnalysisStage } from '../../types/analysis'
 import { isTerminal } from '../../types/analysis'
 import type { RiskSeverity } from '../../types/document'
 import styles from './RiskReport.module.scss'
@@ -271,7 +264,7 @@ function useAnalysisJob(jobId: string) {
 
 function CenteredPanel({ children }: { children: React.ReactNode }) {
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.statePage}`}>
       <div className={`${styles.container} ${styles.statePanel}`}>{children}</div>
     </div>
   )
@@ -289,7 +282,9 @@ function LoadingPanel({ label }: { label: string }) {
 }
 
 function RunningPanel({ job }: { job: AnalysisJobDetail }) {
-  const label = job.stage ? (STAGE_LABEL[job.stage] ?? '분석을 진행하고 있습니다') : '분석을 준비하고 있습니다'
+  const label = job.stage
+    ? (STAGE_LABEL[job.stage] ?? '분석을 진행하고 있습니다')
+    : '분석을 준비하고 있습니다'
   return (
     <CenteredPanel>
       <div className={styles.stateStatus} role="status">
@@ -451,8 +446,12 @@ function ReportBody({ result }: { result: AnalysisResult }) {
             <div className={styles.clauseHead}>
               <h3 className={styles.cardTitle}>계약 특약 사항 분석</h3>
               <div className={styles.legend}>
-                <span className={styles.legendSafe}><i /> 낮음</span>
-                <span className={styles.legendRisk}><i /> 주의</span>
+                <span className={styles.legendSafe}>
+                  <i /> 낮음
+                </span>
+                <span className={styles.legendRisk}>
+                  <i /> 주의
+                </span>
               </div>
             </div>
             {clauses.map((clause) => {
@@ -476,7 +475,9 @@ function ReportBody({ result }: { result: AnalysisResult }) {
           </section>
 
           <aside className={styles.actionCard}>
-            <h3 className={styles.actionTitle}><ClipboardCheck /> 권장 조치 사항</h3>
+            <h3 className={styles.actionTitle}>
+              <ClipboardCheck /> 권장 조치 사항
+            </h3>
             <ul className={styles.actionList}>
               {actions.map((action, index) => (
                 <li key={`${action.title}-${index}`}>
@@ -488,7 +489,9 @@ function ReportBody({ result }: { result: AnalysisResult }) {
                 </li>
               ))}
             </ul>
-            <Link to="/chat" className={styles.actionCta}>AI 어시스턴트에게 조언 구하기</Link>
+            <Link to="/chat" className={styles.actionCta}>
+              AI 어시스턴트에게 조언 구하기
+            </Link>
           </aside>
         </div>
 
@@ -496,7 +499,11 @@ function ReportBody({ result }: { result: AnalysisResult }) {
           <div className={styles.visualCard}>
             <div className={`${styles.visualArt} ${styles.visualArtBuilding}`}>
               {propertyImage ? (
-                <img src={propertyImage} alt={terms.property_type ?? ''} className={styles.visualArtPhoto} />
+                <img
+                  src={propertyImage}
+                  alt={terms.property_type ?? ''}
+                  className={styles.visualArtPhoto}
+                />
               ) : (
                 <Building className={styles.visualArtIcon} />
               )}
