@@ -131,14 +131,41 @@ def _get_owned_room(db: Session, room_id: str, uid: uuid.UUID) -> ChatRoom:
     return room
 
 
-def _room_out(room: ChatRoom) -> ChatRoomOut:
+def _room_out(room: ChatRoom, preview: str | None = None) -> ChatRoomOut:
     """채팅방 응답 필드를 한곳에서 조립해 엔드포인트 사이 누락을 막는다."""
     return ChatRoomOut(
         id=str(room.id),
         title=room.title,
         last_chat_at=room.last_chat_at,
         updated_at=room.updated_at,
+        last_message_preview=preview,
     )
+
+
+_PREVIEW_MAX_LEN = 80
+
+
+def _truncate(text: str, limit: int = _PREVIEW_MAX_LEN) -> str:
+    return text if len(text) <= limit else text[:limit].rstrip() + "…"
+
+
+def _last_message_previews(db: Session, room_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """방마다 가장 최근 메시지 미리보기 한 줄. 목록 카드용이라 길이를 짧게 자른다.
+
+    chat_room_id 로 정렬 후 같은 그룹 안에서 created_at 내림차순 → 그룹의 첫 행이 최신 메시지다.
+    방마다 별도 쿼리(N+1)를 피하려고 한 번에 가져와 파이썬에서 그룹 첫 값만 취한다.
+    """
+    if not room_ids:
+        return {}
+    rows = db.execute(
+        select(ChatMessage.chat_room_id, ChatMessage.content)
+        .where(ChatMessage.chat_room_id.in_(room_ids))
+        .order_by(ChatMessage.chat_room_id, ChatMessage.created_at.desc(), ChatMessage.id.desc())
+    ).all()
+    previews: dict[uuid.UUID, str] = {}
+    for room_id, content in rows:
+        previews.setdefault(room_id, _truncate(content))
+    return previews
 
 
 @router.get("/chat/rooms", response_model=ApiResponse[Page[ChatRoomOut]])
@@ -165,9 +192,10 @@ def list_rooms(
     has_more = len(rows) > limit
     rows = rows[:limit]
     next_cursor = encode_cursor(rows[-1].last_chat_at, rows[-1].id) if has_more and rows else None
+    previews = _last_message_previews(db, [r.id for r in rows])
     return success_response(
         Page(
-            items=[_room_out(r) for r in rows],
+            items=[_room_out(r, previews.get(r.id)) for r in rows],
             next_cursor=next_cursor,
         )
     )

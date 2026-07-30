@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
 
+    # 프로필 사진 등 파일 저장(Supabase Storage). 버킷은 public 이라고 가정하고 업로드 성공 시
+    # 공개 URL 을 그대로 profile.profile_image 에 저장한다(카카오 로그인 아바타 URL과 같은 계약).
+    # 업로드는 서버가 대신 하므로 anon 키가 아니라 RLS 를 우회하는 service_role 키가 필요하다
+    # (대시보드 → Settings → API → service_role). 비어 있으면 업로드는 503.
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    AVATAR_BUCKET: str = "avatars"
+    AVATAR_MAX_FILE_MB: int = 5
+
     # Supabase Auth JWT 검증용(HS256 대칭키). 대시보드 → Settings → API → JWT Settings → JWT Secret.
     # 프로젝트가 비대칭키(ES256/RS256)를 쓰면 이 값 없이 SUPABASE_URL 의 JWKS 로 검증한다.
     # 둘 다 없으면 verify_token 이 항상 None → 보호 엔드포인트는 401(fail-closed).
@@ -65,7 +73,7 @@ class Settings(BaseSettings):
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_API_KEY: str = ""
 
-        # ── 분석 작업 큐 ────────────────────────────────────────────────
+    # ── 분석 작업 큐 ────────────────────────────────────────────────
     # 분석은 analysis_job 테이블을 큐로 삼아 백그라운드 워커가 처리한다(Redis 없음).
     # 테스트·CI 는 반드시 꺼야 한다 — 켜두면 테스트마다 폴링 스레드가 뜬다.
     ANALYSIS_WORKER_ENABLED: bool = True

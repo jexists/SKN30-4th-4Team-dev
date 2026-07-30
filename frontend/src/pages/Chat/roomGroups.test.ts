@@ -11,6 +11,7 @@ function room(id: string, date: Date): ChatRoom {
     title: id,
     last_chat_at: date.toISOString(),
     updated_at: date.toISOString(),
+    last_message_preview: null,
   }
 }
 

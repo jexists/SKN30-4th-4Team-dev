@@ -1,3 +1,4 @@
+import { LEGAL_DATES } from '../config/env'
 import type { LegalBlock } from '../components/LegalDoc/blocks'
 
 /** 「법적 근거」 문서 한 편. 장(chapter) → 조(article) → 문단/표(block) 순서로 구성된다. */
@@ -416,7 +417,7 @@ export const LEGAL_BASIS: {
   appendix: {
     title: '부칙',
     items: [
-      '본 문서는 YYYY년 MM월 DD일 작성되었으며, 인용된 법령은 작성일 기준 시행 중인 조항이다.',
+      `본 문서는 ${LEGAL_DATES.legalBasisWrittenDate} 작성되었으며, 인용된 법령은 작성일 기준 시행 중인 조항이다.`,
       '법령 개정 시 본 문서를 갱신한다.',
     ],
   },

@@ -30,14 +30,17 @@ CREATE INDEX IF NOT EXISTS idx_app_user_withdrawn ON app_user (deleted_at) WHERE
 
 -- 2. profile — 프로필 (1:1)
 CREATE TABLE IF NOT EXISTS profile (
-    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id              uuid NOT NULL UNIQUE REFERENCES app_user (id) ON DELETE CASCADE,
-    nickname             text,
-    nickname_updated_at  timestamptz,
-    profile_image        text,
-    created_at           timestamptz NOT NULL DEFAULT now(),
-    updated_at           timestamptz NOT NULL DEFAULT now()
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                  uuid NOT NULL UNIQUE REFERENCES app_user (id) ON DELETE CASCADE,
+    nickname                 text,
+    nickname_updated_at      timestamptz,
+    profile_image            text,
+    -- 위험 보고서 생성 완료 알림(마이페이지 "알림 설정" 토글) 수신 여부. 기본은 켜짐이다.
+    notify_report_complete   boolean NOT NULL DEFAULT true,
+    created_at               timestamptz NOT NULL DEFAULT now(),
+    updated_at               timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE profile ADD COLUMN IF NOT EXISTS notify_report_complete boolean NOT NULL DEFAULT true;
 
 -- 3. user_agreement — 약관·동의 이력
 CREATE TABLE IF NOT EXISTS user_agreement (

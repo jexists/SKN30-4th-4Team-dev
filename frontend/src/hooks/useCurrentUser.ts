@@ -78,5 +78,11 @@ export function useCurrentUser(token: string | null) {
     }
   }, [token])
 
-  return state
+  /** 닉네임 변경처럼 서버가 최신 사용자를 돌려주는 저장 뒤, 재조회 없이 화면·캐시를 갱신한다. */
+  function setCurrentUser(user: CurrentUser) {
+    if (token) cachedUser = user
+    setState({ status: 'ok', data: user, error: null })
+  }
+
+  return { ...state, setCurrentUser }
 }

@@ -7,6 +7,7 @@ import pytest
 from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
 
 from app.core import config, security
+from app.repositories.auth import AuthRepository
 
 TEST_SECRET = "test-jwt-secret-0123456789-abcdefghij"  # ≥32B (HMAC 권장 길이)
 
@@ -289,6 +290,194 @@ def test_me_uses_email_name_when_signup_nickname_is_empty(client, auth_secret, r
 
     assert resp.status_code == 200
     assert resp.json()["data"]["nickname"] == "fallback"
+
+
+def test_me_prefers_saved_nickname_over_signup_metadata(client, auth_secret, register_member):
+    """닉네임을 변경한 적이 있으면 profile.nickname 이 JWT 의 가입 시 닉네임보다 우선한다."""
+    user_id = register_member()
+    token = _make_token(
+        sub=str(user_id), email="me@example.com", user_metadata={"nickname": "가입시닉네임"}
+    )
+
+    patch_resp = client.patch(
+        "/api/v1/me", json={"nickname": "바꾼닉네임"}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["data"]["nickname"] == "바꾼닉네임"
+    assert patch_resp.json()["message"] == "닉네임이 변경되었습니다."
+
+    get_resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert get_resp.json()["data"]["nickname"] == "바꾼닉네임"
+
+
+def test_update_nickname_keeps_existing_profile_image(
+    client, auth_secret, register_member, db_sessionmaker
+):
+    """닉네임만 바꿔도 이미 저장된 프로필 이미지가 지워지면 안 된다."""
+    user_id = register_member()
+    with db_sessionmaker() as db:
+        AuthRepository(db).upsert_profile(
+            user_id, nickname="기존닉네임", profile_image="https://example.com/avatar.png"
+        )
+        db.commit()
+
+    token = _make_token(sub=str(user_id), email="me@example.com")
+    client.patch(
+        "/api/v1/me", json={"nickname": "새닉네임"}, headers={"Authorization": f"Bearer {token}"}
+    )
+
+    with db_sessionmaker() as db:
+        profile = AuthRepository(db).get_profile(user_id)
+        assert profile.nickname == "새닉네임"
+        assert profile.profile_image == "https://example.com/avatar.png"
+
+
+@pytest.mark.parametrize("nickname", ["", " ", "가" * 21])
+def test_update_nickname_rejects_invalid_length(client, auth_secret, register_member, nickname):
+    user_id = register_member()
+    token = _make_token(sub=str(user_id))
+    resp = client.patch(
+        "/api/v1/me", json={"nickname": nickname}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 422
+
+
+def test_update_nickname_requires_auth(client):
+    resp = client.patch("/api/v1/me", json={"nickname": "닉네임"})
+    assert resp.status_code == 401
+
+
+def test_me_defaults_to_notifications_enabled(client, auth_secret, register_member):
+    user_id = register_member()
+    token = _make_token(sub=str(user_id))
+    resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.json()["data"]["notify_report_complete"] is True
+
+
+def test_update_notification_pref_persists(client, auth_secret, register_member, db_sessionmaker):
+    user_id = register_member()
+    token = _make_token(sub=str(user_id))
+
+    resp = client.patch(
+        "/api/v1/me/notification-prefs",
+        json={"notify_report_complete": False},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["notify_report_complete"] is False
+    assert resp.json()["message"] == "알림 설정이 변경되었습니다."
+
+    with db_sessionmaker() as db:
+        profile = AuthRepository(db).get_profile(user_id)
+        assert profile.notify_report_complete is False
+
+    get_resp = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert get_resp.json()["data"]["notify_report_complete"] is False
+
+
+def test_update_notification_pref_keeps_existing_nickname_and_avatar(
+    client, auth_secret, register_member, db_sessionmaker
+):
+    """알림 설정만 바꿔도 이미 저장된 닉네임·프로필 이미지가 지워지면 안 된다."""
+    user_id = register_member()
+    with db_sessionmaker() as db:
+        AuthRepository(db).upsert_profile(
+            user_id, nickname="기존닉네임", profile_image="https://example.com/avatar.png"
+        )
+        db.commit()
+
+    token = _make_token(sub=str(user_id))
+    resp = client.patch(
+        "/api/v1/me/notification-prefs",
+        json={"notify_report_complete": False},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["data"]["nickname"] == "기존닉네임"
+    assert resp.json()["data"]["profile_image"] == "https://example.com/avatar.png"
+
+
+def test_update_notification_pref_requires_auth(client):
+    resp = client.patch("/api/v1/me/notification-prefs", json={"notify_report_complete": False})
+    assert resp.status_code == 401
+
+
+def test_upload_avatar_persists_url_and_keeps_nickname(
+    client, auth_secret, register_member, db_sessionmaker, monkeypatch
+):
+    """업로드 성공 시 profile_image 가 저장되고, 건드리지 않은 nickname 은 그대로 남는다."""
+    from app.services import auth as auth_service
+
+    monkeypatch.setattr(
+        auth_service.storage, "upload_avatar", lambda *a, **k: "https://cdn.example/avatar.png"
+    )
+
+    user_id = register_member()
+    with db_sessionmaker() as db:
+        AuthRepository(db).upsert_profile(user_id, nickname="기존닉네임", profile_image=None)
+        db.commit()
+
+    token = _make_token(sub=str(user_id))
+    resp = client.post(
+        "/api/v1/me/avatar",
+        files={"file": ("avatar.png", b"fake-image-bytes", "image/png")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["data"]["profile_image"] == "https://cdn.example/avatar.png"
+    assert body["data"]["nickname"] == "기존닉네임"
+    assert body["message"] == "프로필 사진이 변경되었습니다."
+
+    with db_sessionmaker() as db:
+        profile = AuthRepository(db).get_profile(user_id)
+        assert profile.profile_image == "https://cdn.example/avatar.png"
+        assert profile.nickname == "기존닉네임"
+
+
+def test_upload_avatar_rejects_unsupported_extension(client, auth_secret, register_member):
+    user_id = register_member()
+    token = _make_token(sub=str(user_id))
+    resp = client.post(
+        "/api/v1/me/avatar",
+        files={"file": ("avatar.gif", b"fake-bytes", "image/gif")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 415
+
+
+def test_upload_avatar_rejects_oversized_file(client, auth_secret, register_member, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AVATAR_MAX_FILE_MB", 1)
+    user_id = register_member()
+    token = _make_token(sub=str(user_id))
+    oversized = b"a" * (1024 * 1024 + 1)
+    resp = client.post(
+        "/api/v1/me/avatar",
+        files={"file": ("avatar.png", oversized, "image/png")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 413
+
+
+def test_upload_avatar_requires_auth(client):
+    resp = client.post("/api/v1/me/avatar", files={"file": ("avatar.png", b"bytes", "image/png")})
+    assert resp.status_code == 401
+
+
+def test_upload_avatar_503_when_storage_not_configured(client, auth_secret, register_member):
+    """SUPABASE_SERVICE_ROLE_KEY 가 비어 있으면(로컬 기본값) 업로드는 503 이지 500 이 아니다."""
+    user_id = register_member()
+    token = _make_token(sub=str(user_id))
+    resp = client.post(
+        "/api/v1/me/avatar",
+        files={"file": ("avatar.png", b"fake-bytes", "image/png")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 503
 
 
 def test_me_expired_token_says_expired(client, auth_secret):

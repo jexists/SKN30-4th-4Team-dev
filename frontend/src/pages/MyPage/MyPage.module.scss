@@ -212,6 +212,27 @@
     background: v.$page-bg;
   }
 }
+.historyLoadMore {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-top: 1px solid v.$border-subtle;
+  background: none;
+  color: v.$navy-800;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: v.$page-bg;
+  }
+  &:disabled {
+    color: v.$slate;
+    cursor: default;
+  }
+}
 .historyAddress {
   margin: 0;
   font-size: 15px;
@@ -598,34 +619,6 @@
     margin-top: 2px;
     accent-color: v.$red;
     cursor: pointer;
-  }
-}
-
-/* ══════════════ FAB ══════════════ */
-.fab {
-  position: fixed;
-  right: 32px;
-  bottom: 32px;
-  width: 60px;
-  height: 60px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: v.$navy-800;
-  color: v.$text-on-dark;
-  box-shadow: 0 14px 30px rgba(15, 26, 53, 0.35);
-  transition: transform 0.15s ease;
-  z-index: 40;
-
-  svg {
-    width: 26px;
-    height: 26px;
-  }
-  &:hover {
-    transform: scale(1.08);
-  }
-  &:active {
-    transform: scale(0.96);
   }
 }
 

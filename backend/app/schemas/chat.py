@@ -48,6 +48,7 @@ class ChatRoomOut(BaseModel):
     title: str | None
     last_chat_at: datetime
     updated_at: datetime
+    last_message_preview: str | None = None
 
 
 class AddMessageIn(BaseModel):
