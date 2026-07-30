@@ -5,6 +5,7 @@
 """
 
 import base64
+import uuid
 
 import pytest
 
@@ -16,6 +17,7 @@ from app.schemas.document import (
     OcrAnalysisResult,
 )
 from app.services.analysis_jobs import pipeline
+from app.services.analysis_jobs import storage as analysis_storage
 from app.services.document_processing.analyzer import ContractAnalyzer
 from app.services.document_processing.client import OcrWorkerClient
 
@@ -34,17 +36,28 @@ def _ocr(text: str, *, safe: bool = True, index: int = 1) -> OcrAnalysisResult:
     )
 
 
+USER_ID = uuid.uuid4()
+JOB_ID = uuid.uuid4()
+
+
 @pytest.fixture()
-def spool(tmp_path):
+def stored_files(monkeypatch):
+    files: dict[int, bytes] = {}
+
     def _make(count: int):
         for index in range(count):
-            (tmp_path / f"{index:03d}").write_bytes(f"pdf-{index}".encode())
-        return tmp_path
+            files[index] = f"pdf-{index}".encode()
+        return files
 
+    monkeypatch.setattr(
+        analysis_storage,
+        "download_job_file",
+        lambda user_id, job_id, index, filename: files[index],
+    )
     return _make
 
 
-def test_only_sanitized_text_reaches_the_llm(spool, monkeypatch):
+def test_only_sanitized_text_reaches_the_llm(stored_files, monkeypatch):
     sanitized = "[페이지 1]\n임차인: [이름]\n보증금: 금 일억원정"
     monkeypatch.setattr(
         OcrWorkerClient, "process_for_analysis", lambda self, filename, content: _ocr(sanitized)
@@ -60,14 +73,15 @@ def test_only_sanitized_text_reaches_the_llm(spool, monkeypatch):
 
     monkeypatch.setattr(ContractAnalyzer, "analyze", fake_analyze)
 
-    result = pipeline.run_analysis(spool(1), ["contract.pdf"])
+    stored_files(1)
+    result = pipeline.run_analysis(USER_ID, JOB_ID, ["contract.pdf"])
 
     assert received == [sanitized]
     assert "홍길동" not in received[0]
     assert result.analysis.terms.deposit == "금 일억원정"
 
 
-def test_masked_pdf_never_reaches_the_stored_result(spool, monkeypatch):
+def test_masked_pdf_never_reaches_the_stored_result(stored_files, monkeypatch):
     """마스킹 PDF 는 보관하지 않기로 했다 — 결과에 새어 들어가면 DB 가 수십 MB 로 부푼다."""
     monkeypatch.setattr(
         OcrWorkerClient, "process_for_analysis", lambda self, filename, content: _ocr("본문")
@@ -78,12 +92,13 @@ def test_masked_pdf_never_reaches_the_stored_result(spool, monkeypatch):
         lambda self, text: ContractLlmAnalysis(summary="요약", terms=ContractTerms()),
     )
 
-    dumped = pipeline.run_analysis(spool(1), ["contract.pdf"]).model_dump()
+    stored_files(1)
+    dumped = pipeline.run_analysis(USER_ID, JOB_ID, ["contract.pdf"]).model_dump()
 
     assert "masked_pdf_base64" not in str(dumped)
 
 
-def test_stops_before_llm_when_pii_remains(spool, monkeypatch):
+def test_stops_before_llm_when_pii_remains(stored_files, monkeypatch):
     monkeypatch.setattr(
         OcrWorkerClient,
         "process_for_analysis",
@@ -97,14 +112,15 @@ def test_stops_before_llm_when_pii_remains(spool, monkeypatch):
 
     monkeypatch.setattr(ContractAnalyzer, "analyze", fake_analyze)
 
+    stored_files(1)
     with pytest.raises(AppError) as caught:
-        pipeline.run_analysis(spool(1), ["contract.pdf"])
+        pipeline.run_analysis(USER_ID, JOB_ID, ["contract.pdf"])
 
     assert caught.value.code == 422
     assert called is False, "개인정보가 남았는데 LLM 을 호출했다"
 
 
-def test_combines_every_document_in_upload_order(spool, monkeypatch):
+def test_combines_every_document_in_upload_order(stored_files, monkeypatch):
     calls: list[tuple[str, bytes]] = []
 
     def fake_process(self, filename, content):
@@ -120,7 +136,8 @@ def test_combines_every_document_in_upload_order(spool, monkeypatch):
 
     monkeypatch.setattr(ContractAnalyzer, "analyze", fake_analyze)
 
-    result = pipeline.run_analysis(spool(2), ["register.pdf", "contract.jpg"])
+    stored_files(2)
+    result = pipeline.run_analysis(USER_ID, JOB_ID, ["register.pdf", "contract.jpg"])
 
     assert calls == [("register.pdf", b"pdf-0"), ("contract.jpg", b"pdf-1")]
     assert analyzed == ["[문서 1]\n서류 1의 안전한 내용\n\n[문서 2]\n서류 2의 안전한 내용"]
@@ -132,19 +149,20 @@ def test_combines_every_document_in_upload_order(spool, monkeypatch):
     assert [doc.filename for doc in result.documents] == ["register.pdf", "contract.jpg"]
 
 
-def test_rejects_document_longer_than_the_per_file_limit(spool, monkeypatch):
+def test_rejects_document_longer_than_the_per_file_limit(stored_files, monkeypatch):
     monkeypatch.setattr(
         OcrWorkerClient,
         "process_for_analysis",
         lambda self, filename, content: _ocr("가" * (settings.CONTRACT_ANALYSIS_MAX_CHARS + 1)),
     )
 
+    stored_files(1)
     with pytest.raises(AppError) as caught:
-        pipeline.run_analysis(spool(1), ["contract.pdf"])
+        pipeline.run_analysis(USER_ID, JOB_ID, ["contract.pdf"])
     assert caught.value.code == 422
 
 
-def test_rejects_when_combined_text_exceeds_the_total_limit(spool, monkeypatch):
+def test_rejects_when_combined_text_exceeds_the_total_limit(stored_files, monkeypatch):
     chunk = "가" * settings.CONTRACT_ANALYSIS_MAX_CHARS
     monkeypatch.setattr(
         OcrWorkerClient, "process_for_analysis", lambda self, filename, content: _ocr(chunk)
@@ -158,21 +176,29 @@ def test_rejects_when_combined_text_exceeds_the_total_limit(spool, monkeypatch):
     monkeypatch.setattr(ContractAnalyzer, "analyze", fake_analyze)
 
     count = settings.CONTRACT_ANALYSIS_MAX_TOTAL_CHARS // settings.CONTRACT_ANALYSIS_MAX_CHARS + 1
+    stored_files(count)
     with pytest.raises(AppError) as caught:
-        pipeline.run_analysis(spool(count), [f"doc-{i}.pdf" for i in range(count)])
+        pipeline.run_analysis(USER_ID, JOB_ID, [f"doc-{i}.pdf" for i in range(count)])
 
     assert caught.value.code == 422
     assert called is False
 
 
-def test_missing_spool_is_a_terminal_error(tmp_path, monkeypatch):
-    """스풀이 사라졌다 = 프로세스가 바뀌었다. 재시도해도 살아나지 않으므로 4xx 여야 한다."""
+def test_missing_storage_object_is_a_terminal_error(monkeypatch):
+    """Storage에 원본이 없으면 재시도해도 살아나지 않으므로 4xx여야 한다."""
+    monkeypatch.setattr(
+        analysis_storage,
+        "download_job_file",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AppError("분석 파일 없음", "업로드한 파일을 찾지 못했습니다.", 422)
+        ),
+    )
     with pytest.raises(AppError) as caught:
-        pipeline.run_analysis(tmp_path, ["contract.pdf"])
+        pipeline.run_analysis(USER_ID, JOB_ID, ["contract.pdf"])
     assert caught.value.code == 422
 
 
-def test_summarize_picks_the_worst_severity(spool):
+def test_summarize_picks_the_worst_severity(stored_files):
     from app.schemas.analysis import AnalysisResultOut
     from app.schemas.document import ContractRiskIssue
 
@@ -200,7 +226,7 @@ def test_summarize_picks_the_worst_severity(spool):
     assert pipeline.summarize(build(), ["a.pdf"])[2] == "LOW"
 
 
-def test_summarize_falls_back_to_first_filename_without_property_type(spool):
+def test_summarize_falls_back_to_first_filename_without_property_type(stored_files):
     from app.schemas.analysis import AnalysisResultOut
 
     result = AnalysisResultOut(

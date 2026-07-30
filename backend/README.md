@@ -56,11 +56,13 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 | `WARMUP_ON_STARTUP` | 기동 시 임베딩 모델·챗봇 엔진 백그라운드 워밍업 여부 (기본 `true`) |
 | `CORS_ORIGINS` | 허용 origin, 쉼표 구분 |
 | `SUPABASE_URL` | 프로젝트 URL. JWKS 공개키 출처로도 쓰임 (비밀값 아님) |
-| `SUPABASE_KEY` | service role 키 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 프로필·분석 원본 Storage용 service-role 키. 프론트엔드 노출 금지 |
+| `ANALYSIS_UPLOAD_BUCKET` | 분석 원본을 잠시 보관할 private Storage 버킷 (기본 `analysis-uploads`) |
 | `SUPABASE_JWT_SECRET` | HS256(레거시) 검증용. 비대칭키 프로젝트면 불필요 |
 | `OPENAI_API_KEY` | LLM 호출용 |
 | `OCR_WORKER_URL` | 로컬 OCR worker 주소. 로컬 직접 실행 시 `http://127.0.0.1:8100` |
 | `OCR_WORKER_PROCESS_TIMEOUT_SECONDS` | 계약서 OCR 요청 제한 시간(초) |
+| `ANALYSIS_WORKER_ENABLED` | 이 백엔드가 공유 작업 큐를 처리할지 여부 |
 | `CONTRACT_MAX_FILES` | 한 번에 종합 분석할 수 있는 전체 파일 수(기본 10개). 서류 한 종류가 여러 장일 수 있어 종류 수보다 크다 |
 | `CONTRACT_MAX_FILE_MB` | 업로드 가능한 계약서 최대 크기 |
 | `CONTRACT_ANALYSIS_MODEL` | 개인정보 치환 텍스트를 분석할 LLM 모델 |
@@ -69,7 +71,8 @@ tests/            # pytest (conftest.py = 인메모리 SQLite 픽스처)
 
 `POST /api/v1/documents/analyze`는 인증이 필요한 multipart 업로드 API입니다.
 같은 `file` 필드를 반복하면 최대 `CONTRACT_MAX_FILES`개의 서류를 전달할 수 있습니다.
-백엔드는 모든 서류를 OCR worker로 순차 처리하고, 문서별로 구분한 개인정보 치환
+백엔드는 원본을 private Supabase Storage에 잠시 저장한 뒤 모든 서류를 OCR worker로 순차
+처리하고, 문서별로 구분한 개인정보 치환
 텍스트만 한 번의 종합 분석 입력으로 사용합니다. 원본 OCR 텍스트와 마스킹 PDF는
 LLM 입력에 포함되지 않습니다. 응답의 `documents`에는 문서별 마스킹 결과가 있으며,
 기존 최상위 마스킹 PDF 필드는 단일 파일 클라이언트 호환을 위해 첫 번째 결과를

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     AVATAR_BUCKET: str = "avatars"
     AVATAR_MAX_FILE_MB: int = 5
+    # 계약서 원본은 여러 백엔드가 공유하는 private Storage에 잠시 보관한다.
+    # 버킷은 Dashboard에서 미리 만들고 Public을 반드시 끈다.
+    ANALYSIS_UPLOAD_BUCKET: str = "analysis-uploads"
+    ANALYSIS_STORAGE_TIMEOUT_SECONDS: float = 60.0
 
     # Supabase Auth JWT 검증용(HS256 대칭키). 대시보드 → Settings → API → JWT Settings → JWT Secret.
     # 프로젝트가 비대칭키(ES256/RS256)를 쓰면 이 값 없이 SUPABASE_URL 의 JWKS 로 검증한다.

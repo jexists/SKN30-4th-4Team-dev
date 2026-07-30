@@ -4,9 +4,9 @@ analysis_job 테이블을 큐로 삼아 QUEUED 를 하나씩 선점(claim)해 �
 DB 만으로 굴러가고, `FOR UPDATE SKIP LOCKED` + 조건부 UPDATE 덕분에 uvicorn worker 를 여러 개로
 늘려도 같은 작업이 두 번 실행되지 않는다.
 
-**재시도는 워커가 살아 있는 동안만 한다.** 업로드 원본이 임시 디렉터리에만 있어 프로세스가
-바뀌면 되살릴 수 없기 때문이다 — 그래서 기동 시 남은 작업과 lease 가 끊긴 작업은 재큐잉이
-아니라 FAILED 로 닫는다(recover 참고).
+**재시도는 워커가 살아 있는 동안만 한다.** 업로드 원본은 private Storage에 있어 어느
+백엔드든 읽을 수 있다. 기동 시 다른 워커의 정상 작업을 건드리지 않고, lease가 만료된
+RUNNING 작업만 실패로 닫는다(recover 참고).
 """
 
 import logging
@@ -25,7 +25,8 @@ from app.core.exceptions import AppError
 from app.db.session import AppSessionLocal
 from app.models.analysis_job import JobStage
 from app.repositories.analysis_job import AnalysisJobRepository
-from app.services.analysis_jobs import pipeline, spool
+from app.services.analysis_jobs import pipeline
+from app.services.analysis_jobs import storage as analysis_storage
 from app.services.notification import notify_analysis_completed, notify_analysis_failed
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,6 @@ SessionFactory = Callable[[], Session]
 # 4xx(지원하지 않는 형식·크기 초과·개인정보 잔존)는 몇 번을 해도 결과가 같으므로 즉시 닫는다.
 RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
-_RESTART_MESSAGE = "서버가 재시작되어 분석이 중단되었습니다. 다시 시도해 주세요."
 _LEASE_MESSAGE = "분석이 예상보다 오래 걸려 중단되었습니다. 다시 시도해 주세요."
 _UNEXPECTED_MESSAGE = "분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
@@ -129,7 +129,7 @@ class AnalysisWorker:
             with factory() as db:
                 self._process(db, job_id, user_id, file_names, attempt, worker_id)
         finally:
-            spool.discard(job_id)
+            analysis_storage.discard_job(user_id, job_id, file_names)
             logger.info(
                 "분석 작업 종료 job_id=%s user_id=%s worker_id=%s elapsed=%.1fs",
                 job_id,
@@ -149,7 +149,6 @@ class AnalysisWorker:
         worker_id: str,
     ) -> None:
         repo = AnalysisJobRepository(db)
-        directory = spool.spool_dir(job_id)
 
         def on_stage(stage: str, progress: int) -> None:
             repo.set_stage(job_id, stage, progress)
@@ -159,7 +158,7 @@ class AnalysisWorker:
 
         while True:
             try:
-                result = pipeline.run_analysis(directory, file_names, on_stage=on_stage)
+                result = pipeline.run_analysis(user_id, job_id, file_names, on_stage=on_stage)
             except Exception as exc:
                 retryable = _is_retryable(exc)
                 logger.warning(
@@ -218,16 +217,9 @@ def recover_expired_leases(db: Session) -> int:
 
 
 def recover_on_startup(db: Session) -> int:
-    """기동 시 남아 있던 QUEUED/RUNNING 을 전부 실패로 닫는다.
+    """기동 시 lease가 이미 만료된 작업만 정리한다.
 
-    재큐잉하지 않는 이유는 모듈 docstring 참고 — 입력 파일이 이미 사라졌다.
+    QUEUED와 정상 lease의 RUNNING은 다른 백엔드가 처리 중일 수 있다. 원본이 공유 Storage에
+    있으므로 서버 하나가 시작됐다는 이유로 전역 작업을 실패시키면 안 된다.
     """
-    spool.purge_all()
-    orphaned = AnalysisJobRepository(db).fail_active(
-        code="SERVER_RESTARTED", message=_RESTART_MESSAGE
-    )
-    for job_id, user_id in orphaned:
-        notify_analysis_failed(db, user_id, job_id)
-    if orphaned:
-        logger.info("기동 정리: 중단된 분석 작업 %d건을 실패 처리했다", len(orphaned))
-    return len(orphaned)
+    return recover_expired_leases(db)

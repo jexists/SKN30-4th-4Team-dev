@@ -5,14 +5,15 @@
 """
 
 import logging
+import uuid
 from collections.abc import Callable, Sequence
-from pathlib import Path
 
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.models.analysis_job import JobStage, RiskLevel
 from app.schemas.analysis import AnalysisDocumentOut, AnalysisResultOut
 from app.schemas.document import OcrAnalysisResult
+from app.services.analysis_jobs import storage as analysis_storage
 from app.services.document_processing.analyzer import ContractAnalyzer
 from app.services.document_processing.client import OcrWorkerClient
 
@@ -27,15 +28,16 @@ _OCR_END = 70
 
 
 def run_analysis(
-    spool_dir: Path,
+    user_id: uuid.UUID,
+    job_id: uuid.UUID,
     file_names: Sequence[str],
     *,
     on_stage: StageCallback | None = None,
 ) -> AnalysisResultOut:
-    """스풀된 파일들을 OCR·마스킹한 뒤 한 번에 분석한다.
+    """private Storage의 파일들을 OCR·마스킹한 뒤 한 번에 분석한다.
 
-    파일은 `spool_dir/000`, `001` … 로 업로드 순서대로 저장돼 있고, 원본 이름은 file_names 가
-    같은 순서로 들고 있다(파일명에 든 이상한 문자가 디스크 경로로 새지 않게 한 분리).
+    오브젝트는 사용자/작업/순번 경로로 저장돼 있고 원본 이름은 file_names가 같은 순서로
+    들고 있다. 어느 백엔드 워커가 작업을 잡아도 같은 원본을 내려받을 수 있다.
 
     실패는 전부 AppError 로 나간다 — `code` 가 5xx/429 면 워커가 재시도하고, 4xx 면 즉시
     실패로 닫는다(재시도해도 결과가 같은 사용자 입력 문제).
@@ -51,15 +53,8 @@ def run_analysis(
 
     notify(JobStage.OCR, _OCR_START)
     for index, filename in enumerate(file_names, start=1):
-        path = spool_dir / f"{index - 1:03d}"
-        if not path.exists():
-            # 스풀이 사라졌다 = 프로세스가 바뀌었다. 재시도해도 살아나지 않는다.
-            raise AppError(
-                "분석 파일 없음",
-                "업로드한 파일을 찾지 못했습니다. 다시 업로드해 주세요.",
-                422,
-            )
-        result = worker.process_for_analysis(filename, path.read_bytes())
+        content = analysis_storage.download_job_file(user_id, job_id, index - 1, filename)
+        result = worker.process_for_analysis(filename, content)
         if not result.text_safe_for_analysis:
             raise AppError(
                 "개인정보 검토 필요",

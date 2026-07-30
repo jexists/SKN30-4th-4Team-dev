@@ -251,16 +251,6 @@ class AnalysisJobRepository:
 
     # ── 복구 ────────────────────────────────────────────────────────
 
-    def fail_active(self, *, code: str, message: str) -> list[tuple[uuid.UUID, uuid.UUID]]:
-        """남아 있는 QUEUED/RUNNING 을 전부 FAILED 로. 기동 시 한 번 부른다.
-
-        재큐잉하지 않는 이유: 업로드 원본이 임시 디렉터리에만 있어 프로세스와 함께 사라졌다.
-        입력 없이 되살릴 수 없으므로 정직하게 실패로 닫고 사용자에게 재시도를 안내한다.
-
-        반환값은 (job_id, user_id) 목록 — 호출부가 실패 알림을 만들 수 있게.
-        """
-        return self._fail_where(AnalysisJob.status.in_(_ACTIVE), code=code, message=message)
-
     def fail_expired_leases(self, *, code: str, message: str) -> list[tuple[uuid.UUID, uuid.UUID]]:
         """lease 가 끊긴 RUNNING 작업을 회수한다(워커가 죽었거나 멈춘 경우)."""
         return self._fail_where(

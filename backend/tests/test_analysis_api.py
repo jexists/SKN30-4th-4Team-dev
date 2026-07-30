@@ -11,15 +11,27 @@ from app.core.config import settings
 from app.main import app
 from app.models.analysis_job import AnalysisJob, AnalysisResult, JobStatus
 from app.models.notification import Notification, NotificationType
-from app.services.analysis_jobs import spool
+from app.services.analysis_jobs import storage as analysis_storage
 
 PDF = ("contract.pdf", b"fake-pdf", "application/pdf")
 
 
 @pytest.fixture(autouse=True)
-def _isolated_spool(tmp_path, monkeypatch):
-    """스풀을 테스트별 임시 폴더로 — 진짜 temp 디렉터리를 어지럽히지 않는다."""
-    monkeypatch.setattr(spool, "SPOOL_ROOT", tmp_path / "spool")
+def stored_uploads(monkeypatch):
+    """Supabase 대신 테스트별 메모리 Storage를 사용한다."""
+    objects: dict[str, bytes] = {}
+
+    def upload(user_id, job_id, payloads):
+        for index, (filename, content) in enumerate(payloads):
+            objects[analysis_storage.object_path(user_id, job_id, index, filename)] = content
+
+    def discard(user_id, job_id, file_names):
+        for index, filename in enumerate(file_names):
+            objects.pop(analysis_storage.object_path(user_id, job_id, index, filename), None)
+
+    monkeypatch.setattr(analysis_storage, "upload_job_files", upload)
+    monkeypatch.setattr(analysis_storage, "discard_job", discard)
+    return objects
 
 
 @pytest.fixture()
@@ -57,13 +69,14 @@ def test_accepts_immediately_with_202_and_job_id(member, db_sessionmaker):
         assert job.file_names == ["contract.pdf"]
 
 
-def test_files_are_spooled_before_the_job_becomes_visible(member, db_sessionmaker):
-    """워커가 파일 없는 QUEUED 를 집어가면 안 된다."""
-    client, _ = member
+def test_files_are_stored_before_the_job_becomes_visible(member, db_sessionmaker, stored_uploads):
+    """다른 호스트의 워커가 파일 없는 QUEUED를 집어가면 안 된다."""
+    client, user_id = member
 
     job_id = uuid.UUID(_post(client).json()["data"]["id"])
 
-    assert (spool.spool_dir(job_id) / "000").read_bytes() == b"fake-pdf"
+    path = analysis_storage.object_path(user_id, job_id, 0, "contract.pdf")
+    assert stored_uploads[path] == b"fake-pdf"
 
 
 def test_creates_started_notification_pointing_at_the_job(member, db_sessionmaker):
@@ -148,14 +161,14 @@ def test_rejects_oversized_file(member):
     assert response.status_code == 413
 
 
-def test_invalid_input_leaves_no_job_and_no_spool(member, db_sessionmaker):
+def test_invalid_input_leaves_no_job_and_no_storage_object(member, db_sessionmaker, stored_uploads):
     client, _ = member
 
     _post(client, files=[("file", ("contract.hwp", b"x", "application/octet-stream"))])
 
     with db_sessionmaker() as db:
         assert db.execute(select(AnalysisJob)).scalars().all() == []
-    assert not spool.SPOOL_ROOT.exists() or not any(spool.SPOOL_ROOT.iterdir())
+    assert stored_uploads == {}
 
 
 # ── 조회·소유권 ───────────────────────────────────────────────────────

@@ -50,11 +50,10 @@ def _warmup() -> None:
 
 
 def _recover_analysis_jobs() -> None:
-    """이전 프로세스가 남긴 분석 작업을 정리한다.
+    """lease가 만료된 분석 작업만 정리한다.
 
-    업로드 원본이 임시 디렉터리에만 있어 재시작하면 사라진다 — 되살릴 수 없으므로 재큐잉이
-    아니라 FAILED 로 닫고 사용자에게 실패 알림을 보낸다. 워밍업과 마찬가지로 **실패해도
-    기동을 막지 않는다**(DB 가 잠깐 안 되더라도 서버는 떠야 한다).
+    원본은 공유 private Storage에 있으므로 다른 백엔드의 QUEUED/RUNNING 작업은 유지한다.
+    워밍업과 마찬가지로 실패해도 기동을 막지 않는다(DB가 잠깐 안 돼도 서버는 떠야 한다).
     """
     if AppSessionLocal is None:
         return

@@ -4,9 +4,8 @@ analysis_job 은 그 자체가 **작업 큐**다. Redis 를 두지 않고 워커
 `FOR UPDATE SKIP LOCKED` 로 하나씩 선점한다(locked_by/lease_expires_at). uvicorn worker 를
 여러 개로 늘려도 같은 작업이 두 번 실행되지 않는다.
 
-⚠️ 업로드 원본은 임시 디렉터리에만 있고 프로세스와 함께 사라진다. 그래서 기동 시 남아 있던
-   QUEUED/RUNNING 과 lease 가 만료된 RUNNING 은 **재큐잉하지 않고 FAILED 로 정리**한다
-   (입력이 없으니 되살릴 수 없다). 일시적 오류 재시도는 워커가 살아 있는 동안만 한다.
+업로드 원본은 private Supabase Storage에 잠시 보관한다. 따라서 어느 백엔드 워커든 작업을
+선점할 수 있고, 서버 기동은 다른 호스트의 QUEUED/RUNNING 작업을 실패시키지 않는다.
 """
 
 import uuid

@@ -18,6 +18,7 @@ from app.repositories.auth import AuthRepository
 from app.schemas.analysis import AnalysisResultOut
 from app.schemas.document import ContractLlmAnalysis, ContractRiskIssue, ContractTerms
 from app.services.analysis_jobs import pipeline, runner
+from app.services.analysis_jobs import storage as analysis_storage
 
 FILE_NAMES = ["계약서.pdf"]
 
@@ -28,6 +29,7 @@ def _fast_retries(monkeypatch):
     monkeypatch.setattr(settings, "ANALYSIS_RETRY_BASE_SECONDS", 0.001)
     monkeypatch.setattr(settings, "ANALYSIS_RETRY_MAX_SECONDS", 0.001)
     monkeypatch.setattr(settings, "ANALYSIS_JOB_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr(analysis_storage, "discard_job", lambda *args, **kwargs: None)
 
 
 @pytest.fixture()
@@ -228,17 +230,17 @@ def test_unexpected_exception_never_leaks_internals_to_the_user(session_factory,
 # ── 복구 ──────────────────────────────────────────────────────────────
 
 
-def test_startup_recovery_fails_orphaned_jobs(session_factory, user):
-    """재시작하면 업로드 원본이 사라진다 — 재큐잉이 아니라 실패로 닫아야 한다."""
+def test_startup_recovery_keeps_shared_storage_jobs(session_factory, user):
+    """한 백엔드의 시작이 다른 호스트가 처리할 QUEUED 작업을 실패시키면 안 된다."""
     job_id = _queue_job(session_factory, user)
 
     with session_factory() as db:
-        assert runner.recover_on_startup(db) == 1
+        assert runner.recover_on_startup(db) == 0
 
     job = _job(session_factory, job_id)
-    assert job.status == JobStatus.FAILED
-    assert job.error_code == "SERVER_RESTARTED"
-    assert _notification_types(session_factory) == [NotificationType.ANALYSIS_FAILED]
+    assert job.status == JobStatus.QUEUED
+    assert job.error_code is None
+    assert _notification_types(session_factory) == []
 
 
 def test_expired_lease_is_reclaimed_as_failed(session_factory, user):

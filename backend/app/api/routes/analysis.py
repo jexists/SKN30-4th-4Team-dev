@@ -1,6 +1,6 @@
 """분석 작업 API — 접수(202)·목록·상세·제목 수정·삭제.
 
-분석은 **여기서 실행하지 않는다.** 검증하고 파일을 스풀한 뒤 analysis_job 행 하나를 만들고
+분석은 **여기서 실행하지 않는다.** 검증하고 파일을 private Storage에 올린 뒤 작업 행을 만들고
 바로 응답한다. 실제 처리는 services/analysis_jobs/runner.py 의 워커가 큐에서 집어간다.
 """
 
@@ -29,7 +29,7 @@ from app.schemas.analysis import (
     UpdateAnalysisTitleIn,
 )
 from app.schemas.common import ApiResponse, Page, success_response
-from app.services.analysis_jobs import spool
+from app.services.analysis_jobs import storage as analysis_storage
 from app.services.auth import claims_user_id
 from app.services.notification import notify_analysis_started
 
@@ -76,13 +76,11 @@ def start_analysis(
 
     payloads = _read_uploads(file)
 
-    # job_id 를 먼저 정해 파일을 다 쓴 **뒤에** 행을 만든다. 순서를 뒤집으면 워커가 파일이
-    # 아직 없는 QUEUED 를 집어갈 수 있다.
+    # job_id 를 먼저 정해 Storage 업로드를 다 끝낸 **뒤에** 행을 만든다. 순서를 뒤집으면
+    # 다른 호스트의 워커가 파일이 아직 없는 QUEUED 를 집어갈 수 있다.
     job_id = uuid.uuid4()
-    directory = spool.create(job_id)
     try:
-        for index, (_, content) in enumerate(payloads):
-            spool.store(directory, index, content)
+        analysis_storage.upload_job_files(uid, job_id, payloads)
 
         job = repo.create(
             uid,
@@ -93,7 +91,7 @@ def start_analysis(
         db.commit()
         db.refresh(job)
     except Exception:
-        spool.discard(job_id)
+        analysis_storage.discard_job(uid, job_id, [name for name, _ in payloads])
         raise
 
     # 작업이 커밋된 뒤에 알림 — 실패해도 접수는 유효하다(서비스가 예외를 삼킨다).

@@ -270,9 +270,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_dedupe
 -- FOR UPDATE SKIP LOCKED 로 하나씩 선점한다(locked_by/lease_expires_at). uvicorn worker 를
 -- 여러 개로 늘려도 같은 작업이 두 번 실행되지 않는다.
 --
--- ⚠️ 업로드 원본은 임시 디렉터리에만 있고 프로세스와 함께 사라진다. 그래서 기동 시 남아 있던
---    QUEUED/RUNNING 과 lease 가 만료된 RUNNING 은 **재큐잉하지 않고 FAILED 로 정리**한다
---    (입력이 없으니 되살릴 수 없다). 일시적 오류 재시도는 워커가 실행 중일 때만 한다.
+-- 업로드 원본은 private Supabase Storage에 잠시 보관한다. 어느 백엔드 워커든 같은 파일을
+-- 읽을 수 있으므로, 서버 기동은 다른 호스트의 QUEUED/RUNNING 작업을 실패시키지 않는다.
 CREATE TABLE IF NOT EXISTS analysis_job (
     id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id           uuid NOT NULL REFERENCES app_user (id) ON DELETE CASCADE,
@@ -370,4 +369,3 @@ ALTER TABLE analysis_result ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 UPDATE analysis_result SET updated_at = created_at WHERE updated_at IS NULL;
 ALTER TABLE analysis_result ALTER COLUMN updated_at SET DEFAULT now();
 ALTER TABLE analysis_result ALTER COLUMN updated_at SET NOT NULL;
-
