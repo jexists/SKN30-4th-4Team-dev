@@ -16,6 +16,11 @@ class ChatRequest(BaseModel):
 
     message: str = Field(min_length=1, max_length=2000, description="사용자 발화")
     history: list[ChatTurn] = Field(default_factory=list, description="최근 대화 맥락")
+    # 계약서 본문은 요청으로 왕복하지 않는다 — 방 id 만 받고 서버가 DB 에서 읽는다.
+    # (첨부 텍스트는 수만 자라 매 턴 실어 보내면 요청이 비대해지고 상한도 넘긴다.)
+    room_id: str | None = Field(
+        default=None, description="첨부 계약서를 찾을 대화방 id (없으면 일반 질문)"
+    )
 
 
 class ChatResponse(BaseModel):
@@ -42,13 +47,28 @@ class UpdateRoomTitleIn(BaseModel):
 
 
 class ChatRoomOut(BaseModel):
-    """채팅방 목록 항목. id 는 문자열로 내보낸다(프론트 문자열 id)."""
+    """채팅방 목록 항목. id 는 문자열로 내보낸다(프론트 문자열 id).
+
+    analysis_* 두 필드는 첨부된 계약서를 화면에 복원하기 위한 것이다. 새로고침하거나 대화를
+    다시 열어도 첨부 칩이 그대로 보여야 하므로 방 정보에 함께 싣는다.
+    """
 
     id: str
     title: str | None
     last_chat_at: datetime
     updated_at: datetime
+    analysis_job_id: str | None = None
+    # 칩에 표시할 파일명(analysis_job.file_names 의 첫 항목). 첨부가 없으면 None.
+    analysis_file_name: str | None = None
+
+
+class AttachDocumentIn(BaseModel):
+    """완료된 계약서 분석을 대화방에 첨부한다."""
+
+    analysis_job_id: str
+
     last_message_preview: str | None = None
+
 
 
 class AddMessageIn(BaseModel):

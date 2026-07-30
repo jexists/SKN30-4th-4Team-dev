@@ -788,6 +788,82 @@
   border-top: 1px solid #f0f1f4;
   background: v.$surface;
 }
+/* 첨부한 계약서 칩 — 입력창 바로 위. 상태(읽는 중/참고 중/실패)를 한 줄로 보여준다. */
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  margin-bottom: v.$space-2;
+  padding: v.$space-2 v.$space-2 v.$space-2 v.$space-3;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-pill;
+  background: v.$blue-soft;
+  color: v.$ink;
+  @include t.caption;
+}
+.attachmentFailed {
+  border-color: v.$red;
+  background: v.$red-soft;
+  color: v.$red;
+}
+.attachmentIcon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+.attachmentName {
+  // 파일명이 길어도 칩이 입력창을 밀어내지 않게 이 칸만 줄인다.
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.attachmentState {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: v.$slate;
+
+  .attachmentFailed & {
+    color: inherit;
+  }
+}
+.attachmentRemove {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: v.$radius-pill;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+  &:hover {
+    background: v.$surface;
+  }
+}
+
+/* 파일 선택은 첨부 버튼이 대신 연다 — input 자체는 화면에서 감춘다.
+   display:none 은 일부 브라우저에서 click() 이 무시되므로 크기만 없앤다. */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .inputBar {
   display: flex;
   align-items: flex-end;

@@ -11,6 +11,9 @@ function room(id: string, date: Date): ChatRoom {
     title: id,
     last_chat_at: date.toISOString(),
     updated_at: date.toISOString(),
+    // 날짜 그룹핑과 무관한 필드지만 ChatRoom 계약을 만족시켜야 한다.
+    analysis_job_id: null,
+    analysis_file_name: null,
     last_message_preview: null,
   }
 }

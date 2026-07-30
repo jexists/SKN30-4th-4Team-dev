@@ -58,6 +58,12 @@ class ChatRoom(Base):
         DateTime(timezone=True), nullable=True
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 이 방에 첨부된 계약서 분석(analysis_job.id). 붙어 있으면 이후 모든 질문에 계약서 맥락이
+    # 함께 들어간다. user_id 와 같은 이유로 ORM 쪽 FK 는 걸지 않는다 — 무결성은 실제 DB 제약이
+    # 지키고, 분석이 삭제돼도 대화는 남도록 스키마에서 ON DELETE SET NULL 이다.
+    analysis_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), nullable=True, index=True
+    )
 
     messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="room", cascade="all, delete-orphan"
