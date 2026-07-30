@@ -67,6 +67,9 @@ class AttachDocumentIn(BaseModel):
 
     analysis_job_id: str
 
+    last_message_preview: str | None = None
+
+
 
 class AddMessageIn(BaseModel):
     """메시지 저장 요청.

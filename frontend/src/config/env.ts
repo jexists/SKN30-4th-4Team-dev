@@ -31,5 +31,22 @@ export const BRAND = {
 /** 저작권 표기에 쓰는 법인명 — "HomeShield Legal Tech" */
 export const BRAND_LEGAL_NAME = `${BRAND.name} Legal Tech`
 
+/**
+ * 이용약관·개인정보처리방침·법적 근거 문서의 시행일 등.
+ *
+ * 문서 본문(`content/legal.ts`, `content/legalBasis.ts`)이 이 값을 참조해 화면에 표시한다.
+ * 실제 공개·개정 시점이 정해지면 여기 값만 바꾸면 모든 문서·화면에 한 번에 반영된다.
+ */
+export const LEGAL_DATES = {
+  /** 이용약관 시행일 */
+  termsEffectiveDate: '2026년 7월 30일',
+  /** 개인정보처리방침 공고일 (시행 7일 전 공지) */
+  privacyAnnouncedDate: '2026년 7월 30일',
+  /** 개인정보처리방침 시행일 */
+  privacyEffectiveDate: '2026년 7월 30일',
+  /** 법적 근거 문서 작성일 */
+  legalBasisWrittenDate: '2026년 7월 30일',
+} as const
+
 /** 브라우저 탭 제목 — "HomeShield — 안전한 임대차 계약" */
 export const BRAND_PAGE_TITLE = `${BRAND.name} — ${BRAND.tagline}`

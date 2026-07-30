@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { listAnalyses } from '../../api/analyses'
-import { withdrawMember } from '../../api/auth'
+import { updateNickname, updateNotificationPref, uploadAvatar, withdrawMember } from '../../api/auth'
+import type { ChatRoom } from '../../api/chatHistory'
+import { listRooms } from '../../api/chatHistory'
 import { ErrorState } from '../../components/ErrorState/ErrorState'
 import { Modal } from '../../components/Modal/Modal'
+import { relativeTime } from '../../components/NotificationBell/relativeTime'
 import { showToast } from '../../components/Toast/toastStore'
 import {
   ArrowRight,
@@ -17,111 +19,87 @@ import {
   Trash,
   User,
 } from '../../components/icons'
+import { supabase } from '../../config/supabase'
 import { requestDesktopPermission } from '../../hooks/desktopNotify'
+import {
+  analysisTitle,
+  formatAnalyzedAt,
+  isAnalysisFailed,
+  riskBadge,
+  useAnalysisHistory,
+} from '../../hooks/useAnalysisHistory'
 import { useAuth } from '../../hooks/useAuth'
-import { setAvatarFile, useAvatarUrl } from '../../hooks/useAvatar'
 import { useCurrentUser } from '../../hooks/useCurrentUser'
 import { setDesktopAlertsEnabled, useDesktopAlertsEnabled } from '../../hooks/useNotifications'
-import type { AnalysisJobSummary } from '../../types/analysis'
-import { isTerminal } from '../../types/analysis'
 import styles from './MyPage.module.scss'
 
-// 백엔드에 저장 API가 아직 없어, "다시 바꾸기 전까지 유지"는 localStorage 로 흉내낸다.
-const PHONE_STORAGE_KEY = 'homeshield.phone'
-const PASSWORD_CHANGED_STORAGE_KEY = 'homeshield.passwordChangedAt'
-const DEFAULT_PHONE = '010-1234-5678'
-
-function readStoredPhone(): string {
-  try {
-    return window.localStorage.getItem(PHONE_STORAGE_KEY) || DEFAULT_PHONE
-  } catch {
-    return DEFAULT_PHONE
-  }
+/** 로그인 수단 — Supabase 가 app_metadata.provider 에 넣어주는 값("email"/"kakao")을 한국어로. */
+const LOGIN_PROVIDER_LABEL: Record<string, string> = {
+  email: '이메일',
+  kakao: '카카오톡',
 }
 
-function readPasswordChanged(): boolean {
-  try {
-    return window.localStorage.getItem(PASSWORD_CHANGED_STORAGE_KEY) !== null
-  } catch {
-    return false
-  }
+function loginProviderLabel(provider: string | null | undefined): string {
+  if (!provider) return '알 수 없음'
+  return LOGIN_PROVIDER_LABEL[provider] ?? provider
 }
 
-type Consultation = {
-  id: string
-  label: string
-  timeAgo: string
-  title: string
-  excerpt: string
+/** 카드 상단 배지 — 실제 id 는 UUID 라 그대로 못 쓰므로 앞 8자리만 축약해 보여준다. */
+function consultLabel(room: ChatRoom): string {
+  return `# 상담 ID: ${room.id.slice(0, 8).toUpperCase()}`
 }
 
-const CONSULTATIONS: Consultation[] = [
-  {
-    id: 'HS-20260520',
-    label: '# 상담 ID: HS-20260520',
-    timeAgo: '2시간 전',
-    title: '임대인 세금 체납 관련 법적 효력...',
-    excerpt: '"현재 분석 중인 계약서 4조 2항의 특약 사항이 임차인에게 다소 불리하게..."',
-  },
-  {
-    id: 'HS-20260519',
-    label: '# 상담 ID: HS-20260519',
-    timeAgo: '어제',
-    title: '전세보증보험 가입 요건 확인',
-    excerpt: '"HUG 전세보증보험 가입을 위해 필요한 서류 목록과 집합건물 해당 여부를..."',
-  },
-]
-
-/** 서버 risk_level → 화면 뱃지. 진행 중이라 아직 등급이 없으면 별도 처리한다. */
-const LEVEL_STYLE = { LOW: 'safe', MEDIUM: 'caution', HIGH: 'risk' } as const
-const LEVEL_LABEL = {
-  LOW: 'SAFE (안전)',
-  MEDIUM: 'CAUTION (주의)',
-  HIGH: 'HIGH RISK (위험)',
-} as const
-
-/** `2026.05.20 14:30` — 목록에서 한 줄로 읽히는 형식. */
-function formatAnalyzedAt(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-/** 카드 제목 — 서버가 준 요약 제목, 없으면 첫 파일명, 그것도 없으면 기본 문구. */
-function analysisTitle(job: AnalysisJobSummary): string {
-  return job.title || job.file_names[0] || '계약서 분석'
+/** 카드 제목 — 방 제목(첫 질문 요약), 아직 없으면 기본 문구. */
+function consultTitle(room: ChatRoom): string {
+  return room.title || '새 상담'
 }
 
 export function MyPage() {
   const { token, signOut } = useAuth()
   // 조회 실패는 client.ts 의 공통 처리가 오류 모달로 알린다 — 여기서 또 띄우지 않는다.
-  const { status, data: currentUser } = useCurrentUser(token)
+  const { status, data: currentUser, setCurrentUser } = useCurrentUser(token)
 
   const notifyReport = useDesktopAlertsEnabled()
   const history = useAnalysisHistory()
-  const avatarUrl = useAvatarUrl()
+  const consultHistory = useConsultationHistory()
   const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
-  const [phone, setPhone] = useState(readStoredPhone)
-  const [phoneModalOpen, setPhoneModalOpen] = useState(false)
-  const [phoneDraft, setPhoneDraft] = useState(phone)
+  // 서버 값(profile.notify_report_complete)이 진실 공급원이다 — 로그인 직후·다른
+  // 기기에서 바꾼 설정도 이 화면을 열 때 반영되게 로컬 스토어를 맞춘다.
+  useEffect(() => {
+    if (currentUser) setDesktopAlertsEnabled(currentUser.notify_report_complete)
+  }, [currentUser])
 
-  const [passwordChanged, setPasswordChanged] = useState(readPasswordChanged)
+  const [nicknameModalOpen, setNicknameModalOpen] = useState(false)
+  const [nicknameDraft, setNicknameDraft] = useState('')
+  const [nicknameSaving, setNicknameSaving] = useState(false)
+
+  const [passwordChanged, setPasswordChanged] = useState(false)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
 
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false)
   const [withdrawAgreed, setWithdrawAgreed] = useState(false)
   const [withdrawing, setWithdrawing] = useState(false)
 
-  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) return
-    setAvatarFile(file)
-// #    setAvatarUrl(URL.createObjectURL(file))
+    e.target.value = '' // 같은 파일을 다시 골라도 onChange 가 또 뜨도록 초기화
+    if (!file || avatarUploading) return
+
+    setAvatarUploading(true)
+    try {
+      const updated = await uploadAvatar(file)
+      setCurrentUser(updated)
+    } catch {
+      // 실패 안내는 client.ts 의 공통 오류 모달이 맡는다.
+    } finally {
+      setAvatarUploading(false)
+    }
   }
 
   /**
@@ -131,6 +109,12 @@ export function MyPage() {
   async function handleDesktopAlertsToggle(next: boolean) {
     if (!next) {
       setDesktopAlertsEnabled(false)
+      try {
+        const updated = await updateNotificationPref(false)
+        setCurrentUser(updated)
+      } catch {
+        // 실패 안내는 client.ts 의 공통 오류 모달이 맡는다 — 로컬 배너는 꺼진 채로 둔다.
+      }
       return
     }
     const granted = await requestDesktopPermission()
@@ -138,29 +122,39 @@ export function MyPage() {
     if (!granted) {
       // API 실패가 아니라 브라우저 설정 문제라 서버가 알려줄 수 없다 — 화면이 직접 말한다.
       showToast('브라우저에서 알림이 차단되어 있습니다. 사이트 설정에서 허용해주세요.', 'error')
-    }
-  }
-
-  function openPhoneModal() {
-    setPhoneDraft(phone)
-    setPhoneModalOpen(true)
-  }
-
-  function handlePhoneSave(e: React.FormEvent) {
-    e.preventDefault()
-    const trimmed = phoneDraft.trim()
-    if (!trimmed) {
-      showToast('휴대폰 번호를 입력해주세요.', 'error')
       return
     }
-    setPhone(trimmed)
     try {
-      window.localStorage.setItem(PHONE_STORAGE_KEY, trimmed)
+      const updated = await updateNotificationPref(true)
+      setCurrentUser(updated)
     } catch {
-      // 저장 실패해도 화면 표시는 유지된다 — 이번 세션 안에서는 문제 없다.
+      // 실패 안내는 client.ts 의 공통 오류 모달이 맡는다.
     }
-    setPhoneModalOpen(false)
-    showToast('휴대폰 번호가 변경되었습니다.', 'success')
+  }
+
+  function openNicknameModal() {
+    setNicknameDraft(currentUser?.nickname ?? '')
+    setNicknameModalOpen(true)
+  }
+
+  async function handleNicknameSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (nicknameSaving) return
+    const trimmed = nicknameDraft.trim()
+    if (!trimmed) {
+      showToast('닉네임을 입력해주세요.', 'error')
+      return
+    }
+    setNicknameSaving(true)
+    try {
+      const updated = await updateNickname(trimmed)
+      setCurrentUser(updated)
+      setNicknameModalOpen(false)
+    } catch {
+      // 실패 안내는 client.ts 의 공통 오류 모달이 맡는다 — 모달은 열어둔 채 재시도할 수 있게 한다.
+    } finally {
+      setNicknameSaving(false)
+    }
   }
 
   function openPasswordModal() {
@@ -170,7 +164,12 @@ export function MyPage() {
     setPasswordModalOpen(true)
   }
 
-  function handlePasswordSave(e: React.FormEvent) {
+  /**
+   * 비밀번호는 우리 DB 가 아니라 Supabase Auth 가 관리한다 — 변경도 그쪽 API 로 해야
+   * 실제로 반영된다. 현재 비밀번호는 signInWithPassword 로 재인증해 확인한다(Supabase
+   * Auth 에 "비밀번호만 검증" API 가 따로 없어, 재로그인 시도가 곧 검증이다).
+   */
+  async function handlePasswordSave(e: React.FormEvent) {
     e.preventDefault()
     if (!currentPassword || !newPassword || !confirmPassword) {
       showToast('모든 항목을 입력해주세요.', 'error')
@@ -184,14 +183,35 @@ export function MyPage() {
       showToast('새 비밀번호가 일치하지 않습니다.', 'error')
       return
     }
-    setPasswordChanged(true)
-    try {
-      window.localStorage.setItem(PASSWORD_CHANGED_STORAGE_KEY, String(Date.now()))
-    } catch {
-      // 저장 실패해도 화면 표시는 유지된다 — 이번 세션 안에서는 문제 없다.
+    if (!supabase || !currentUser?.email) {
+      showToast('로그인 서비스가 아직 설정되지 않았습니다.', 'error')
+      return
     }
-    setPasswordModalOpen(false)
-    showToast('비밀번호가 변경되었습니다.', 'success')
+    if (passwordSaving) return
+
+    setPasswordSaving(true)
+    try {
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPassword,
+      })
+      if (reauthError) {
+        showToast('현재 비밀번호가 올바르지 않습니다.', 'error')
+        return
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) {
+        showToast('비밀번호를 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error')
+        return
+      }
+
+      setPasswordChanged(true)
+      setPasswordModalOpen(false)
+      showToast('비밀번호가 변경되었습니다.', 'success')
+    } finally {
+      setPasswordSaving(false)
+    }
   }
 
   function openWithdrawModal() {
@@ -228,8 +248,8 @@ export function MyPage() {
         <section className={styles.profile}>
           <div className={styles.avatarWrap}>
             <div className={styles.avatar}>
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" className={styles.avatarImg} />
+              {currentUser?.profile_image ? (
+                <img src={currentUser.profile_image} alt="" className={styles.avatarImg} />
               ) : (
                 <User className={styles.avatarIcon} />
               )}
@@ -239,6 +259,7 @@ export function MyPage() {
               className={styles.avatarEdit}
               aria-label="프로필 사진 변경"
               onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
             >
               <Edit />
             </button>
@@ -246,8 +267,9 @@ export function MyPage() {
               ref={avatarInputRef}
               type="file"
               accept="image/*"
+              aria-label="프로필 사진 변경"
               className={styles.avatarInput}
-              onChange={handleAvatarChange}
+              onChange={(e) => void handleAvatarChange(e)}
             />
           </div>
           <h1 className={styles.name} aria-live="polite">
@@ -255,12 +277,12 @@ export function MyPage() {
               <span role="status">프로필을 불러오는 중입니다.</span>
             ) : (
               <>
-                {currentUser?.nickname || '회원'} <span className={styles.nameSuffix}>님</span>
+                {currentUser?.nickname || '회원'} <span className={styles.nameSuffix}></span>
               </>
             )}
           </h1>
           <span className={styles.tierBadge}>
-            <Check className={styles.tierBadgeIcon} /> 프리미엄 회원
+            <Check className={styles.tierBadgeIcon} /> 일반회원
           </span>
           <p className={styles.tagline}>
             안전한 전세 계약을 위해
@@ -274,32 +296,27 @@ export function MyPage() {
           <div className={styles.infoList}>
             <div className={styles.infoRow}>
               <div>
-                <p className={styles.infoLabel}>이메일 주소</p>
-                <p className={styles.infoValue}>chulsoo.kim@example.com</p>
+                <p className={styles.infoLabel}>닉네임</p>
+                <p className={styles.infoValue}>{currentUser?.nickname || '회원'}</p>
               </div>
+              <button type="button" className={styles.linkBtn} onClick={openNicknameModal}>
+                수정
+              </button>
             </div>
             <div className={styles.infoRow}>
               <div>
-                <p className={styles.infoLabel}>휴대폰 번호</p>
-                <p className={styles.infoValue}>{phone}</p>
+                <p className={styles.infoLabel}>로그인 경로</p>
+                <p className={styles.infoValue}>{loginProviderLabel(currentUser?.login_provider)}</p>
               </div>
-              <button type="button" className={styles.linkBtn} onClick={openPhoneModal}>
-                수정
-              </button>
             </div>
           </div>
         </section>
 
         {/* 최근 진단 내역 */}
         <section className={styles.section}>
-          <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>
-              <BarChart className={styles.sectionTitleIcon} /> 최근 진단 내역
-            </h2>
-            <Link to="/risk-report" className={styles.linkBtn}>
-              전체보기
-            </Link>
-          </div>
+          <h2 className={styles.sectionTitle}>
+            <BarChart className={styles.sectionTitleIcon} /> 최근 진단 내역
+          </h2>
           {history.status === 'loading' && (
             <p className={styles.historyEmpty} role="status">
               진단 내역을 불러오는 중입니다.
@@ -316,7 +333,7 @@ export function MyPage() {
             ) : (
               <div className={styles.historyList}>
                 {history.items.map((job) => {
-                  const done = job.status === 'SUCCEEDED' && job.risk_level !== null
+                  const badge = riskBadge(job)
                   return (
                     <div key={job.id} className={styles.historyItem}>
                       <div>
@@ -326,73 +343,125 @@ export function MyPage() {
                         </p>
                       </div>
                       <div className={styles.historyRight}>
-                        {done ? (
-                          <span
-                            className={`${styles.levelPill} ${styles[`level_${LEVEL_STYLE[job.risk_level!]}`]}`}
-                          >
-                            {LEVEL_LABEL[job.risk_level!]}
-                          </span>
-                        ) : (
-                          <span className={styles.levelPill}>
-                            {isTerminal(job.status) ? '분석 실패' : '분석 중'}
-                          </span>
-                        )}
-                        <Link
-                          to={`/risk-report/${job.id}`}
-                          className={styles.historyDetail}
-                          aria-label={`${analysisTitle(job)} 진단 리포트 보기`}
+                        {/* 등급이 없는 상태(분석 중·실패)는 level_* 가 없어 기본 pill 모습이 된다. */}
+                        <span
+                          className={[styles.levelPill, styles[`level_${badge.tone}`]]
+                            .filter(Boolean)
+                            .join(' ')}
                         >
-                          <FileLines />
-                        </Link>
+                          {badge.label}
+                        </span>
+                        {/*
+                          실패한 기록은 열어도 보여줄 리포트가 없다. 버튼을 없애면 행마다
+                          오른쪽 폭이 달라져 목록이 어긋나므로, 자리는 그대로 두고 누르면
+                          토스트로 이유를 알린다(API 실패가 아니라 화면이 아는 사실이다).
+                        */}
+                        {isAnalysisFailed(job) ? (
+                          <button
+                            type="button"
+                            className={styles.historyDetail}
+                            aria-label={`${analysisTitle(job)} 진단 리포트 보기`}
+                            onClick={() =>
+                              showToast('분석에 실패한 기록이라 리포트를 열 수 없습니다.', 'error')
+                            }
+                          >
+                            <FileLines />
+                          </button>
+                        ) : (
+                          <Link
+                            to={`/risk-report/${job.id}`}
+                            className={styles.historyDetail}
+                            aria-label={`${analysisTitle(job)} 진단 리포트 보기`}
+                          >
+                            <FileLines />
+                          </Link>
+                        )}
                       </div>
                     </div>
                   )
                 })}
+                {history.hasMore && (
+                  <button
+                    type="button"
+                    className={styles.historyLoadMore}
+                    onClick={() => void history.loadMore()}
+                    disabled={history.loadingMore}
+                  >
+                    {history.loadingMore ? '불러오는 중입니다...' : '더 보기'}
+                  </button>
+                )}
               </div>
             ))}
         </section>
 
         {/* 최근 상담 내역 */}
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>
-            <Chat className={styles.sectionTitleIcon} /> 최근 상담 내역
-          </h2>
-          <div className={styles.consultGrid}>
-            {CONSULTATIONS.map((c) => (
-              <div key={c.id} className={styles.consultCard}>
-                <div className={styles.consultTop}>
-                  <span className={styles.consultId}>{c.label}</span>
-                  <span className={styles.consultTime}>{c.timeAgo}</span>
-                </div>
-                <h4 className={styles.consultTitle}>{c.title}</h4>
-                <p className={styles.consultExcerpt}>{c.excerpt}</p>
-                <Link to={`/chat/${c.id}`} className={styles.consultCta}>
-                  상담 이어서 하기 <ArrowRight />
-                </Link>
+          <div className={styles.sectionHead}>
+            <h2 className={styles.sectionTitle}>
+              <Chat className={styles.sectionTitleIcon} /> 최근 상담 내역
+            </h2>
+            <Link to="/chat" className={styles.linkBtn}>
+              전체보기
+            </Link>
+          </div>
+          {consultHistory.status === 'loading' && (
+            <p className={styles.historyEmpty} role="status">
+              상담 내역을 불러오는 중입니다.
+            </p>
+          )}
+          {consultHistory.status === 'error' && (
+            <ErrorState message="상담 내역을 불러오지 못했습니다." onRetry={consultHistory.retry} />
+          )}
+          {consultHistory.status === 'ok' &&
+            (consultHistory.items.length === 0 ? (
+              <p className={styles.historyEmpty}>
+                아직 진행한 상담이 없습니다. 챗봇에게 물어보면 이곳에 기록이 쌓입니다.
+              </p>
+            ) : (
+              <div className={styles.consultGrid}>
+                {consultHistory.items.map((room) => (
+                  <div key={room.id} className={styles.consultCard}>
+                    <div className={styles.consultTop}>
+                      <span className={styles.consultId}>{consultLabel(room)}</span>
+                      <span className={styles.consultTime}>{relativeTime(room.last_chat_at)}</span>
+                    </div>
+                    <h4 className={styles.consultTitle}>{consultTitle(room)}</h4>
+                    <p className={styles.consultExcerpt}>
+                      {room.last_message_preview
+                        ? `"${room.last_message_preview}"`
+                        : '아직 대화 내용이 없습니다.'}
+                    </p>
+                    <Link to={`/chat/${room.id}`} className={styles.consultCta}>
+                      상담 이어서 하기 <ArrowRight />
+                    </Link>
+                  </div>
+                ))}
               </div>
             ))}
-          </div>
         </section>
 
         {/* 보안 및 알림 설정 */}
         <section className={styles.card}>
-          <div className={styles.cardBody}>
-            <h3 className={styles.cardTitle}>보안 설정</h3>
-            <div className={styles.settingRow}>
-              <div className={styles.settingLeft}>
-                <Lock className={styles.settingIcon} />
-                <div>
-                  <p className={styles.settingLabel}>비밀번호 변경</p>
-                  <p className={styles.settingSub}>
-                    {passwordChanged ? '방금 변경되었습니다' : '마지막 변경: 3개월 전'}
-                  </p>
+          {/* 카카오 로그인 계정은 Supabase Auth 에 비밀번호 자체가 없다 — 이메일 로그인만 보여준다. */}
+          {currentUser?.login_provider === 'email' && (
+            <div className={styles.cardBody}>
+              <h3 className={styles.cardTitle}>보안 설정</h3>
+              <div className={styles.settingRow}>
+                <div className={styles.settingLeft}>
+                  <Lock className={styles.settingIcon} />
+                  <div>
+                    <p className={styles.settingLabel}>비밀번호 변경</p>
+                    <p className={styles.settingSub}>
+                      {passwordChanged ? '방금 변경되었습니다' : '마지막 변경: 3개월 전'}
+                    </p>
+                  </div>
                 </div>
+                <button type="button" className={styles.linkBtn} onClick={openPasswordModal}>
+                  변경
+                </button>
               </div>
-              <button type="button" className={styles.linkBtn} onClick={openPasswordModal}>
-                변경
-              </button>
             </div>
-          </div>
+          )}
 
           <div className={styles.cardBody}>
             <h3 className={styles.cardTitle}>알림 설정</h3>
@@ -418,23 +487,24 @@ export function MyPage() {
         </div>
       </div>
 
-      <Link to="/chat" className={styles.fab} aria-label="AI 챗봇 상담 시작하기">
-        <Chat />
-      </Link>
-
-      <Modal open={phoneModalOpen} onClose={() => setPhoneModalOpen(false)} title="휴대폰 번호 수정">
-        <form className={styles.modalForm} onSubmit={handlePhoneSave}>
+      <Modal
+        open={nicknameModalOpen}
+        onClose={() => setNicknameModalOpen(false)}
+        title="닉네임 변경"
+      >
+        <form className={styles.modalForm} onSubmit={handleNicknameSave}>
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="phone-draft">
-              휴대폰 번호
+            <label className={styles.label} htmlFor="nickname-draft">
+              닉네임
             </label>
             <input
-              id="phone-draft"
-              type="tel"
+              id="nickname-draft"
+              type="text"
               className={styles.input}
-              placeholder="010-0000-0000"
-              value={phoneDraft}
-              onChange={(e) => setPhoneDraft(e.target.value)}
+              placeholder="닉네임을 입력해주세요"
+              value={nicknameDraft}
+              onChange={(e) => setNicknameDraft(e.target.value)}
+              maxLength={20}
               autoFocus
             />
           </div>
@@ -442,11 +512,11 @@ export function MyPage() {
             <button
               type="button"
               className={styles.btnGhost}
-              onClick={() => setPhoneModalOpen(false)}
+              onClick={() => setNicknameModalOpen(false)}
             >
               취소
             </button>
-            <button type="submit" className={styles.btnPrimary}>
+            <button type="submit" className={styles.btnPrimary} disabled={nicknameSaving}>
               저장
             </button>
           </div>
@@ -507,7 +577,7 @@ export function MyPage() {
             >
               취소
             </button>
-            <button type="submit" className={styles.btnPrimary}>
+            <button type="submit" className={styles.btnPrimary} disabled={passwordSaving}>
               변경
             </button>
           </div>
@@ -557,20 +627,16 @@ export function MyPage() {
   )
 }
 
-/**
- * 최근 진단 내역. 목록에는 요약만 오므로(결과 payload 없음) 가볍다.
- *
- * 실패를 빈 목록으로 그리지 않는다 — 서버 장애가 "진단한 적 없음"으로 보이면 안 된다.
- */
-function useAnalysisHistory() {
-  const [items, setItems] = useState<AnalysisJobSummary[]>([])
+/** 최근 상담 내역. 카드 2개짜리 그리드라 최신 2개만 가져오고, 전체는 "전체보기"(=/chat)로 보낸다. */
+function useConsultationHistory() {
+  const [items, setItems] = useState<ChatRoom[]>([])
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     setStatus('loading')
-    listAnalyses(null, 5)
+    listRooms(null, 2)
       .then((page) => {
         if (cancelled) return
         setItems(page.items)

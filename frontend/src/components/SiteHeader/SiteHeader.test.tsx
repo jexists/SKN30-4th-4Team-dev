@@ -10,6 +10,17 @@ import { SiteHeader } from './SiteHeader'
 // 테스트에선 Supabase 를 끈다 → 인증 상태를 signIn/signOut 으로만 결정론적으로 제어.
 // (실제 .env 의 VITE_SUPABASE_* 가 있으면 비동기 getSession 이 상태를 덮어써 불안정해진다.)
 vi.mock('../../config/supabase', () => ({ supabase: null, isAuthConfigured: false }))
+// 아바타는 이제 /me 를 조회해 그린다 — 실제 fetch 가 나가지 않도록 고정한다.
+vi.mock('../../api/auth', () => ({
+  getCurrentUser: vi.fn().mockResolvedValue({
+    id: 'user-1',
+    email: null,
+    role: null,
+    nickname: null,
+    login_provider: null,
+    profile_image: null,
+  }),
+}))
 
 function renderHeader() {
   return render(

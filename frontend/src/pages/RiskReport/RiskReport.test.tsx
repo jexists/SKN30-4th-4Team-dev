@@ -4,15 +4,24 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { __resetNotificationStoreForTests } from '../../hooks/useNotifications'
-import type { AnalysisJobDetail, AnalysisStatus } from '../../types/analysis'
+import type { AnalysisJobDetail, AnalysisJobSummary, AnalysisStatus } from '../../types/analysis'
 import { RiskReport } from './RiskReport'
 
 const getAnalysis = vi.hoisted(() => vi.fn())
 const listAnalyses = vi.hoisted(() => vi.fn())
+const updateAnalysisTitle = vi.hoisted(() => vi.fn())
+const deleteAnalysis = vi.hoisted(() => vi.fn())
 const listNotifications = vi.hoisted(() => vi.fn())
 const markNotificationsRead = vi.hoisted(() => vi.fn())
 
-vi.mock('../../api/analyses', () => ({ getAnalysis, listAnalyses, startAnalysis: vi.fn() }))
+vi.mock('../../api/analyses', () => ({
+  getAnalysis,
+  listAnalyses,
+  updateAnalysisTitle,
+  deleteAnalysis,
+  startAnalysis: vi.fn(),
+  ANALYSIS_TITLE_MAX: 200,
+}))
 vi.mock('../../api/notifications', () => ({
   listNotifications,
   markNotificationsRead,
@@ -35,6 +44,22 @@ function job(status: AnalysisStatus, patch: Partial<AnalysisJobDetail> = {}): An
     attempt_count: 1,
     result: null,
     error: null,
+    ...patch,
+  }
+}
+
+/** 목록 응답 한 줄 — 상세와 달리 result·error 가 없다. */
+function summary(patch: Partial<AnalysisJobSummary> = {}): AnalysisJobSummary {
+  return {
+    id: 'job-1',
+    status: 'SUCCEEDED',
+    stage: null,
+    progress: 100,
+    file_names: ['계약서.pdf'],
+    title: '주택 임대차계약서',
+    risk_level: 'HIGH',
+    created_at: '2026-07-30T05:30:00Z',
+    finished_at: '2026-07-30T05:31:00Z',
     ...patch,
   }
 }
@@ -214,24 +239,103 @@ describe('RiskReport 완료', () => {
   })
 })
 
-describe('RiskReport (jobId 없음)', () => {
-  it('가장 최근 성공 분석으로 보낸다', async () => {
+describe('RiskReport (jobId 없음) — 분석 목록', () => {
+  it('이전 분석이 있으면 리다이렉트 없이 목록을 보여준다', async () => {
+    listAnalyses.mockResolvedValue({
+      items: [summary({ id: 'job-new' }), summary({ id: 'job-old', title: '오피스텔 계약서' })],
+      next_cursor: null,
+    })
+    renderReport('/risk-report')
+
+    expect(await screen.findByRole('heading', { name: '최근 진단 내역' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '주택 임대차계약서 리포트 보기' })).toHaveAttribute(
+      'href',
+      '/risk-report/job-new',
+    )
+    expect(screen.getByRole('link', { name: '오피스텔 계약서 리포트 보기' })).toBeInTheDocument()
+    expect(screen.getAllByText('HIGH RISK (위험)')).toHaveLength(2)
+    // 자동 리다이렉트가 사라진 것을 여기서 고정한다 — 최신 결과에 갇히지 않는다.
+    expect(getAnalysis).not.toHaveBeenCalled()
+  })
+
+  it('분석 CTA 는 헤더에 하나만 둔다', async () => {
+    listAnalyses.mockResolvedValue({ items: [summary()], next_cursor: null })
+    renderReport('/risk-report')
+
+    const cta = await screen.findAllByRole('link', { name: '새 계약서 분석하기' })
+    expect(cta).toHaveLength(1)
+    expect(cta[0]).toHaveAttribute('href', '/analyze')
+  })
+
+  it('진행 중인 분석은 목록에서 눌러 진행 화면으로 갈 수 있다', async () => {
     listAnalyses.mockResolvedValue({
       items: [
-        { id: 'job-old', status: 'FAILED' },
-        { id: 'job-new', status: 'SUCCEEDED' },
+        summary({ id: 'job-run', status: 'RUNNING', risk_level: null, title: '분석 중 계약서' }),
       ],
       next_cursor: null,
     })
-    getAnalysis.mockResolvedValue(job('SUCCEEDED', { id: 'job-new', result: RESULT }))
-
     renderReport('/risk-report')
 
-    await waitFor(() => expect(getAnalysis).toHaveBeenCalledWith('job-new', true))
+    expect(await screen.findByText('분석 중')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '분석 중 계약서 리포트 보기' })).toHaveAttribute(
+      'href',
+      '/risk-report/job-run',
+    )
+  })
+
+  // 열어도 보여줄 리포트가 없다 — 실패 화면으로 보내지 않는다.
+  it('실패한 분석은 목록에 남지만 누를 수 없다', async () => {
+    listAnalyses.mockResolvedValue({
+      items: [
+        summary({ id: 'job-fail', status: 'FAILED', risk_level: null, title: '실패한 계약서' }),
+        summary({ id: 'job-cancel', status: 'CANCELLED', risk_level: null, title: '취소된 계약서' }),
+        // SUCCEEDED 인데 등급이 없는 조합도 배지가 "분석 실패" 라 같이 막는다.
+        summary({ id: 'job-empty', risk_level: null, title: '결과 없는 계약서' }),
+      ],
+      next_cursor: null,
+    })
+    renderReport('/risk-report')
+
+    expect(await screen.findByText('실패한 계약서')).toBeInTheDocument()
+    expect(screen.getByText('취소된 계약서')).toBeInTheDocument()
+    expect(screen.getByText('결과 없는 계약서')).toBeInTheDocument()
+    expect(screen.getAllByText('분석 실패')).toHaveLength(3)
+    expect(screen.queryAllByRole('link', { name: /리포트 보기/ })).toHaveLength(0)
+  })
+
+  it('목록에서 항목을 누르면 그 분석의 리포트를 연다', async () => {
+    listAnalyses.mockResolvedValue({ items: [summary({ id: 'job-7' })], next_cursor: null })
+    getAnalysis.mockResolvedValue(job('SUCCEEDED', { id: 'job-7', result: RESULT }))
+    const user = userEvent.setup()
+    renderReport('/risk-report')
+
+    await user.click(await screen.findByRole('link', { name: '주택 임대차계약서 리포트 보기' }))
+
+    await waitFor(() => expect(getAnalysis).toHaveBeenCalledWith('job-7', true))
     expect(await screen.findByRole('heading', { name: '종합 리스크 리포트' })).toBeInTheDocument()
   })
 
-  it('완료된 분석이 없으면 빈 상태와 분석 CTA 를 보여준다', async () => {
+  it('다음 페이지가 있으면 더 보기로 이어붙인다', async () => {
+    listAnalyses.mockResolvedValueOnce({
+      items: [summary({ id: 'job-1' })],
+      next_cursor: 'cursor-1',
+    })
+    const user = userEvent.setup()
+    renderReport('/risk-report')
+
+    const loadMore = await screen.findByRole('button', { name: '더 보기' })
+    listAnalyses.mockResolvedValueOnce({
+      items: [summary({ id: 'job-2', title: '두 번째 계약서' })],
+      next_cursor: null,
+    })
+    await user.click(loadMore)
+
+    expect(await screen.findByText('두 번째 계약서')).toBeInTheDocument()
+    expect(listAnalyses).toHaveBeenLastCalledWith('cursor-1', 5)
+    expect(screen.queryByRole('button', { name: '더 보기' })).not.toBeInTheDocument()
+  })
+
+  it('분석한 적이 없으면 빈 상태와 분석 CTA 를 보여준다', async () => {
     listAnalyses.mockResolvedValue({ items: [], next_cursor: null })
     renderReport('/risk-report')
 
@@ -241,5 +345,88 @@ describe('RiskReport (jobId 없음)', () => {
       '/analyze',
     )
     expect(getAnalysis).not.toHaveBeenCalled()
+  })
+
+  // 서버 장애가 "분석한 적 없음" 으로 보이면 안 된다.
+  it('목록 조회가 실패하면 빈 상태가 아니라 오류 화면을 보여준다', async () => {
+    listAnalyses.mockRejectedValue(new Error('boom'))
+    renderReport('/risk-report')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('분석 기록을 불러오지 못했습니다.')
+    expect(screen.queryByText('아직 분석한 계약서가 없습니다.')).not.toBeInTheDocument()
+  })
+})
+
+describe('RiskReport 목록 — 제목 수정·삭제', () => {
+  async function openMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(await screen.findByRole('button', { name }))
+  }
+
+  it('제목을 수정하면 목록에 바로 반영된다', async () => {
+    listAnalyses.mockResolvedValue({ items: [summary({ id: 'job-9' })], next_cursor: null })
+    updateAnalysisTitle.mockResolvedValue(summary({ id: 'job-9', title: '강남 원룸' }))
+    const user = userEvent.setup()
+    renderReport('/risk-report')
+
+    await openMenu(user, '주택 임대차계약서 옵션')
+    await user.click(screen.getByRole('menuitem', { name: '제목 수정' }))
+
+    const input = screen.getByLabelText('분석 제목')
+    await user.clear(input)
+    await user.type(input, '강남 원룸')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(updateAnalysisTitle).toHaveBeenCalledWith('job-9', '강남 원룸'))
+    expect(await screen.findByText('강남 원룸')).toBeInTheDocument()
+    // 목록을 다시 부르지 않는다 — "더 보기" 로 쌓은 페이지가 되감기면 안 된다.
+    expect(listAnalyses).toHaveBeenCalledTimes(1)
+  })
+
+  it('삭제를 확인하면 그 행이 목록에서 사라진다', async () => {
+    listAnalyses.mockResolvedValue({
+      items: [summary({ id: 'job-9' }), summary({ id: 'job-8', title: '남는 계약서' })],
+      next_cursor: null,
+    })
+    deleteAnalysis.mockResolvedValue(summary({ id: 'job-9' }))
+    const user = userEvent.setup()
+    renderReport('/risk-report')
+
+    await openMenu(user, '주택 임대차계약서 옵션')
+    await user.click(screen.getByRole('menuitem', { name: '삭제' }))
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+
+    await waitFor(() => expect(deleteAnalysis).toHaveBeenCalledWith('job-9'))
+    await waitFor(() => expect(screen.queryByText('주택 임대차계약서')).not.toBeInTheDocument())
+    expect(screen.getByText('남는 계약서')).toBeInTheDocument()
+  })
+
+  // 제목은 산출물에 있다 — 결과가 없는 실패 기록은 고칠 자리가 없다.
+  it('실패한 분석 메뉴에는 삭제만 있다', async () => {
+    listAnalyses.mockResolvedValue({
+      items: [summary({ id: 'job-f', status: 'FAILED', risk_level: null, title: '실패 계약서' })],
+      next_cursor: null,
+    })
+    const user = userEvent.setup()
+    renderReport('/risk-report')
+
+    await openMenu(user, '실패 계약서 옵션')
+
+    expect(screen.getByRole('menuitem', { name: '삭제' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '제목 수정' })).not.toBeInTheDocument()
+  })
+
+  it('삭제가 실패하면 행을 지우지 않는다', async () => {
+    listAnalyses.mockResolvedValue({ items: [summary({ id: 'job-9' })], next_cursor: null })
+    // 진행 중인 분석은 서버가 409 로 막는다 — 원인은 공통 오류 모달이 말한다.
+    deleteAnalysis.mockRejectedValue(new Error('409'))
+    const user = userEvent.setup()
+    renderReport('/risk-report')
+
+    await openMenu(user, '주택 임대차계약서 옵션')
+    await user.click(screen.getByRole('menuitem', { name: '삭제' }))
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+
+    await waitFor(() => expect(deleteAnalysis).toHaveBeenCalled())
+    expect(screen.getByText('주택 임대차계약서')).toBeInTheDocument()
   })
 })

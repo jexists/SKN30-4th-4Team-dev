@@ -140,6 +140,7 @@ class AuthRepository:
         *,
         nickname: str | None,
         profile_image: str | None,
+        notify_report_complete: bool = True,
     ) -> Profile:
         profile = self.get_profile(user_id)
         if profile is None:
@@ -147,6 +148,7 @@ class AuthRepository:
                 user_id=user_id,
                 nickname=nickname,
                 profile_image=profile_image,
+                notify_report_complete=notify_report_complete,
             )
             self.db.add(profile)
             return profile
@@ -155,6 +157,7 @@ class AuthRepository:
             profile.nickname = nickname
             profile.nickname_updated_at = utcnow()
         profile.profile_image = profile_image
+        profile.notify_report_complete = notify_report_complete
         profile.updated_at = utcnow()
         return profile
 

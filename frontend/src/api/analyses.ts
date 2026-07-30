@@ -1,8 +1,11 @@
 import type { AnalysisJob, AnalysisJobDetail, AnalysisJobSummary } from '../types/analysis'
 import type { Page } from '../types/api'
-import { apiGet, apiPostForm, type ApiOptions } from './client'
+import { apiDelete, apiGet, apiPostForm, apiPut, type ApiOptions } from './client'
 
 const BASE = '/api/v1/analyses'
+
+/** 제목 입력 상한 — 백엔드 UpdateAnalysisTitleIn 과 동일. */
+export const ANALYSIS_TITLE_MAX = 200
 
 /**
  * 분석을 접수한다. **분석이 끝날 때까지 기다리지 않고** 202 + 작업 id 만 받는다.
@@ -43,4 +46,19 @@ export function listAnalyses(cursor?: string | null, limit = 20): Promise<Page<A
   const params = new URLSearchParams({ limit: String(limit) })
   if (cursor) params.set('cursor', cursor)
   return apiGet<Page<AnalysisJobSummary>>(`${BASE}?${params}`)
+}
+
+/**
+ * 목록에 보이는 제목을 고친다.
+ *
+ * 제목은 산출물(analysis_result)에 있으므로 **결과가 없는 분석(진행 중·실패)은 409** 다.
+ * 목록도 그 행에는 '제목 수정' 메뉴를 띄우지 않는다.
+ */
+export function updateAnalysisTitle(jobId: string, title: string): Promise<AnalysisJobSummary> {
+  return apiPut<AnalysisJobSummary>(`${BASE}/${jobId}/title`, { title })
+}
+
+/** 분석 기록을 soft delete 한다 — 목록·상세에서 사라지고 서버에는 행이 남는다. */
+export function deleteAnalysis(jobId: string): Promise<AnalysisJobSummary> {
+  return apiDelete<AnalysisJobSummary>(`${BASE}/${jobId}`)
 }

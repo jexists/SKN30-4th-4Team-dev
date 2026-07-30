@@ -1,6 +1,7 @@
 """분석 접수 API — 202·중복 방지·소유권·입력 검증."""
 
 import uuid
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
@@ -281,3 +282,135 @@ def test_unregistered_user_cannot_start_analysis(client):
     app.dependency_overrides[require_user] = lambda: {"sub": str(uuid.uuid4())}
 
     assert _post(client).status_code == 403
+
+
+# ── 제목 수정·삭제 ────────────────────────────────────────────────────
+
+
+#: 상세 응답이 AnalysisResultOut 으로 검증하므로 최소 필수 필드는 채워 둔다.
+_MIN_PAYLOAD = {
+    "sanitized_text": "본문",
+    "redaction_counts": {},
+    "redaction_scope": [],
+    "mask_count": 0,
+    "coarse_mask_count": 0,
+    "review_required": False,
+    "documents": [],
+    "analysis": {"summary": "요약", "terms": {}, "risks": [], "missing_information": []},
+}
+
+
+def _finish(db_sessionmaker, user_id, *, title="아파트", status=JobStatus.SUCCEEDED):
+    """작업 한 건을 결과까지 만들어 둔다 — 수정·삭제 테스트의 출발점."""
+    with db_sessionmaker() as db:
+        job = db.execute(select(AnalysisJob)).scalar_one()
+        job.status = status.value
+        db.add(
+            AnalysisResult(
+                job_id=job.id,
+                user_id=user_id,
+                title=title,
+                risk_level="LOW",
+                payload=_MIN_PAYLOAD,
+            )
+        )
+        db.commit()
+        return job.id
+
+
+def test_title_update_is_visible_in_list_and_detail(member, db_sessionmaker):
+    client, user_id = member
+    job_id = uuid.UUID(_post(client).json()["data"]["id"])
+    _finish(db_sessionmaker, user_id)
+
+    body = client.put(f"/api/v1/analyses/{job_id}/title", json={"title": " 강남 원룸 "}).json()
+
+    # 앞뒤 공백은 스키마가 떼고, 토스트 문구는 서버가 소유한다.
+    assert body["data"]["title"] == "강남 원룸"
+    assert body["message"] == "분석 제목을 수정했습니다."
+    assert client.get(f"/api/v1/analyses/{job_id}").json()["data"]["title"] == "강남 원룸"
+    assert client.get("/api/v1/analyses").json()["data"]["items"][0]["title"] == "강남 원룸"
+
+
+def test_title_update_stamps_updated_at(member, db_sessionmaker):
+    client, user_id = member
+    _post(client)
+    job_id = _finish(db_sessionmaker, user_id)
+    # 시각을 하루 뒤로 돌려 둔다 — 방금 만든 행과 비교하면 Windows 시계 해상도(~15ms) 안에서
+    # 두 값이 같아질 수 있어 테스트가 흔들린다.
+    with db_sessionmaker() as db:
+        row = db.execute(select(AnalysisResult)).scalar_one()
+        row.updated_at = row.created_at - timedelta(days=1)
+        db.commit()
+        stale = row.updated_at
+
+    client.put(f"/api/v1/analyses/{job_id}/title", json={"title": "새 제목"})
+
+    with db_sessionmaker() as db:
+        assert db.execute(select(AnalysisResult)).scalar_one().updated_at > stale
+
+
+def test_title_update_without_result_is_409(member, db_sessionmaker):
+    """실패한 분석에는 제목을 담을 산출물이 없다 — 목록도 그 행엔 수정 메뉴를 띄우지 않는다."""
+    client, _ = member
+    job_id = _post(client).json()["data"]["id"]
+    with db_sessionmaker() as db:
+        db.execute(select(AnalysisJob)).scalar_one().status = JobStatus.FAILED.value
+        db.commit()
+
+    assert client.put(f"/api/v1/analyses/{job_id}/title", json={"title": "x"}).status_code == 409
+
+
+def test_blank_title_is_rejected(member, db_sessionmaker):
+    client, user_id = member
+    _post(client)
+    job_id = _finish(db_sessionmaker, user_id)
+
+    assert client.put(f"/api/v1/analyses/{job_id}/title", json={"title": "   "}).status_code == 422
+
+
+def test_delete_hides_the_job_but_keeps_the_row(member, db_sessionmaker):
+    """soft delete — 목록·상세에서 사라지지만 산출물까지 DB 에서 지우지는 않는다."""
+    client, user_id = member
+    _post(client)
+    job_id = _finish(db_sessionmaker, user_id)
+
+    body = client.delete(f"/api/v1/analyses/{job_id}").json()
+
+    assert body["message"] == "분석 기록을 삭제했습니다."
+    assert client.get(f"/api/v1/analyses/{job_id}").status_code == 404
+    assert client.get("/api/v1/analyses").json()["data"]["items"] == []
+    with db_sessionmaker() as db:
+        assert db.execute(select(AnalysisJob)).scalar_one().deleted_at is not None
+        assert db.execute(select(AnalysisResult)).scalar_one() is not None
+
+
+def test_deleting_twice_is_404(member, db_sessionmaker):
+    client, user_id = member
+    _post(client)
+    job_id = _finish(db_sessionmaker, user_id)
+    client.delete(f"/api/v1/analyses/{job_id}")
+
+    assert client.delete(f"/api/v1/analyses/{job_id}").status_code == 404
+
+
+def test_running_job_cannot_be_deleted(member, db_sessionmaker):
+    """숨겨둔 채로 도는 작업이 있으면 uq_analysis_job_active 때문에 새 분석이 영영 막힌다."""
+    client, _ = member
+    job_id = _post(client).json()["data"]["id"]
+
+    assert client.delete(f"/api/v1/analyses/{job_id}").status_code == 409
+    with db_sessionmaker() as db:
+        assert db.execute(select(AnalysisJob)).scalar_one().deleted_at is None
+
+
+def test_other_users_job_cannot_be_renamed_or_deleted(member, db_sessionmaker, register_member):
+    client, user_id = member
+    _post(client)
+    job_id = _finish(db_sessionmaker, user_id)
+
+    stranger = register_member()
+    app.dependency_overrides[require_user] = lambda: {"sub": str(stranger)}
+
+    assert client.put(f"/api/v1/analyses/{job_id}/title", json={"title": "x"}).status_code == 404
+    assert client.delete(f"/api/v1/analyses/{job_id}").status_code == 404
