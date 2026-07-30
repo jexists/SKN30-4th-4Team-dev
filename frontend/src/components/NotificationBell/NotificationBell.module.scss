@@ -1,0 +1,219 @@
+@use '../../styles/variables' as v;
+
+.root {
+  position: relative;
+}
+
+/* 헤더의 .iconBtn 과 같은 치수 — 종·아바타가 같은 줄에서 나란히 보여야 한다. */
+.bellBtn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: v.$radius-md;
+  background: transparent;
+  color: v.$slate;
+  cursor: pointer;
+  transition: background v.$transition-base;
+
+  svg {
+    width: 20px;
+    height: 20px;
+  }
+  &:hover {
+    background: v.$page-bg;
+  }
+}
+
+/* 분석이 도는 동안 — 어느 화면에 있든 "돌아가고 있다"가 보인다. */
+.pulsing {
+  color: v.$navy-800;
+
+  svg {
+    animation: bell-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+.badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 v.$space-1;
+  display: grid;
+  place-items: center;
+  border-radius: v.$radius-pill;
+  background: v.$red;
+  color: v.$text-on-dark;
+  font-size: 10px;
+  font-weight: v.$font-weight-bold;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ══════════════ 드롭다운 ══════════════ */
+.panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: v.$z-menu;
+  width: 340px;
+  max-width: calc(100vw - #{v.$space-8});
+  display: flex;
+  flex-direction: column;
+  background: v.$surface;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius;
+  box-shadow: v.$shadow-elevated;
+  overflow: hidden;
+}
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$space-3;
+  padding: v.$space-3 v.$space-4;
+  border-bottom: 1px solid v.$border-subtle;
+}
+.panelTitle {
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-bold;
+  color: v.$navy-900;
+}
+.panelAction {
+  border: none;
+  background: none;
+  padding: 0;
+  color: v.$navy-800;
+  font-size: v.$font-size-sm;
+  font-weight: v.$font-weight-semibold;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+.panelBody {
+  max-height: 380px;
+  overflow-y: auto;
+}
+.panelNote {
+  margin: 0;
+  padding: v.$space-8 v.$space-4;
+  text-align: center;
+  color: v.$slate;
+  font-size: v.$font-size-sm;
+}
+.panelFooter {
+  padding: v.$space-3;
+  border-top: 1px solid v.$border-subtle;
+  background: v.$surface;
+  color: v.$navy-800;
+  font-size: v.$font-size-sm;
+  font-weight: v.$font-weight-semibold;
+  text-align: center;
+  text-decoration: none;
+
+  &:hover {
+    background: v.$page-bg;
+  }
+}
+
+/* ══════════════ 행 ══════════════ */
+/* 이동할 곳이 있는 행만 .rowLink 를 얻는다 — 커서·호버·화살표로 눌러도 된다고 말한다. */
+.row {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: v.$space-2;
+  padding: v.$space-3 v.$space-4;
+  border: none;
+  border-bottom: 1px solid v.$border-subtle;
+  background: transparent;
+  text-align: left;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+.rowUnread {
+  background: v.$blue-soft;
+}
+.rowLink {
+  cursor: pointer;
+  transition: background v.$transition-fast;
+
+  &:hover {
+    background: v.$page-bg;
+  }
+}
+.dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: v.$red;
+}
+.rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rowTitle {
+  font-size: v.$font-size-md;
+  font-weight: v.$font-weight-semibold;
+  color: v.$ink;
+}
+.rowUnread .rowTitle {
+  font-weight: v.$font-weight-bold;
+  color: v.$navy-900;
+}
+.rowContent {
+  font-size: v.$font-size-sm;
+  line-height: v.$line-height-normal;
+  color: v.$slate;
+  /* 미리보기라 두 줄까지만 — 긴 알림이 목록을 밀어내지 않게. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rowTime {
+  flex-shrink: 0;
+  color: v.$text-placeholder;
+  font-size: v.$font-size-xs;
+  white-space: nowrap;
+}
+.rowArrow {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  color: v.$text-placeholder;
+}
+
+@keyframes bell-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 0.65;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulsing svg {
+    animation: none;
+  }
+}

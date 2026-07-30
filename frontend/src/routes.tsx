@@ -3,7 +3,6 @@ import { createBrowserRouter } from 'react-router-dom'
 import App from './App'
 import { RequireAuth } from './components/RequireAuth/RequireAuth'
 import { Analyze } from './pages/Analyze/Analyze'
-import { AnalyzeResult } from './pages/AnalyzeResult/AnalyzeResult'
 import { AuthCallback } from './pages/AuthCallback/AuthCallback'
 import { Chat } from './pages/Chat/Chat'
 import { Home } from './pages/Home/Home'
@@ -11,7 +10,7 @@ import { LegalBasis } from './pages/LegalBasis/LegalBasis'
 import { Login } from './pages/Login/Login'
 import { MyPage } from './pages/MyPage/MyPage'
 import { NotFound } from './pages/NotFound/NotFound'
-import { Onboarding } from './pages/Onboarding/Onboarding'
+import { Notifications } from './pages/Notifications/Notifications'
 import { Privacy } from './pages/Privacy/Privacy'
 import { RiskReport } from './pages/RiskReport/RiskReport'
 import { SignUp } from './pages/SignUp/SignUp'
@@ -27,7 +26,6 @@ export const router = createBrowserRouter([
       { path: 'login', element: <Login /> },
       { path: 'signup', element: <SignUp /> },
       { path: 'auth/callback', element: <AuthCallback /> },
-      { path: 'onboarding', element: <Onboarding /> },
       { path: 'terms', element: <Terms /> },
       { path: 'privacy', element: <Privacy /> },
       // 로그인이 필요한 화면 — 비로그인이면 /login 으로 이동(로그인 후 원래 위치로 복귀)
@@ -35,10 +33,12 @@ export const router = createBrowserRouter([
         element: <RequireAuth />,
         children: [
           { path: 'analyze', element: <Analyze /> },
-          { path: 'analyze/:id', element: <AnalyzeResult /> },
           { path: 'chat/:chatId?', element: <Chat /> },
           { path: 'mypage', element: <MyPage /> },
+          { path: 'notifications', element: <Notifications /> },
+          // id 없이 들어오면 가장 최근 결과로 보낸다(헤더 "위험 보고서" 내비).
           { path: 'risk-report', element: <RiskReport /> },
+          { path: 'risk-report/:jobId', element: <RiskReport /> },
         ],
       },
       { path: 'legal-basis', element: <LegalBasis /> },

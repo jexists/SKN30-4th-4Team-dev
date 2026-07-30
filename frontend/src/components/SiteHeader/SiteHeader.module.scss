@@ -94,33 +94,7 @@
   align-items: center;
   gap: 8px;
 }
-.iconBtn {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: v.$slate;
-  cursor: pointer;
-  transition: background 0.15s ease;
-
-  svg {
-    width: 20px;
-    height: 20px;
-  }
-  &:hover {
-    background: v.$page-bg;
-  }
-}
-.iconBtnAlert {
-  color: v.$red;
-
-  &:hover {
-    background: v.$red-soft;
-  }
-}
+/* 알림 종 버튼은 NotificationBell 로 옮겼다(배지·펄스·드롭다운이 함께 붙는다). */
 .ctaSm {
   margin-left: 6px;
   padding: 9px 16px;

@@ -63,21 +63,19 @@ describe('SiteHeader', () => {
     expect(screen.queryByLabelText('내 계정')).not.toBeInTheDocument()
   })
 
-  it('비로그인 상태면 최근 기록·알림 버튼을 숨긴다', () => {
+  it('비로그인 상태면 알림 종을 숨긴다', () => {
     renderHeader()
 
-    expect(screen.queryByLabelText('최근 기록')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('알림')).not.toBeInTheDocument()
   })
 
-  it('로그인 상태면 로그인 버튼 대신 아바타를 보여준다', () => {
+  it('로그인 상태면 로그인 버튼 대신 아바타와 알림 종을 보여준다', () => {
     signedIn()
 
     renderHeader()
 
     expect(screen.getByLabelText('내 계정')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '로그인' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('최근 기록')).toBeInTheDocument()
     expect(screen.getByLabelText('알림')).toBeInTheDocument()
   })
 

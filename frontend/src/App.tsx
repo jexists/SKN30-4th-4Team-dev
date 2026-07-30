@@ -6,15 +6,19 @@ import { SiteFooter } from './components/SiteFooter/SiteFooter'
 import { SiteHeader } from './components/SiteHeader/SiteHeader'
 import { Toaster } from './components/Toast/Toaster'
 import { ENV } from './config/env'
+import { useNotificationPolling } from './hooks/useNotifications'
 import styles from './App.module.scss'
 
 export default function App() {
   const { pathname } = useLocation()
+  // 알림 폴링은 앱 수명에 묶는다 — 화면마다 켜면 이동할 때마다 끊겼다 붙는다.
+  useNotificationPolling()
   // 채팅은 화면 높이를 그대로 쓰는 앱 셸이라 푸터를 붙이지 않는다.
   const isChat = pathname === '/chat' || pathname.startsWith('/chat/')
   // 랜딩만 다크 밴드로 닫고, 나머지 화면은 한 줄 고지 스트립으로 마무리한다.
   const isLanding = pathname === '/'
   // 자체 디자인으로 화면을 꽉 채우는 화면 — 공통 여백을 주지 않는다.
+  // 위험 보고서는 /risk-report/:jobId 도 같은 레이아웃이라 prefix 로 판정한다.
   const isFullBleed =
     isLanding ||
     isChat ||
@@ -22,7 +26,9 @@ export default function App() {
     pathname === '/login' ||
     pathname === '/support' ||
     pathname === '/mypage' ||
-    pathname === '/risk-report'
+    pathname === '/notifications' ||
+    pathname === '/risk-report' ||
+    pathname.startsWith('/risk-report/')
 
   return (
     <div className={isChat ? `${styles.layout} ${styles.chatLayout}` : styles.layout}>
@@ -35,7 +41,7 @@ export default function App() {
       <ErrorModalHost />
       {/* 백엔드 연결 표시는 로컬 개발 서버에서만 좌하단에 띄운다. 빌드 결과물에는 포함되지 않는다. */}
       {ENV.isDev && (
-        <div className={styles.devStatus}>
+        <div className={styles.devStatus} data-print="hide">
           <HealthStatus />
         </div>
       )}
