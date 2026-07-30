@@ -1,0 +1,80 @@
+# 운영(EC2) 전용 — 개발용 docker-compose.yml 과 합쳐 쓰지 않고 이 파일만 단독으로 씁니다.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# 개발용과 다른 점:
+#   - 외부에 열리는 포트는 Caddy 의 80/443 뿐. 백엔드·OCR 워커는 컨테이너 네트워크 안에만 있다
+#     (OCR 워커에는 인증이 없으므로 절대 외부에 노출하면 안 된다).
+#   - 프론트는 VITE_API_BASE_URL 을 비워서 빌드한다 → 같은 도메인의 /api 를 호출 → CORS 없음.
+#   - 모든 서비스 restart: unless-stopped (재부팅 후 자동 기동).
+name: homeshield
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS 를 .env 에 설정하세요 (도메인 또는 :80)}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # 발급받은 인증서. 이 볼륨을 지우면 재발급이 일어나 Let's Encrypt 발급 한도에 걸릴 수 있다.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Caddy 가 같은 도메인의 /api 를 백엔드로 넘기므로 절대주소가 필요 없다.
+        VITE_API_BASE_URL: ""
+        # Vite 는 빌드 시점에 값을 굽는다 — 비면 로그인이 비활성화되므로 필수로 요구한다.
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?VITE_SUPABASE_URL 을 .env 에 설정하세요}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:?VITE_SUPABASE_ANON_KEY 를 .env 에 설정하세요}
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # .env 의 값이 무엇이든 컨테이너 네트워크 이름으로 고정한다.
+      OCR_WORKER_URL: http://ocr-worker:8100
+    volumes:
+      - hf-cache:/models
+    expose:
+      - "8000"
+    depends_on:
+      - ocr-worker
+
+  ocr-worker:
+    build: ./ocr-worker
+    restart: unless-stopped
+    env_file:
+      - ./ocr-worker/.env
+    environment:
+      OCR_VL_MODEL_DIR: /models/paddleocr-vl-1.6
+    volumes:
+      # PaddleOCR-VL 스냅샷(1.8GB)은 git 에 없다. OCR_PROVIDER=tesseract 로 운영하는 동안에는
+      # 비어 있어도 무방하며, 이 경우 도커가 빈 디렉터리를 만든다.
+      - ./ocr-worker/models:/models:ro
+      - ocr-hf-cache:/cache
+      - ocr-paddlex-cache:/root/.paddlex
+    expose:
+      - "8100"
+
+volumes:
+  caddy-data:
+  caddy-config:
+  hf-cache:
+  ocr-hf-cache:
+  ocr-paddlex-cache:

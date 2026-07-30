@@ -1,0 +1,36 @@
+# 운영 리버스 프록시.
+#
+# SITE_ADDRESS 한 변수로 두 가지 모드를 쓴다:
+#   - 도메인(예: homeshield.co.kr) → Let's Encrypt 인증서 자동 발급·갱신 (권장)
+#   - :80                          → HTTP 만. 도메인 확보 전 IP 로 확인할 때만.
+#
+# 주의: :80 모드에서는 카카오 로그인이 동작하지 않는다. OAuth 리다이렉트가 HTTPS 를
+# 요구하므로, 로그인까지 확인하려면 도메인이 반드시 있어야 한다.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# 백엔드 API. 프론트는 VITE_API_BASE_URL 을 비워 두고 상대경로로 호출하므로
+	# 같은 출처가 되어 CORS 자체가 발생하지 않는다.
+	handle /api/* {
+		reverse_proxy backend:8000 {
+			# 계약서 분석은 OCR 때문에 한 요청이 길다(backend 의
+			# OCR_WORKER_PROCESS_TIMEOUT_SECONDS 기본 1200초). 프록시가 먼저 끊으면
+			# 사용자에게는 502/504 로 보이므로 그보다 넉넉하게 잡는다.
+			transport http {
+				dial_timeout 10s
+				read_timeout 1800s
+				write_timeout 1800s
+			}
+		}
+	}
+
+	# 그 외 전부 정적 프론트(nginx). SPA 라우팅은 프론트 컨테이너의 nginx.conf 가 처리한다.
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
