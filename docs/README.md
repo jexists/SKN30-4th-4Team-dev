@@ -3,6 +3,7 @@
 | 문서 | 내용 |
 |------|------|
 | [PRD.md](./PRD.md) | 기획서 (문제정의·목표·사용자·핵심기능·범위) |
+| [프로젝트_주요_화면.md](./프로젝트_주요_화면.md) | HomeShield 핵심 기능과 사용자 흐름을 보여주는 화면 |
 | [architecture.md](./architecture.md) | 시스템 구성·데이터 흐름·기술 결정 |
 | [ERD.md](./ERD.md) | DB 엔티티·관계 설계 (지금은 빈 골격) |
 | [conventions.md](./conventions.md) | 팀 규칙 (정한 것 + 결정 필요 목록) |
