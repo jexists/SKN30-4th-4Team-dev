@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_API_KEY: str = ""
 
+    # 1차 워커가 **인프라 사유로** 실패했을 때만 넘어가는 2차 워커(예: EC2 tesseract).
+    # 비우면 폴백이 없고 기존 동작 그대로다 — 켜는 것은 배포 환경의 선택이다.
+    #
+    # 키를 따로 두는 이유: 1차(RunPod)와 2차(EC2)는 서로 다른 호스트라 공유 비밀도 다르다.
+    # 하나로 묶으면 한쪽 키를 돌릴 때 다른 쪽이 401 로 죽는다.
+    OCR_FALLBACK_WORKER_URL: str = ""
+    OCR_FALLBACK_WORKER_API_KEY: str = ""
+
     # ── 분석 작업 큐 ────────────────────────────────────────────────
     # 분석은 analysis_job 테이블을 큐로 삼아 백그라운드 워커가 처리한다(Redis 없음).
     # 테스트·CI 는 반드시 꺼야 한다 — 켜두면 테스트마다 폴링 스레드가 뜬다.
@@ -94,6 +102,11 @@ class Settings(BaseSettings):
 
     OCR_WORKER_TIMEOUT_SECONDS: float = 10.0
     OCR_WORKER_PROCESS_TIMEOUT_SECONDS: float = 1200.0
+    # 폴백은 1차 타임아웃을 **다 쓴 뒤에** 시작되므로, 둘을 더한 값이 파일 하나의 최악 소요다.
+    # 이 합이 ANALYSIS_JOB_LEASE_SECONDS 를 넘으면 아직 도는 작업을 좀비로 오인해 재큐잉한다
+    # (heartbeat 는 파일 하나가 끝나야 갱신된다 — analysis_jobs/pipeline.py 의 notify).
+    # 기본값 기준: 1200 + 300 = 1500 < 1800. 1차 타임아웃을 올리면 여기도 함께 다시 계산한다.
+    OCR_FALLBACK_PROCESS_TIMEOUT_SECONDS: float = 300.0
     # 서류 종류(계약서·등기부등본·건축물대장)가 아니라 한 요청의 전체 파일 수 상한이다.
     # 한 서류가 여러 장으로 스캔돼 오는 경우가 많아 종류 수보다 넉넉히 잡는다.
     CONTRACT_MAX_FILES: int = 10

@@ -9,6 +9,12 @@ class OcrWorkerHealth(BaseModel):
     status: str
     model: str
     model_loaded: bool
+    # 어느 워커가 응답했는지("primary"·"fallback"). 폴백으로 넘어간 상태를 눈으로 구분하려면
+    # 이게 필요하다 — 없으면 1차가 죽어도 /ocr-health 는 그냥 ok 로만 보인다.
+    target: str = "primary"
+    # 워커가 /health 로 알려 주는 실제 엔진("paddle_vl"·"tesseract").
+    # 폴백 경로는 인식 품질이 다르므로 어느 엔진이 답했는지 남겨 둔다.
+    provider: str | None = None
 
 
 class OcrAnalysisResult(BaseModel):

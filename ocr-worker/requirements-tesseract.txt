@@ -1,0 +1,17 @@
+# CPU 전용 tesseract 워커의 의존성. GPU·PaddleOCR-VL 경로를 쓰지 않는 배포(EC2 등)에서
+# pyproject.toml 대신 이 목록을 쓴다.
+#
+# paddlepaddle·paddleocr·torch·torchvision·transformers 가 빠져 있다. 이게 가능한 이유는
+# 무거운 import 가 딱 한 군데, PaddleVlEngine._get_pipeline() 안의 지연 import 뿐이기
+# 때문이다(app/inference/paddle_vl_engine.py). main.py 가 PaddleVlEngine 을 import 하지만
+# OCR_PROVIDER=tesseract 면 인스턴스화되지 않으므로 paddle 이 없어도 기동한다.
+#
+# 그래서 새로 최상단 import 를 추가할 때 주의해야 한다 — 여기에 없는 패키지를 모듈
+# 최상단에서 import 하면 이 이미지가 기동 단계에서 죽는다.
+fastapi>=0.115
+pydantic-settings>=2.4
+python-multipart>=0.0.9
+uvicorn[standard]>=0.30
+pillow>=10.4
+pytesseract>=0.3.13
+pymupdf>=1.24

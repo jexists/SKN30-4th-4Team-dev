@@ -1,0 +1,39 @@
+# CPU 전용 tesseract 워커. 폴백 대상(EC2 등)으로 띄우는 용도다.
+#
+# 기본 Dockerfile 과의 차이: pyproject.toml 대신 requirements-tesseract.txt 를 쓴다.
+# uv sync 는 paddlepaddle·torch·transformers 까지 전부 설치해 이미지가 10GB 에 가까워지는데,
+# tesseract 경로는 그중 아무것도 쓰지 않는다. 여기서는 수백 MB 로 끝난다.
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    # 이 이미지는 tesseract 전용이다. .env 가 없어도 paddle 경로로 새지 않게 여기서 못 박는다
+    # (paddle 의존성이 설치돼 있지 않아 그 경로로 가면 import 에러가 난다).
+    OCR_PROVIDER=tesseract
+
+WORKDIR /app
+
+# tesseract-ocr-kor 가 없으면 한글이 로마자 비슷한 문자열로 인식된다. 더 나쁜 건 tesseract 가
+# 이걸 **exit code 0 으로** 넘긴다는 점이다 — 예외가 나지 않아 파이프라인은 "성공"으로 끝나고
+# 품질만 조용히 무너진다. 언어팩을 이미지에 굽는 이유가 이것이다.
+#
+# libgl1·libglib2.0-0 은 넣지 않는다. 그건 paddle 이 끌어오는 opencv 의 런타임 의존성이라
+# 이 이미지에서는 쓰이지 않는다.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-kor \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-tesseract.txt ./
+RUN pip install --no-cache-dir -r requirements-tesseract.txt
+
+COPY app ./app
+
+EXPOSE 8100
+
+# OCR_WORKER_API_KEY 를 설정한 경우 /health 도 그 키를 요구하므로 헤더를 함께 보낸다.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD python3 -c "import os,urllib.request; r=urllib.request.Request('http://127.0.0.1:8100/health',headers={'X-API-Key':os.getenv('OCR_WORKER_API_KEY','')}); urllib.request.urlopen(r,timeout=5)" || exit 1
+
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100"]
