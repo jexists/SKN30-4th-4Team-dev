@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.db.base import Base
-from app.models.analysis_job import AnalysisJob, AnalysisResult, JobStatus
+from app.models.analysis_job import AnalysisExternalJob, AnalysisJob, AnalysisResult, JobStatus
 from app.models.notification import Notification, NotificationType
 from app.repositories.analysis_job import AnalysisJobRepository
 from app.repositories.auth import AuthRepository
@@ -119,6 +119,25 @@ def test_active_job_blocks_a_second_one(session_factory, user):
     _queue_job(session_factory, user)
     with session_factory() as db:
         assert AnalysisJobRepository(db).find_active(user) is not None
+
+
+def test_external_job_ids_are_kept_separately_by_file_index(session_factory, user):
+    job_id = _queue_job(session_factory, user)
+    with session_factory() as db:
+        repo = AnalysisJobRepository(db)
+        repo.save_external_job(job_id, 0, "runpod-0", "IN_QUEUE")
+        repo.save_external_job(job_id, 1, "runpod-1", "IN_PROGRESS")
+
+    with session_factory() as db:
+        rows = list(
+            db.execute(
+                select(AnalysisExternalJob).order_by(AnalysisExternalJob.file_index)
+            ).scalars()
+        )
+    assert [(row.file_index, row.external_job_id) for row in rows] == [
+        (0, "runpod-0"),
+        (1, "runpod-1"),
+    ]
 
 
 # ── 성공 ──────────────────────────────────────────────────────────────
@@ -369,7 +388,6 @@ def test_expired_lease_at_attempt_limit_fails_and_discards_inputs(
     assert job.error_code == "LEASE_EXPIRED"
     assert _notification_types(session_factory) == [NotificationType.ANALYSIS_FAILED]
     assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
-
 
 def test_expired_lease_of_silent_job_does_not_notify(session_factory, user, discarded_inputs):
     """lease 만료 경로도 job.notify 를 본다 — 여기만 빠뜨리면 채팅 첨부가 타임아웃될 때

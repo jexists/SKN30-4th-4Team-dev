@@ -1,0 +1,13 @@
+FROM ghcr.io/dosupdebongu/skn30-ocr-worker:paddle-vl-1.6-v2
+
+USER root
+
+# PaddleOCR-VL's Triton kernels need a C compiler on first inference.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CC=/usr/bin/gcc \
+    CXX=/usr/bin/g++

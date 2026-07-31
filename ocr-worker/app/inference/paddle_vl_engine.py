@@ -32,9 +32,9 @@ class PaddleVlEngine:
                     "device": self.settings.OCR_DEVICE,
                     "use_doc_orientation_classify": self.settings.OCR_USE_ORIENTATION,
                     "use_doc_unwarping": self.settings.OCR_USE_UNWARPING,
-                    # 이 Worker는 전체 페이지 Spotting 좌표를 사용하므로 별도의
-                    # PP-DocLayoutV3 모델을 초기화하거나 다운로드하지 않는다.
-                    "use_layout_detection": False,
+                    # 전체 Parsing 텍스트와 Spotting 좌표의 목적을 분리한다. Parsing에서는
+                    # 레이아웃을 사용하고 Spotting 호출만 predict 인자로 끈다.
+                    "use_layout_detection": self.settings.OCR_USE_LAYOUT_DETECTION,
                     "use_seal_recognition": self.settings.OCR_USE_SEAL_RECOGNITION,
                 }
                 if self.settings.OCR_VL_BACKEND:
@@ -75,7 +75,26 @@ class PaddleVlEngine:
             )
         ]
 
+    def parse_page(self, path: Path, page_index: int) -> ParsedPage:
+        """AI 분석용 구조화 텍스트를 한 페이지에서 추출한다."""
+        pipeline = self._get_pipeline()
+        kwargs: dict[str, Any] = {
+            "use_layout_detection": self.settings.OCR_USE_LAYOUT_DETECTION,
+            "use_doc_unwarping": False,
+            "format_block_content": False,
+            "layout_shape_mode": self.settings.OCR_LAYOUT_SHAPE_MODE,
+        }
+        if not self.settings.OCR_USE_LAYOUT_DETECTION:
+            # 레이아웃 모델을 명시적으로 끈 경량 환경에서도 Spotting 텍스트를 분석 본문으로
+            # 재사용하지 않고 일반 OCR prompt를 사용한다.
+            kwargs["prompt_label"] = "ocr"
+        results = list(pipeline.predict(str(path), **kwargs))
+        if len(results) != 1:
+            raise ValueError("문서 Parsing은 페이지 이미지 하나당 결과 하나여야 합니다.")
+        return parse_result(self._payload(results[0]), default_page_index=page_index)
+
     def spot_page(self, path: Path, page_index: int) -> ParsedPage:
+        """픽셀 마스킹용 세부 텍스트 좌표를 추출한다."""
         pipeline = self._get_pipeline()
         results = list(
             pipeline.predict(

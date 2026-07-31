@@ -19,6 +19,9 @@ class TesseractEngine:
     def parse_document(self, path: Path) -> list[ParsedPage]:
         return [self.spot_page(path, 0)]
 
+    def parse_page(self, path: Path, page_index: int) -> ParsedPage:
+        return self.spot_page(path, page_index)
+
     def spot_page(self, path: Path, page_index: int) -> ParsedPage:
         import pytesseract
         from PIL import Image
@@ -51,9 +54,7 @@ class TesseractEngine:
             right = max(int(data["left"][index]) + int(data["width"][index]) for index in indexes)
             bottom = max(int(data["top"][index]) + int(data["height"][index]) for index in indexes)
             confidences = [
-                float(data["conf"][index])
-                for index in indexes
-                if float(data["conf"][index]) >= 0
+                float(data["conf"][index]) for index in indexes if float(data["conf"][index]) >= 0
             ]
             regions.append(
                 TextRegion(

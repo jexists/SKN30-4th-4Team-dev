@@ -16,6 +16,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from math import ceil
 
 from sqlalchemy.orm import Session
 
@@ -56,6 +57,13 @@ def _backoff_seconds(attempt: int) -> float:
     raw = settings.ANALYSIS_RETRY_BASE_SECONDS * (2 ** (attempt - 1))
     capped = min(raw, settings.ANALYSIS_RETRY_MAX_SECONDS)
     return capped * (0.5 + random.random() / 2)  # noqa: S311 - 보안용 난수가 아니다
+
+
+def _lease_seconds() -> int:
+    """Serverless 폴링은 짧게 heartbeat할 수 있어 재시작 복구용 lease도 짧게 둔다."""
+    if settings.OCR_TRANSPORT.strip().lower() == "runpod_serverless":
+        return max(30, ceil(settings.RUNPOD_STATUS_POLL_SECONDS * 4))
+    return settings.ANALYSIS_JOB_LEASE_SECONDS
 
 
 class AnalysisWorker:
@@ -113,9 +121,7 @@ class AnalysisWorker:
 
         with factory() as db:
             recover_expired_leases(db)
-            job = AnalysisJobRepository(db).claim_next(
-                worker_id, lease_seconds=settings.ANALYSIS_JOB_LEASE_SECONDS
-            )
+            job = AnalysisJobRepository(db).claim_next(worker_id, lease_seconds=_lease_seconds())
             if job is None:
                 return False
             job_id, user_id = job.id, job.user_id
@@ -155,26 +161,95 @@ class AnalysisWorker:
             repo.set_stage(job_id, stage, progress)
             # 오래 걸리는 단계 사이에 lease 를 연장한다. OCR 한 건이 lease 보다 길어지면
             # 다른 워커가 좀비로 오인해 회수하므로, 파일 하나 끝날 때마다 갱신한다.
-            repo.heartbeat(job_id, lease_seconds=settings.ANALYSIS_JOB_LEASE_SECONDS)
+            repo.heartbeat(job_id, lease_seconds=_lease_seconds())
 
+        external_context: dict[str, object | None] = {
+            "file_index": None,
+            "runpod_job_id": None,
+        }
         while True:
             try:
-                result = pipeline.run_analysis(
-                    file_names,
-                    load_file=lambda index: input_store.load(user_id, job_id, index),
-                    on_stage=on_stage,
-                )
+                external_context.update(file_index=None, runpod_job_id=None)
+                run_kwargs = {
+                    "load_file": lambda index: input_store.load(user_id, job_id, index),
+                    "on_stage": on_stage,
+                }
+                if settings.OCR_TRANSPORT.strip().lower() == "runpod_serverless":
+
+                    def external_job_for_file(index: int) -> str | None:
+                        row = repo.get_external_job(job_id, index)
+                        external_context["file_index"] = index
+                        external_context["runpod_job_id"] = (
+                            row.external_job_id if row is not None else None
+                        )
+                        return row.external_job_id if row is not None else None
+
+                    def on_external_job(index: int, external_id: str, status: str) -> None:
+                        external_context["file_index"] = index
+                        external_context["runpod_job_id"] = external_id
+                        repo.save_external_job(job_id, index, external_id, status)
+                        repo.heartbeat(job_id, lease_seconds=_lease_seconds())
+                        logger.info(
+                            "RunPod OCR 제출 저장 job_id=%s file_index=%d "
+                            "runpod_job_id=%s status=%s",
+                            job_id,
+                            index,
+                            external_id,
+                            status,
+                        )
+
+                    def on_external_status(index: int, status: str) -> None:
+                        repo.set_external_status(job_id, index, status)
+                        total = max(len(file_names), 1)
+                        file_start = 10 + round(60 * index / total)
+                        file_end = 10 + round(60 * (index + 1) / total)
+                        progress = (
+                            file_start
+                            if status == "IN_QUEUE"
+                            else (file_start + file_end) // 2
+                            if status in {"IN_PROGRESS", "RUNNING"}
+                            else file_end
+                            if status == "COMPLETED"
+                            else file_start
+                        )
+                        repo.set_stage(job_id, JobStage.OCR.value, progress)
+                        repo.heartbeat(job_id, lease_seconds=_lease_seconds())
+
+                    run_kwargs.update(
+                        {
+                            "signed_url_for_file": lambda index: input_store.create_signed_url(
+                                user_id, job_id, index
+                            ),
+                            "external_job_for_file": external_job_for_file,
+                            "on_external_job": on_external_job,
+                            "on_external_status": on_external_status,
+                        }
+                    )
+                result = pipeline.run_analysis(file_names, **run_kwargs)
             except Exception as exc:
                 retryable = _is_retryable(exc)
-                logger.warning(
-                    "분석 실패 job_id=%s user_id=%s worker_id=%s attempt=%d retryable=%s",
-                    job_id,
-                    user_id,
-                    worker_id,
-                    attempt,
-                    retryable,
-                    exc_info=True,
-                )
+                if settings.OCR_TRANSPORT.strip().lower() == "runpod_serverless":
+                    logger.warning(
+                        "분석 OCR 실패 job_id=%s file_index=%s runpod_job_id=%s "
+                        "error_code=%s attempt=%d",
+                        job_id,
+                        external_context["file_index"],
+                        external_context["runpod_job_id"],
+                        getattr(exc, "safe_code", exc.code)
+                        if isinstance(exc, AppError)
+                        else "UNEXPECTED",
+                        attempt,
+                    )
+                else:
+                    logger.warning(
+                        "분석 실패 job_id=%s user_id=%s worker_id=%s attempt=%d retryable=%s",
+                        job_id,
+                        user_id,
+                        worker_id,
+                        attempt,
+                        retryable,
+                        exc_info=True,
+                    )
                 if retryable and attempt < settings.ANALYSIS_JOB_MAX_ATTEMPTS:
                     attempt += 1
                     repo.set_attempt(job_id, attempt)
@@ -212,7 +287,8 @@ class AnalysisWorker:
         notify: bool = True,
     ) -> None:
         if isinstance(exc, AppError):
-            code, message = str(exc.code), exc.message
+            code = str(getattr(exc, "safe_code", exc.code))
+            message = exc.message
         else:
             code, message = "UNEXPECTED", _UNEXPECTED_MESSAGE
         AnalysisJobRepository(db).mark_failed(job_id, code=code, message=message)

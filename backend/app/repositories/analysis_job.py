@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models.analysis_job import (
     ACTIVE_STATUSES,
+    AnalysisExternalJob,
     AnalysisJob,
     AnalysisResult,
     JobStatus,
@@ -88,6 +89,48 @@ class AnalysisJobRepository:
         return self.db.execute(
             select(AnalysisResult).where(AnalysisResult.job_id == job_id)
         ).scalar_one_or_none()
+
+    def get_external_job(self, job_id: uuid.UUID, file_index: int) -> AnalysisExternalJob | None:
+        return self.db.execute(
+            select(AnalysisExternalJob).where(
+                AnalysisExternalJob.analysis_job_id == job_id,
+                AnalysisExternalJob.file_index == file_index,
+            )
+        ).scalar_one_or_none()
+
+    def save_external_job(
+        self,
+        job_id: uuid.UUID,
+        file_index: int,
+        external_job_id: str,
+        external_status: str,
+    ) -> AnalysisExternalJob:
+        """제출 응답을 즉시 커밋해 다음 lease 소유자가 상태 조회부터 재개하게 한다."""
+        existing = self.get_external_job(job_id, file_index)
+        if existing is not None:
+            return existing
+        row = AnalysisExternalJob(
+            analysis_job_id=job_id,
+            file_index=file_index,
+            external_job_id=external_job_id,
+            external_status=external_status,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return row
+
+    def set_external_status(self, job_id: uuid.UUID, file_index: int, status: str) -> None:
+        self.db.execute(
+            update(AnalysisExternalJob)
+            .where(
+                AnalysisExternalJob.analysis_job_id == job_id,
+                AnalysisExternalJob.file_index == file_index,
+            )
+            .values(external_status=status, updated_at=utcnow())
+            .execution_options(synchronize_session=False)
+        )
+        self.db.commit()
 
     def _owned(self, user_id: uuid.UUID) -> Select:
         return (

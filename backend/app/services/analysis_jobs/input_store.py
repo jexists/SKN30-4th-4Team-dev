@@ -8,6 +8,7 @@ import logging
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 
@@ -186,6 +187,64 @@ def load(user_id: uuid.UUID, job_id: uuid.UUID, index: int) -> bytes:
             message="분석 파일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
         )
     return response.content
+
+
+def create_signed_url(
+    user_id: uuid.UUID,
+    job_id: uuid.UUID,
+    index: int,
+    *,
+    expires_in: int | None = None,
+) -> str:
+    """private 입력 객체 하나의 단기 URL을 만든다. service role key는 URL에 포함하지 않는다."""
+    base_url, service_key, bucket = _require_configuration()
+    ttl = expires_in or settings.ANALYSIS_SIGNED_URL_TTL_SECONDS
+    runpod_ttl_seconds = (settings.RUNPOD_JOB_TTL_MS + 999) // 1000
+    if ttl < runpod_ttl_seconds:
+        raise AppError(
+            "분석 설정 오류",
+            "분석 파일 접근 시간을 설정하지 못했습니다.",
+            503,
+        )
+    object_key = _object_key(user_id, job_id, index)
+    url = f"{base_url}/storage/v1/object/sign/{bucket}/{object_key}"
+    try:
+        response = httpx.post(
+            url,
+            json={"expiresIn": ttl},
+            headers=_headers(service_key),
+            timeout=settings.ANALYSIS_STORAGE_TIMEOUT_SECONDS,
+        )
+    except httpx.HTTPError as exc:
+        raise _storage_error(
+            operation="서명 URL 생성",
+            status_code=None,
+            title="분석 파일 접근 실패",
+            message="분석 파일을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
+    if not 200 <= response.status_code < 300:
+        raise _storage_error(
+            operation="서명 URL 생성",
+            status_code=response.status_code,
+            title="분석 파일 접근 실패",
+            message="분석 파일을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        )
+    try:
+        signed_path = response.json()["signedURL"]
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.warning("분석 입력 Storage 서명 URL 응답 형식 오류")
+        raise AppError(
+            "분석 파일 접근 실패",
+            "분석 파일을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            502,
+        ) from exc
+    if not isinstance(signed_path, str) or not signed_path:
+        raise AppError(
+            "분석 파일 접근 실패",
+            "분석 파일을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            502,
+        )
+    return urljoin(f"{base_url}/", signed_path)
 
 
 def discard(

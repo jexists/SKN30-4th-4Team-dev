@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 #: (stage, progress) 를 받는 콜백. 워커가 DB 에 진행률을 반영하는 데 쓴다.
 StageCallback = Callable[[str, int], None]
 FileLoader = Callable[[int], bytes]
+SignedUrlLoader = Callable[[int], str]
+ExternalJobLoader = Callable[[int], str | None]
+ExternalJobCallback = Callable[[int, str, str], None]
+ExternalStatusCallback = Callable[[int, str], None]
 
 # OCR 이 전체 시간의 대부분이라 진행률의 대부분(10~70%)을 여기에 배분한다.
 _OCR_START = 10
@@ -31,6 +35,10 @@ def run_analysis(
     *,
     load_file: FileLoader,
     on_stage: StageCallback | None = None,
+    signed_url_for_file: SignedUrlLoader | None = None,
+    external_job_for_file: ExternalJobLoader | None = None,
+    on_external_job: ExternalJobCallback | None = None,
+    on_external_status: ExternalStatusCallback | None = None,
 ) -> AnalysisResultOut:
     """업로드된 파일들을 OCR·마스킹한 뒤 한 번에 분석한다.
 
@@ -51,10 +59,35 @@ def run_analysis(
     total = len(file_names)
 
     notify(JobStage.OCR, _OCR_START)
-    for index, filename in enumerate(file_names, start=1):
+    for file_index, filename in enumerate(file_names):
+        index = file_index + 1
         # 실패했을 때 "몇 번째에서 멈췄는지"를 로그만 보고 알 수 있어야 한다.
         logger.info("OCR 처리 시작 %d/%d", index, total)
-        result = worker.process_for_analysis(filename, load_file(index - 1))
+        if worker.is_serverless:
+            if signed_url_for_file is None:
+                raise AppError("OCR 입력 오류", "OCR 처리할 파일을 준비하지 못했습니다.", 503)
+            external_job_id = (
+                external_job_for_file(file_index) if external_job_for_file is not None else None
+            )
+            result = worker.process_for_analysis(
+                filename,
+                source_url_factory=lambda idx=file_index: signed_url_for_file(idx),
+                external_job_id=external_job_id,
+                on_submitted=(
+                    lambda job_id, status, idx=file_index: (
+                        on_external_job(idx, job_id, status)
+                        if on_external_job is not None
+                        else None
+                    )
+                ),
+                on_status=(
+                    lambda status, idx=file_index: (
+                        on_external_status(idx, status) if on_external_status is not None else None
+                    )
+                ),
+            )
+        else:
+            result = worker.process_for_analysis(filename, load_file(file_index))
         if not result.text_safe_for_analysis:
             logger.warning(
                 "개인정보 잔존으로 분석 중단 %d/%d scope=%s review_required=%s",

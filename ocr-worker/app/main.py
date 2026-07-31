@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app.core.config import settings
+from app.errors import OcrProcessingError
 from app.inference.paddle_vl_engine import PaddleVlEngine
 from app.inference.tesseract_engine import TesseractEngine
 from app.masking.patterns import PiiType
@@ -34,9 +35,7 @@ app = FastAPI(
     dependencies=[Depends(require_worker_api_key)],
 )
 engine = (
-    TesseractEngine(settings)
-    if settings.OCR_PROVIDER == "tesseract"
-    else PaddleVlEngine(settings)
+    TesseractEngine(settings) if settings.OCR_PROVIDER == "tesseract" else PaddleVlEngine(settings)
 )
 processing_lock = Lock()
 
@@ -60,11 +59,11 @@ def health() -> dict[str, object]:
 def _process_upload(file: UploadFile) -> ProcessedDocument:
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in {".pdf", ".png", ".jpg", ".jpeg"}:
-        raise HTTPException(415, "PDF, PNG, JPG 파일만 처리할 수 있습니다.")
+        raise HTTPException(415, {"code": "UNSUPPORTED_FORMAT"})
 
     content = file.file.read(settings.OCR_MAX_FILE_MB * 1024 * 1024 + 1)
     if len(content) > settings.OCR_MAX_FILE_MB * 1024 * 1024:
-        raise HTTPException(413, f"파일은 최대 {settings.OCR_MAX_FILE_MB}MB까지 허용됩니다.")
+        raise HTTPException(413, {"code": "FILE_TOO_LARGE"})
 
     try:
         with tempfile.TemporaryDirectory(prefix="contract-ocr-") as temp_dir:
@@ -78,13 +77,19 @@ def _process_upload(file: UploadFile) -> ProcessedDocument:
                     input_path, work_dir, output_path
                 )
             body = output_path.read_bytes()
-    except (ValueError, OSError) as exc:
-        logger.warning("Document processing rejected: %s", type(exc).__name__)
-        raise HTTPException(422, "문서를 처리하거나 검증하지 못했습니다.") from exc
+    except OcrProcessingError as exc:
+        logger.warning("Document processing rejected code=%s", exc.code)
+        raise HTTPException(exc.http_status, {"code": exc.code}) from exc
+    except ValueError as exc:
+        logger.warning("Document processing rejected code=OCR_RESULT_INVALID")
+        raise HTTPException(422, {"code": "OCR_RESULT_INVALID"}) from exc
+    except OSError as exc:
+        logger.warning("Document processing rejected code=INVALID_IMAGE")
+        raise HTTPException(422, {"code": "INVALID_IMAGE"}) from exc
     except Exception as exc:
-        # OCR 원문이나 파일 내용이 로그/응답에 노출되지 않게 예외 타입만 남긴다.
-        logger.exception("Document processing failed: %s", type(exc).__name__)
-        raise HTTPException(500, "OCR 처리 중 오류가 발생했습니다.") from exc
+        # 예외 메시지에는 OCR 원문이 포함될 수 있으므로 traceback도 남기지 않는다.
+        logger.error("Document processing failed code=OCR_INTERNAL_ERROR")
+        raise HTTPException(500, {"code": "OCR_INTERNAL_ERROR"}) from exc
 
     return ProcessedDocument(pdf=body, result=result)
 
