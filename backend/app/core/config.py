@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     # ── 분석 작업 큐 ────────────────────────────────────────────────
     # 분석은 analysis_job 테이블을 큐로 삼아 백그라운드 워커가 처리한다(Redis 없음).
     # 테스트·CI 는 반드시 꺼야 한다 — 켜두면 테스트마다 폴링 스레드가 뜬다.
-    ANALYSIS_WORKER_ENABLED: bool = True
+    ANALYSIS_WORKER_ENABLED: bool = False
     # 동시 실행 1이 기본인 이유: ocr-worker 가 전역 Lock 으로 처리를 직렬화하므로 늘려도
     # 처리량이 늘지 않고, 스레드마다 DB 커넥션과 KURE/OCR 메모리만 더 먹는다.
     ANALYSIS_WORKER_CONCURRENCY: int = Field(default=1, ge=1, le=4)
