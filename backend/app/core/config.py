@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,6 +34,7 @@ class Settings(BaseSettings):
     # 분석 원본은 워커 프로세스가 달라도 읽을 수 있도록 private Storage에 잠시 보관한다.
     ANALYSIS_INPUT_BUCKET: str = "analysis-inputs"
     ANALYSIS_STORAGE_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0)
+    ANALYSIS_SIGNED_URL_TTL_SECONDS: int = Field(default=3600, ge=10)
 
     # Supabase Auth JWT 검증용(HS256 대칭키). 대시보드 → Settings → API → JWT Settings → JWT Secret.
     # 프로젝트가 비대칭키(ES256/RS256)를 쓰면 이 값 없이 SUPABASE_URL 의 JWKS 로 검증한다.
@@ -75,11 +77,18 @@ class Settings(BaseSettings):
     # 사용자 계약서 OCR/마스킹은 별도 worker에서 실행한다.
     OCR_WORKER_URL: str = "http://ocr-worker:8100"
     OCR_WORKER_API_KEY: str = ""
+    OCR_TRANSPORT: Literal["direct", "runpod_serverless"] = "direct"
+    RUNPOD_ENDPOINT_ID: str = ""
+    RUNPOD_API_KEY: str = ""
+    RUNPOD_STATUS_POLL_SECONDS: float = Field(default=3.0, gt=0)
+    RUNPOD_EXECUTION_TIMEOUT_MS: int = Field(default=1_200_000, ge=5_000)
+    RUNPOD_JOB_TTL_MS: int = Field(default=3_600_000, ge=10_000)
+    RUNPOD_HTTP_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0)
 
     # ── 분석 작업 큐 ────────────────────────────────────────────────
     # 분석은 analysis_job 테이블을 큐로 삼아 백그라운드 워커가 처리한다(Redis 없음).
     # 테스트·CI 는 반드시 꺼야 한다 — 켜두면 테스트마다 폴링 스레드가 뜬다.
-    ANALYSIS_WORKER_ENABLED: bool = False
+    ANALYSIS_WORKER_ENABLED: bool = True
     # 동시 실행 1이 기본인 이유: ocr-worker 가 전역 Lock 으로 처리를 직렬화하므로 늘려도
     # 처리량이 늘지 않고, 스레드마다 DB 커넥션과 KURE/OCR 메모리만 더 먹는다.
     ANALYSIS_WORKER_CONCURRENCY: int = Field(default=1, ge=1, le=4)

@@ -28,6 +28,17 @@ RUN python3 -m pip install --break-system-packages \
         --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/ \
     && python3 -m pip install --break-system-packages -r requirements-runpod.txt
 
+# PaddleOCR-VL's Triton kernels are JIT-compiled on first inference.
+# Keep this after the large Python dependency layer so rebuilds can reuse it.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CC=/usr/bin/gcc \
+    CXX=/usr/bin/g++
+
 COPY app ./app
 
 EXPOSE 8100

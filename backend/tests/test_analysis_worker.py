@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.db.base import Base
-from app.models.analysis_job import AnalysisJob, AnalysisResult, JobStatus
+from app.models.analysis_job import AnalysisExternalJob, AnalysisJob, AnalysisResult, JobStatus
 from app.models.notification import Notification, NotificationType
 from app.repositories.analysis_job import AnalysisJobRepository
 from app.repositories.auth import AuthRepository
@@ -121,12 +121,29 @@ def test_active_job_blocks_a_second_one(session_factory, user):
         assert AnalysisJobRepository(db).find_active(user) is not None
 
 
+def test_external_job_ids_are_kept_separately_by_file_index(session_factory, user):
+    job_id = _queue_job(session_factory, user)
+    with session_factory() as db:
+        repo = AnalysisJobRepository(db)
+        repo.save_external_job(job_id, 0, "runpod-0", "IN_QUEUE")
+        repo.save_external_job(job_id, 1, "runpod-1", "IN_PROGRESS")
+
+    with session_factory() as db:
+        rows = list(
+            db.execute(
+                select(AnalysisExternalJob).order_by(AnalysisExternalJob.file_index)
+            ).scalars()
+        )
+    assert [(row.file_index, row.external_job_id) for row in rows] == [
+        (0, "runpod-0"),
+        (1, "runpod-1"),
+    ]
+
+
 # ── 성공 ──────────────────────────────────────────────────────────────
 
 
-def test_success_stores_result_and_notifies(
-    session_factory, user, monkeypatch, discarded_inputs
-):
+def test_success_stores_result_and_notifies(session_factory, user, monkeypatch, discarded_inputs):
     job_id = _queue_job(session_factory, user)
     monkeypatch.setattr(pipeline, "run_analysis", lambda *a, **k: _fake_result())
 
@@ -336,9 +353,7 @@ def test_expired_lease_at_attempt_limit_fails_and_discards_inputs(
     assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
 
 
-def test_expired_lease_recovery_is_idempotent(
-    session_factory, user, discarded_inputs
-):
+def test_expired_lease_recovery_is_idempotent(session_factory, user, discarded_inputs):
     job_id = _queue_job(session_factory, user)
     with session_factory() as db:
         AnalysisJobRepository(db).claim_next("w1", lease_seconds=60)

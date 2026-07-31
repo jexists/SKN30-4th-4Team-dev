@@ -325,6 +325,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_analysis_job_active
 CREATE UNIQUE INDEX IF NOT EXISTS uq_analysis_job_idempotency
     ON analysis_job (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 
+-- 파일별 RunPod Serverless 작업 ID. lease 소유자가 바뀌어도 이 행을 먼저 읽어 같은 작업의
+-- /status 조회를 재개하며, (analysis_job_id, file_index) UNIQUE가 한 파일의 중복 매핑을 막는다.
+CREATE TABLE IF NOT EXISTS analysis_external_job (
+    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    analysis_job_id   uuid NOT NULL REFERENCES analysis_job (id) ON DELETE CASCADE,
+    file_index        smallint NOT NULL CHECK (file_index >= 0),
+    external_job_id   text NOT NULL UNIQUE,
+    external_status   text NOT NULL,
+    submitted_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_analysis_external_job_file UNIQUE (analysis_job_id, file_index)
+);
+CREATE INDEX IF NOT EXISTS idx_analysis_external_job_analysis
+    ON analysis_external_job (analysis_job_id, file_index);
+
 -- 15. analysis_result — 분석 산출물 (analysis_job 과 1:1)
 --
 -- 작업(진행 상태)과 산출물을 분리한다. 사용자가 실패한 분석을 다시 돌리면 작업은 새로 생기지만

@@ -1,5 +1,6 @@
-from app.inference.result_parser import parse_result
+from app.inference.result_parser import order_regions, parse_result
 from app.inference.spotting_parser import parse_spotting_result
+from app.inference.types import TextRegion
 
 
 class ArrayLike:
@@ -80,3 +81,23 @@ def test_spotting_result_prefers_fine_grained_polygons():
     assert page.regions[0].page_index == 3
     assert page.regions[0].bbox == (100.0, 300.0, 700.0, 360.0)
     assert page.regions[0].label == "spotting"
+
+
+def test_order_regions_prefers_layout_block_order():
+    regions = [
+        TextRegion(0, "두 번째", (0, 10, 100, 20), block_order=2),
+        TextRegion(0, "첫 번째", (0, 100, 100, 120), block_order=1),
+    ]
+
+    assert [region.text for region in order_regions(regions)] == ["첫 번째", "두 번째"]
+
+
+def test_order_regions_falls_back_to_geometry():
+    regions = [
+        # 같은 행의 오른쪽 영역 y가 조금 위에 있어도 x 순서가 먼저여야 한다.
+        TextRegion(0, "오른쪽", (100, 7, 180, 19)),
+        TextRegion(0, "아래", (0, 50, 80, 60)),
+        TextRegion(0, "왼쪽", (0, 10, 80, 20)),
+    ]
+
+    assert [region.text for region in order_regions(regions)] == ["왼쪽", "오른쪽", "아래"]

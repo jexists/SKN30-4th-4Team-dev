@@ -7,7 +7,7 @@ from app.inference.paddle_vl_engine import PaddleVlEngine
 
 
 def test_layout_shape_mode_is_passed_to_predict_not_constructor(monkeypatch):
-    calls: dict[str, dict] = {}
+    calls: dict[str, object] = {"predict": []}
 
     class FakeResult:
         json = {
@@ -27,7 +27,7 @@ def test_layout_shape_mode_is_passed_to_predict_not_constructor(monkeypatch):
             calls["init"] = kwargs
 
         def predict(self, _path, **kwargs):
-            calls["predict"] = kwargs
+            calls["predict"].append(kwargs)
             return [FakeResult()]
 
     monkeypatch.setitem(sys.modules, "paddleocr", SimpleNamespace(PaddleOCRVL=FakePaddleOCRVL))
@@ -44,6 +44,46 @@ def test_layout_shape_mode_is_passed_to_predict_not_constructor(monkeypatch):
     page = engine.spot_page(Path("/tmp/input.png"), 0)
 
     assert "layout_shape_mode" not in calls["init"]
-    assert calls["init"]["use_layout_detection"] is False
-    assert calls["predict"]["layout_shape_mode"] == "poly"
+    assert calls["init"]["use_layout_detection"] is True
+    assert calls["predict"][0]["use_layout_detection"] is False
+    assert calls["predict"][0]["prompt_label"] == "spotting"
+    assert calls["predict"][0]["layout_shape_mode"] == "poly"
     assert page.regions[0].text == "전화번호 010-1234-5678"
+
+
+def test_parse_page_uses_layout_detection(monkeypatch):
+    calls: list[dict] = []
+
+    class FakeResult:
+        json = {
+            "res": {
+                "page_index": None,
+                "width": 100,
+                "height": 100,
+                "parsing_res_list": [
+                    {
+                        "block_bbox": [0, 0, 90, 20],
+                        "block_content": "임차인 홍길동",
+                        "block_order": 1,
+                    }
+                ],
+            }
+        }
+
+    class FakePaddleOCRVL:
+        def __init__(self, **kwargs):
+            pass
+
+        def predict(self, _path, **kwargs):
+            calls.append(kwargs)
+            return [FakeResult()]
+
+    monkeypatch.setitem(sys.modules, "paddleocr", SimpleNamespace(PaddleOCRVL=FakePaddleOCRVL))
+    engine = PaddleVlEngine(Settings(OCR_USE_LAYOUT_DETECTION=True))
+
+    page = engine.parse_page(Path("/tmp/input.png"), 4)
+
+    assert calls[0]["use_layout_detection"] is True
+    assert "prompt_label" not in calls[0]
+    assert page.page_index == 4
+    assert page.regions[0].block_order == 1

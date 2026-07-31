@@ -22,6 +22,7 @@ from sqlalchemy import (
     Index,
     SmallInteger,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -221,4 +222,30 @@ class AnalysisResult(Base):
             name="analysis_result_risk_level_check",
         ),
         Index("idx_analysis_result_user", "user_id", "created_at"),
+    )
+
+
+class AnalysisExternalJob(Base):
+    """분석 파일 하나와 RunPod Serverless 작업 하나의 영속 매핑."""
+
+    __tablename__ = "analysis_external_job"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    analysis_job_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("analysis_job.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    file_index: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    external_job_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    external_status: Mapped[str] = mapped_column(Text, nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint("file_index >= 0", name="analysis_external_job_file_index_check"),
+        UniqueConstraint("analysis_job_id", "file_index", name="uq_analysis_external_job_file"),
+        Index("idx_analysis_external_job_analysis", "analysis_job_id", "file_index"),
     )

@@ -182,6 +182,34 @@ def test_loader_error_is_propagated():
     assert caught.value is error
 
 
+def test_serverless_pipeline_resumes_existing_job_without_loading_or_signing(
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "OCR_TRANSPORT", "runpod_serverless")
+    received = []
+
+    def fake_process(self, filename, content=None, **kwargs):
+        received.append((filename, content, kwargs["external_job_id"]))
+        assert kwargs["external_job_id"] == "existing-runpod-job"
+        return _ocr("안전한 내용")
+
+    monkeypatch.setattr(OcrWorkerClient, "process_for_analysis", fake_process)
+    monkeypatch.setattr(
+        ContractAnalyzer,
+        "analyze",
+        lambda self, text: ContractLlmAnalysis(summary="요약", terms=ContractTerms()),
+    )
+
+    pipeline.run_analysis(
+        ["contract.pdf"],
+        load_file=lambda _index: pytest.fail("Serverless에서 원본을 백엔드로 읽으면 안 됨"),
+        signed_url_for_file=lambda _index: pytest.fail("기존 작업에 URL을 재발급하면 안 됨"),
+        external_job_for_file=lambda _index: "existing-runpod-job",
+    )
+
+    assert received == [("contract.pdf", None, "existing-runpod-job")]
+
+
 def test_summarize_picks_the_worst_severity():
     from app.schemas.analysis import AnalysisResultOut
     from app.schemas.document import ContractRiskIssue

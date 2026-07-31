@@ -223,3 +223,30 @@ def test_missing_configuration_is_503_but_discard_stays_non_raising(monkeypatch)
 
     assert caught.value.code == 503
     assert input_store.discard(USER_ID, JOB_ID, 1) is None
+
+
+def test_create_signed_url_uses_short_lived_object_url(monkeypatch):
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return httpx.Response(200, json={"signedURL": "/storage/v1/object/sign/signed-token"})
+
+    monkeypatch.setattr(config.settings, "RUNPOD_JOB_TTL_MS", 3_600_000)
+    monkeypatch.setattr(input_store.httpx, "post", fake_post)
+
+    result = input_store.create_signed_url(USER_ID, JOB_ID, 2, expires_in=3600)
+
+    assert result == f"{BASE_URL}/storage/v1/object/sign/signed-token"
+    assert calls[0][0].endswith(f"/analysis-inputs/{USER_ID}/{JOB_ID}/002")
+    assert calls[0][1]["json"] == {"expiresIn": 3600}
+    assert SERVICE_KEY not in result
+
+
+def test_signed_url_must_outlive_runpod_job(monkeypatch):
+    monkeypatch.setattr(config.settings, "RUNPOD_JOB_TTL_MS", 3_600_000)
+
+    with pytest.raises(AppError) as caught:
+        input_store.create_signed_url(USER_ID, JOB_ID, 0, expires_in=3599)
+
+    assert caught.value.code == 503
