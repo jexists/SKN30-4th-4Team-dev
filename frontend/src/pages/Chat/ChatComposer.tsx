@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react'
 
+import { showToast } from '../../components/Toast/toastStore'
 import { Close, FileLines, Info, Paperclip, Send, Warn } from '../../components/icons'
 import styles from './Chat.module.scss'
 import type { Attachment } from './types'
@@ -26,6 +27,11 @@ const PLACEHOLDER = '법률적인 상황을 설명해주세요...'
 const MAX_HEIGHT = 200 // px — 이 높이까지 늘고 그 뒤엔 내부 스크롤
 /** 백엔드 업로드 검증(analysis.py)과 같은 목록. 여기서 먼저 걸러 헛왕복을 줄인다. */
 const ACCEPT = '.pdf,.png,.jpg,.jpeg'
+/**
+ * 첨부 버튼은 데모 동안 안내만 한다 — 파일 선택창을 열지도, 업로드를 시작하지도 않는다.
+ * 아래 파일 input·pickFile 은 기능이 열릴 때 그대로 다시 연결하려고 남겨 둔다.
+ */
+const ATTACH_COMING_SOON = 'OCR 첨부 기능은 준비 중입니다.'
 
 const STATE_TEXT: Record<Attachment['state'], string> = {
   PREPARING: '올리는 중…',
@@ -131,7 +137,7 @@ export function ChatComposer({
           aria-label="계약서 첨부"
           title={busy ? '계약서를 읽는 중입니다' : '계약서 첨부 (PDF·PNG·JPG)'}
           disabled={busy}
-          onClick={() => fileRef.current?.click()}
+          onClick={() => showToast(ATTACH_COMING_SOON, 'info')}
         >
           <Paperclip />
         </button>
