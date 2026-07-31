@@ -30,6 +30,8 @@ from app.schemas.chat import (
     ChatResponse,
     ChatRoomOut,
     CreateRoomIn,
+    MessageAttachment,
+    UpdateMessageIn,
     UpdateRoomTitleIn,
 )
 from app.schemas.common import ApiResponse, Page, success_response
@@ -45,6 +47,8 @@ Limit = Annotated[int, Query(ge=1, le=100)]
 
 # 없는 방·남의 방·잘못된 UUID 를 한 문구로 묶는다(존재 여부를 알려주지 않는다).
 _ROOM_NOT_FOUND = "이미 삭제되었거나 존재하지 않는 대화입니다."
+# 메시지도 같은 방식이다 — 내 방에 없는 id 는 이유를 가리지 않고 한 문구로 묶는다.
+_MESSAGE_NOT_FOUND = "이미 삭제되었거나 존재하지 않는 메시지입니다."
 
 # graph_rag 는 langgraph·langchain-openai 를 요구하므로 지연 로드한다.
 # (미설치·초기화 실패해도 서버 기동과 다른 엔드포인트는 영향받지 않는다.)
@@ -82,38 +86,41 @@ def prewarm_engine() -> bool:
     return True
 
 
-def _room_document_text(db: Session, room_id: str | None, user: dict | None) -> str | None:
-    """방에 첨부된 계약서 본문(개인정보 치환 완료)을 읽는다. 없으면 None.
+def _room_document(db: Session, room_id: str | None, user: dict) -> tuple[str | None, bool]:
+    """방에 첨부된 계약서 본문(개인정보 치환 완료)과 '조회 실패' 여부를 함께 돌려준다.
 
-    첨부는 로그인 사용자의 방에만 붙으므로 비로그인 요청은 곧바로 None 이다.
-    첨부가 풀렸거나 분석이 지워진 경우도 조용히 None 로 흘린다 — 계약서를 못 찾았다고 대화를
-    끊는 것보다 일반 답변이라도 나가는 편이 낫다.
+    구분해야 하는 상태가 셋이다.
+      - (None, False) 계약서가 애초에 없는 일반 방 → 그냥 일반 답변. 경고할 게 없다.
+      - (본문, False) 정상 → 그 계약서를 근거로 답한다.
+      - (None, True)  **계약서는 붙어 있는데 내용을 못 읽었다** → 일반 답변을 하되 그 사실을
+        반드시 알려야 한다. 예전에는 이 경우도 (None, False) 와 똑같이 흘러가, 모델이 계약서를
+        보지 않은 채 아무 말 없이 일반 답변을 했다 — 사용자는 자기 계약서를 근거로 한 답이라고
+        읽었다. 요청을 실패시키는 대신 '못 읽었다'는 사실만 모델까지 들고 간다.
+
+    방 소유권은 여기서 검증한다(없는 방·남의 방·잘못된 UUID 는 모두 404 한 문구).
     """
-    if not room_id or user is None:
-        return None
-    try:
-        uid = uuid.UUID(str(user.get("sub", "")))
-        rid = uuid.UUID(room_id)
-    except ValueError:
-        return None
+    if not room_id:
+        return None, False
 
-    room = db.execute(
-        select(ChatRoom).where(
-            ChatRoom.id == rid,
-            ChatRoom.user_id == uid,
-            ChatRoom.deleted_at.is_(None),
-        )
-    ).scalar_one_or_none()
-    if room is None or room.analysis_job_id is None:
-        return None
+    uid = _uid(user)
+    room = _get_owned_room(db, room_id, uid)
+    if room.analysis_job_id is None:
+        return None, False  # 계약서가 원래 없는 방 — 경고 대상이 아니다.
 
     result = AnalysisJobRepository(db).get_result(room.analysis_job_id)
-    if result is None:
-        return None
-    text = (result.payload or {}).get("sanitized_text")
-    if not isinstance(text, str):
-        return None
-    return text.strip() or None
+    payload = result.payload if result is not None else None
+    text = payload.get("sanitized_text") if isinstance(payload, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        # 사유(결과 없음·payload 없음·타입 오류·빈 문자열)는 사용자에게 보일 것이 아니므로
+        # 로그로만 남긴다. 본문은 개인정보 치환 후에도 계약 내용이라 절대 찍지 않는다.
+        logger.warning(
+            "첨부 계약서 본문을 읽지 못했습니다 (room_id=%s, analysis_job_id=%s, result=%s)",
+            room.id,
+            room.analysis_job_id,
+            "없음" if result is None else "본문 없음",
+        )
+        return None, True
+    return text.strip(), False
 
 
 @router.post("/chat", response_model=ApiResponse[ChatResponse])
@@ -122,21 +129,36 @@ def chat(req: ChatRequest, user: CurrentUser, db: AppDb) -> ApiResponse[ChatResp
 
     동기 함수라 FastAPI 가 스레드풀에서 실행 → OpenAI 블로킹 호출이 이벤트 루프를 막지 않는다.
 
-    인증은 **선택**이다(CurrentUser). 비로그인·Supabase 미설정 상태의 비영속 대화가 그대로
-    동작해야 하므로 필수 인증으로 바꾸지 않는다. room_id 와 로그인이 모두 있을 때만 그 방에
-    첨부된 계약서를 함께 넣는다.
+    인증은 **선택**이다(CurrentUser) — 비로그인·Supabase 미설정 상태의 비영속 대화가 그대로
+    동작해야 한다. 다만 '선택'은 Authorization 헤더가 아예 없을 때만이고(deps 가 만료·무효
+    토큰은 401, 인증 서버 장애는 503 으로 세운다), **room_id 가 있는 요청은 인증이 필수다** —
+    방은 누군가의 소유물이고, 익명으로 남의 방 id 를 넣어 볼 수 있으면 안 된다.
+
+    attachment_failed 는 프론트가 첨부 처리(OCR·분석)에 실패하고도 질문은 살려 보냈다는
+    표시다. 답변은 계약서 없이 나가되 모델이 "파일을 읽지 못했다"고 먼저 밝힌다.
     """
     run_turn = _get_run_turn()
     history = [t.model_dump() for t in req.history]
 
-    document_context = _room_document_text(db, req.room_id, user)
+    if req.room_id and user is None:
+        raise AppError("로그인 필요", "로그인이 필요합니다.", 401)
+
+    document_context, document_unavailable = (
+        _room_document(db, req.room_id, user) if user is not None else (None, False)
+    )
     # LLM 호출은 수십 초가 걸린다. 그동안 커넥션을 쥐고 있으면 동시 대화 몇 건만으로 풀이
     # 마른다(프로세스당 상한이 7이다). DB 로 할 일은 위에서 끝났으므로 여기서 돌려준다.
     db.close()
 
     started = time.perf_counter()
     try:
-        answer = run_turn(req.message, history, document_context)
+        answer = run_turn(
+            req.message,
+            history,
+            document_context,
+            attachment_failed=req.attachment_failed,
+            document_unavailable=document_unavailable,
+        )
     except AppError:
         raise
     except Exception as e:
@@ -179,23 +201,43 @@ def _get_owned_room(db: Session, room_id: str, uid: uuid.UUID) -> ChatRoom:
     return room
 
 
-
 def _room_out(
-    room: ChatRoom, file_name: str | None = None, preview: str | None = None
+    room: ChatRoom, file_names: Sequence[str] = (), preview: str | None = None
 ) -> ChatRoomOut:
-    """채팅방 응답 필드를 한곳에서 조립해 엔드포인트 사이 누락을 막는다."""
+    """채팅방 응답 필드를 한곳에서 조립해 엔드포인트 사이 누락을 막는다.
+
+    파일명은 목록(analysis_file_names)이 원본이고 analysis_file_name 은 그 첫 항목이다 —
+    한 번에 여러 장을 올릴 수 있게 되면서 개수가 필요해졌지만, 기존 필드를 지우면 배포
+    순서에 따라 예전 프론트의 첨부 표시가 사라진다.
+    """
     return ChatRoomOut(
         id=str(room.id),
         title=room.title,
         last_chat_at=room.last_chat_at,
         updated_at=room.updated_at,
         analysis_job_id=str(room.analysis_job_id) if room.analysis_job_id else None,
-        analysis_file_name=file_name,
+        analysis_file_name=file_names[0] if file_names else None,
+        analysis_file_names=list(file_names),
         last_message_preview=preview,
     )
 
 
-def _attachment_names(db: Session, rooms: Sequence[ChatRoom]) -> dict[uuid.UUID, str | None]:
+def _message_out(msg: ChatMessage) -> ChatMessageOut:
+    """메시지 응답 조립. 저장·조회 두 경로가 같은 모양을 내도록 한곳에 둔다.
+
+    attachments 는 예전 행에 아예 없으므로(NULL) 빈 배열로 정규화한다 — 프론트가 None 과
+    [] 를 따로 다루지 않아도 되게.
+    """
+    return ChatMessageOut(
+        id=str(msg.id),
+        role=msg.role,
+        content=msg.content,
+        created_at=msg.created_at,
+        attachments=[MessageAttachment(**a) for a in (msg.attachments or [])],
+    )
+
+
+def _attachment_names(db: Session, rooms: Sequence[ChatRoom]) -> dict[uuid.UUID, list[str]]:
     """첨부된 방들의 표시용 파일명을 한 번에 읽는다(방마다 조회하면 N+1 이 된다).
 
     첨부가 하나도 없으면 쿼리 자체를 보내지 않는다 — 첨부는 예외적인 경우라 목록 조회에
@@ -207,7 +249,7 @@ def _attachment_names(db: Session, rooms: Sequence[ChatRoom]) -> dict[uuid.UUID,
     rows = db.execute(
         select(AnalysisJob.id, AnalysisJob.file_names).where(AnalysisJob.id.in_(job_ids))
     ).all()
-    return {job_id: (names[0] if names else None) for job_id, names in rows}
+    return {job_id: list(names or []) for job_id, names in rows}
 
 
 _PREVIEW_MAX_LEN = 80
@@ -234,7 +276,6 @@ def _last_message_previews(db: Session, room_ids: list[uuid.UUID]) -> dict[uuid.
     for room_id, content in rows:
         previews.setdefault(room_id, _truncate(content))
     return previews
-
 
 
 @router.get("/chat/rooms", response_model=ApiResponse[Page[ChatRoomOut]])
@@ -268,7 +309,7 @@ def list_rooms(
             items=[
                 _room_out(
                     r,
-                    names.get(r.analysis_job_id) if r.analysis_job_id else None,
+                    names.get(r.analysis_job_id, ()) if r.analysis_job_id else (),
                     previews.get(r.id),
                 )
                 for r in rows
@@ -321,12 +362,7 @@ def list_messages(
     rows = list(reversed(rows))  # 화면 표시용 오름차순(오래된 → 최신)
     return success_response(
         Page(
-            items=[
-                ChatMessageOut(
-                    id=str(m.id), role=m.role, content=m.content, created_at=m.created_at
-                )
-                for m in rows
-            ],
+            items=[_message_out(m) for m in rows],
             next_cursor=next_cursor,
         )
     )
@@ -344,6 +380,8 @@ def add_message(
         role=body.role,
         content=body.content,
         response_time=body.response_time,
+        # 첨부가 없으면 빈 배열 대신 NULL 로 둔다 — 기존 행과 같은 모양이라 조회가 한 갈래다.
+        attachments=[a.model_dump() for a in body.attachments] or None,
     )
     db.add(msg)
     now = monotonic_utcnow()
@@ -351,11 +389,46 @@ def add_message(
     room.updated_at = now
     db.commit()
     db.refresh(msg)
-    return success_response(
-        ChatMessageOut(
-            id=str(msg.id), role=msg.role, content=msg.content, created_at=msg.created_at
-        )
-    )
+    return success_response(_message_out(msg))
+
+
+@router.put(
+    "/chat/rooms/{room_id}/messages/{message_id}", response_model=ApiResponse[ChatMessageOut]
+)
+def update_message(
+    room_id: str, message_id: str, body: UpdateMessageIn, user: RequireMember, db: AppDb
+) -> ApiResponse[ChatMessageOut]:
+    """저장된 메시지의 본문을 교체한다(첨부 실패 답변 → 재시도로 받은 답변).
+
+    새 메시지를 저장하지 않는 이유는 새로고침 때문이다 — 화면에서만 실패 답변을 걷어내면
+    DB 에는 그대로 남아, 다시 열었을 때 실패 답변과 재시도 답변이 나란히 보인다.
+    created_at 을 건드리지 않으므로 대화 순서는 유지되고, last_chat_at 도 그대로 둔다
+    (답변 교체는 새 대화가 아니라 같은 턴의 정정이라 목록 순서를 바꿀 이유가 없다).
+
+    소유권은 두 단계다: 방이 내 것인지(_get_owned_room) → 그 메시지가 그 방에 속하는지.
+    남의 메시지 id 를 넣어도 내 방에 속하지 않으므로 404 다.
+    """
+    uid = _uid(user)
+    room = _get_owned_room(db, room_id, uid)
+    try:
+        mid = uuid.UUID(message_id)
+    except ValueError as e:
+        raise AppError("메시지를 찾을 수 없습니다", _MESSAGE_NOT_FOUND, 404) from e
+
+    msg = db.execute(
+        select(ChatMessage).where(ChatMessage.id == mid, ChatMessage.chat_room_id == room.id)
+    ).scalar_one_or_none()
+    if msg is None:
+        raise AppError("메시지를 찾을 수 없습니다", _MESSAGE_NOT_FOUND, 404)
+
+    msg.content = body.content
+    msg.response_time = body.response_time
+    room.updated_at = monotonic_utcnow()
+    db.commit()
+    db.refresh(msg)
+    # 답변 교체는 전송의 내부 단계다 — 사용자는 말풍선이 바뀌는 것으로 이미 결과를 본다.
+    # 토스트까지 띄우면 재시도 한 번에 알림이 겹친다(첨부와 같은 이유로 message 를 비운다).
+    return success_response(_message_out(msg))
 
 
 @router.put("/chat/rooms/{room_id}/title", response_model=ApiResponse[ChatRoomOut])
@@ -373,9 +446,9 @@ def update_room_title(
     db.refresh(room)
     # 파일명까지 채워서 돌려준다 — 프론트가 이 응답으로 목록의 방을 통째로 교체하므로
     # 빼먹으면 이름만 바꿨는데 첨부 칩이 사라진다.
-    file_name = _attachment_names(db, [room]).get(room.analysis_job_id)
+    file_names = _attachment_names(db, [room]).get(room.analysis_job_id, ())
     # message 는 토스트 문구다 — 프론트가 화면마다 따로 심지 않도록 서버가 소유한다.
-    return success_response(_room_out(room, file_name), message="대화 제목을 수정했습니다.")
+    return success_response(_room_out(room, file_names), message="대화 제목을 수정했습니다.")
 
 
 @router.post("/chat/rooms/{room_id}/document", response_model=ApiResponse[ChatRoomOut])
@@ -411,8 +484,9 @@ def attach_document(
     room.updated_at = monotonic_utcnow()
     db.commit()
     db.refresh(room)
-    file_name = job.file_names[0] if job.file_names else None
-    return success_response(_room_out(room, file_name), message="계약서를 대화에 첨부했습니다.")
+    # message 를 비워 토스트를 띄우지 않는다 — 첨부는 이제 사용자가 따로 누르는 행동이 아니라
+    # 메시지 전송의 내부 단계고, 첨부한 파일은 이미 메시지 말풍선 안에 그려진다.
+    return success_response(_room_out(room, job.file_names or ()))
 
 
 @router.delete("/chat/rooms/{room_id}/document", response_model=ApiResponse[ChatRoomOut])

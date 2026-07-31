@@ -478,8 +478,11 @@ const isMobile = useIsMobile()
 - **Badge / Pill** — `historyItem`, `warnPill`, `hotTag`, `tierBadge` 등.
 - **EmptyState** — Chat, MyPage 에서 등장.
 - **SectionHeader** — `sectionTitle` + `sectionSub` 조합이 여러 곳에.
-- **FileUpload / FileRow** — 현재는 `pages/Analyze` 에만 있다(고정 높이 드롭 영역 + 내부 스크롤 파일 목록 + 파일명·용량·제거 행). 검증과 **거부 사유 문구 생성**은 `pages/Analyze/uploadFiles.ts` 에 순수 함수(`mergeFiles`·`describeRejections`)로 분리해 두었으니, 다른 화면에서 두 번째 업로드 UI 가 생기면 그 파일부터 `utils` 로 올리고 UI 를 `components/` 로 추출한다.
+- **FileUpload / FileRow** — 업로드 UI 가 두 곳(`pages/Analyze` 의 드롭 영역, `pages/Chat` 의 입력창 프리뷰)이 되면서 **검증·거부 문구는 예고대로 `utils/uploadFiles.ts` 로 올렸다**(`mergeFiles`·`describeRejections`·`fileKey`·`isPdf`·`ACCEPT_ATTR`·`MAX_TOTAL_FILES`). 두 화면의 허용 확장자·개수 상한이 어긋나면 한쪽에서만 통과하고 서버에서 거절되므로 규칙은 여기 하나뿐이다. UI(드롭 영역 / 파일 행) 자체는 아직 페이지 로컬이고, 세 번째 업로드 화면이 생기면 `components/` 로 추출한다.
   - 거부(확장자·용량·중복)는 **카드 안 인라인 문구가 아니라 토스트**로 알린다. 문구에 서류명과 파일명을 담고, 중복은 실패가 아니므로 `info`·나머지는 `error`. 클라이언트 검증 알림에 `showToast` 를 쓰는 것은 `frontend/CLAUDE.md` 가 허용한 예외다(`SignUp` 폼 검증과 같은 취급).
+- **AttachmentList (첨부 칩)** — 현재는 `pages/Chat/AttachmentList.tsx` 에만 있다. 입력창 프리뷰와 사용자 말풍선이 **같은 컴포넌트를 `variant` 로만 갈라 쓴다** — 보내기 전과 보낸 뒤가 다르게 생기면 "같은 것" 으로 읽히지 않는다.
+  - 이미지는 썸네일(`URL.createObjectURL`), PDF·기타는 아이콘 + 파일명. 원본은 분석이 끝나면 서버에서 지워지므로 **새로고침 뒤에는 썸네일이 없고 아이콘으로 떨어진다**(의도된 폴백).
+  - `variant="message"`(`.attachmentsOnDark`)는 사용자 말풍선이 `$navy-900` 이라 밝은 칩을 그대로 쓰면 눈에 튄다 → 테두리 `$navy-700`, 바탕 `$navy-800`, 글자 `$text-on-dark`. **어두운 표면 위에 칩을 얹을 때는 항상 이 짝을 쓴다.**
 
 신규 페이지에서 이들 반복 패턴이 필요하면 **여기 컴포넌트로 추출한 뒤** 사용하세요. 페이지 로컬 CSS 로 새로 만드는 것은 지양합니다.
 

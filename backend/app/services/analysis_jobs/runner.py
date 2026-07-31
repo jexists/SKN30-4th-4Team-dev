@@ -121,11 +121,14 @@ class AnalysisWorker:
             job_id, user_id = job.id, job.user_id
             file_names = list(job.file_names or [])
             attempt = job.attempt_count
+            # 알림 여부는 접수 때 정해져 행에 남아 있다(채팅 첨부는 false). 세션이 닫히기 전에
+            # 값으로 읽어 둔다 — 아래 처리는 다른 세션에서 돈다.
+            notify = job.notify
 
         started = time.perf_counter()
         try:
             with factory() as db:
-                self._process(db, job_id, user_id, file_names, attempt, worker_id)
+                self._process(db, job_id, user_id, file_names, attempt, worker_id, notify)
         finally:
             logger.info(
                 "분석 작업 종료 job_id=%s user_id=%s worker_id=%s elapsed=%.1fs",
@@ -144,6 +147,7 @@ class AnalysisWorker:
         file_names: list[str],
         attempt: int,
         worker_id: str,
+        notify: bool = True,
     ) -> None:
         repo = AnalysisJobRepository(db)
 
@@ -177,7 +181,7 @@ class AnalysisWorker:
                     repo.set_stage(job_id, JobStage.OCR.value, 5)
                     time.sleep(_backoff_seconds(attempt))
                     continue
-                self._fail(db, job_id, user_id, len(file_names), exc)
+                self._fail(db, job_id, user_id, len(file_names), exc, notify)
                 return
 
             title, summary, risk_level = pipeline.summarize(result, file_names)
@@ -190,8 +194,10 @@ class AnalysisWorker:
                 risk_level=risk_level,
             )
             # 상태를 먼저 커밋한 뒤 알림 — "알림은 왔는데 결과가 없다" 를 구조적으로 막는다.
+            # 알림을 건너뛰더라도 입력 정리는 반드시 돈다(안 그러면 원본이 스풀에 영영 남는다).
             try:
-                notify_analysis_completed(db, user_id, job_id)
+                if notify:
+                    notify_analysis_completed(db, user_id, job_id)
             finally:
                 _discard_inputs(user_id, job_id, len(file_names))
             return
@@ -203,6 +209,7 @@ class AnalysisWorker:
         user_id: uuid.UUID,
         file_count: int,
         exc: BaseException,
+        notify: bool = True,
     ) -> None:
         if isinstance(exc, AppError):
             code, message = str(exc.code), exc.message
@@ -210,7 +217,8 @@ class AnalysisWorker:
             code, message = "UNEXPECTED", _UNEXPECTED_MESSAGE
         AnalysisJobRepository(db).mark_failed(job_id, code=code, message=message)
         try:
-            notify_analysis_failed(db, user_id, job_id)
+            if notify:
+                notify_analysis_failed(db, user_id, job_id)
         finally:
             _discard_inputs(user_id, job_id, file_count)
 
@@ -245,13 +253,17 @@ def recover_expired_leases(db: Session) -> int:
     for job_id, user_id in stale:
         job = db.get(AnalysisJob, job_id)
         file_count = len(job.file_names or []) if job is not None else 0
+        # 행을 못 읽으면 알리지 않는다 — 채팅 첨부(notify=false)에 알림이 새는 쪽보다
+        # 알림 하나를 빠뜨리는 쪽이 낫다. 실패 자체는 아래 로그와 job.status 에 남는다.
+        notify = job.notify if job is not None else False
         logger.warning(
             "lease 만료 및 재시도 한도 소진으로 분석 실패 job_id=%s user_id=%s",
             job_id,
             user_id,
         )
         try:
-            notify_analysis_failed(db, user_id, job_id)
+            if notify:
+                notify_analysis_failed(db, user_id, job_id)
         finally:
             _discard_inputs(user_id, job_id, file_count)
     if requeued:

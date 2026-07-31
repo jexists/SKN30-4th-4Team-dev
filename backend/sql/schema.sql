@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS chat_message (
     response_time  integer,
     created_at     timestamptz NOT NULL DEFAULT now()
 );
+-- 이 메시지와 함께 보낸 첨부파일. [{"name": "계약서.pdf", "kind": "pdf"}] 형태로,
+-- **파일명과 종류만** 담는다 — 원본 바이트는 워커가 분석을 끝내며 지우므로 서버에 없다.
+-- 첨부 자체(어떤 계약서를 참고하는가)는 chat_room.analysis_job_id 가 들고, 이 컬럼은
+-- "어느 메시지에 무엇을 붙여 보냈는가" 라는 대화 기록만 담당한다.
+ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS attachments jsonb;
+
 CREATE INDEX IF NOT EXISTS idx_chat_message_room ON chat_message (chat_room_id, created_at);
 
 -- 12. document — 지식베이스 원문 메타
@@ -303,6 +309,12 @@ CREATE TABLE IF NOT EXISTS analysis_job (
 -- result 가 아니라 job 에 두는 이유: 목록은 analysis_job 기준이고, 실패한 분석에는
 -- analysis_result 행이 아예 없다. 두 곳이 같은 사실을 표현하면 불일치만 생긴다.
 ALTER TABLE analysis_job ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+-- 이 작업의 결과를 알림으로 알릴지. 채팅 첨부(false)는 대화 안에서 진행·결과를 그대로
+-- 보여주므로 벨 배지·토스트까지 뜨면 같은 사실이 두 번 전달된다. 완료·실패 알림은 워커가
+-- 만들기 때문에 "알리지 말 것" 이 요청이 아니라 행에 남아 있어야 한다.
+-- 기본값 true — 분석 화면(/analyze)에서 올린 기존 행은 그대로 알림을 받는다.
+ALTER TABLE analysis_job ADD COLUMN IF NOT EXISTS notify boolean NOT NULL DEFAULT true;
 
 -- 목록 조회가 지운 행을 훑지 않도록 살아 있는 행만 담는다. 아래 alive 인덱스가 대체하므로
 -- 예전 전체 인덱스는 지운다(같은 컬럼을 두 번 갱신할 이유가 없다).

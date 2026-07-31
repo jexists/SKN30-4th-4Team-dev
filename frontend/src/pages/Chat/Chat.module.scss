@@ -1,5 +1,5 @@
-@use "../../styles/variables" as v;
-@use "../../styles/typography" as t;
+@use '../../styles/variables' as v;
+@use '../../styles/typography' as t;
 
 .page {
   // 공통 헤더(App.tsx)를 제외한 남은 높이를 그대로 채운다.
@@ -689,6 +689,27 @@
   }
 }
 
+/* 첨부를 읽는 동안의 자리표시. 답변이 오면 이 말풍선이 통째로 교체된다.
+   점 세 개는 '아직 도는 중' 이라는 신호일 뿐이라 장식(aria-hidden)이다. */
+.pendingText {
+  display: inline-flex;
+  align-items: center;
+  gap: v.$space-2;
+  color: v.$slate;
+}
+.pendingDots {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9aa6c4;
+  animation: chatBlink 1.2s infinite ease-in-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pendingDots {
+    animation: none;
+  }
+}
+
 /* 법률 분석 결과 카드 */
 .analysisCard {
   background: v.$blue-soft;
@@ -788,48 +809,99 @@
   border-top: 1px solid #f0f1f4;
   background: v.$surface;
 }
-/* 첨부한 계약서 칩 — 입력창 바로 위. 상태(읽는 중/참고 중/실패)를 한 줄로 보여준다. */
-.attachment {
+/* '이 대화가 참고 중인 계약서' 배지 — 프리뷰보다 위, 한 줄로 얇게.
+   아직 안 보낸 파일(프리뷰)과 이미 읽고 있는 계약서는 다른 사실이라 층을 나눈다. */
+.roomDoc {
   display: flex;
   align-items: center;
   gap: v.$space-2;
   margin-bottom: v.$space-2;
-  padding: v.$space-2 v.$space-2 v.$space-2 v.$space-3;
-  border: 1px solid v.$border-strong;
+  padding: v.$space-1 v.$space-2 v.$space-1 v.$space-3;
   border-radius: v.$radius-pill;
+  background: v.$blue-soft;
+  color: v.$slate;
+  @include t.caption;
+}
+.roomDocIcon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+.roomDocText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roomDocRemove {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: v.$space-1 v.$space-2;
+  border: none;
+  border-radius: v.$radius-pill;
+  background: transparent;
+  color: v.$slate;
+  cursor: pointer;
+  @include t.label;
+
+  &:hover {
+    background: v.$surface;
+    color: v.$ink;
+  }
+}
+
+/* 첨부파일 목록. 입력창 프리뷰(밝은 배경)와 사용자 말풍선 안(어두운 배경)이 함께 쓴다 —
+   보내기 전과 보낸 뒤가 같은 모양이라야 "같은 것" 으로 읽힌다. */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-2;
+  margin: 0 0 v.$space-2;
+  padding: 0;
+  list-style: none;
+}
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  max-width: 100%;
+  padding: v.$space-1 v.$space-2;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-sm;
   background: v.$blue-soft;
   color: v.$ink;
   @include t.caption;
 }
-.attachmentFailed {
-  border-color: v.$red;
-  background: v.$red-soft;
-  color: v.$red;
+.attachmentThumb {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: v.$radius-xs;
+  object-fit: cover;
 }
 .attachmentIcon {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: v.$radius-xs;
+  background: v.$surface;
+  color: v.$slate;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
 }
 .attachmentName {
-  // 파일명이 길어도 칩이 입력창을 밀어내지 않게 이 칸만 줄인다.
+  // 파일명이 길어도 칩이 입력창·말풍선을 밀어내지 않게 이 칸만 줄인다.
   min-width: 0;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-}
-.attachmentState {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: v.$slate;
-
-  .attachmentFailed & {
-    color: inherit;
-  }
 }
 .attachmentRemove {
   flex-shrink: 0;
@@ -849,6 +921,19 @@
   }
   &:hover {
     background: v.$surface;
+  }
+}
+
+/* 말풍선 안 변형. 사용자 말풍선은 navy 배경이라 밝은 칩을 그대로 쓰면 눈에 튄다. */
+.attachmentsOnDark {
+  .attachment {
+    border-color: v.$navy-700;
+    background: v.$navy-800;
+    color: v.$text-on-dark;
+  }
+  .attachmentIcon {
+    background: v.$navy-700;
+    color: v.$text-on-dark-muted;
   }
 }
 
@@ -1089,6 +1174,53 @@
   height: 15px;
 }
 
+/* 첨부를 못 읽고 답한 경우의 경고 줄 — 답변 말풍선 위에 붙는다.
+   답변 자체는 정상이므로 red 가 아니라 amber 다(오류가 아니라 '반쪽만 봤다'는 뜻).
+   글자는 .citation 과 같이 중립색($ink/$slate)으로 두고 amber 는 신호로만 쓴다 — amber 를
+   본문 색으로 쓰면 amber-soft 배경 위에서 대비가 무너진다(design.md §시맨틱). */
+.degradedNotice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: v.$space-2;
+  margin-bottom: v.$space-2;
+  padding: v.$space-2 v.$space-3;
+  border-radius: v.$radius-md;
+  border-left: 4px solid v.$amber;
+  background: v.$amber-soft;
+}
+.degradedIcon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: v.$amber;
+}
+.degradedText {
+  @include t.body-sm;
+  color: v.$ink;
+  // 사유가 길어도 버튼을 다음 줄로 밀어내며 읽히게 둔다.
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.degradedRetry {
+  display: inline-flex;
+  align-items: center;
+  gap: v.$space-1;
+  flex: none;
+  padding: v.$space-1 v.$space-3;
+  border: 1px solid v.$amber;
+  border-radius: v.$radius-sm;
+  background: v.$surface;
+  color: v.$ink;
+  @include t.button-text-sm;
+  cursor: pointer;
+  transition: background v.$transition-base;
+
+  &:hover {
+    background: v.$surface-raised;
+  }
+}
+
 /* 스켈레톤(방 열기 로딩) */
 .skeletonWrap {
   display: flex;
@@ -1281,6 +1413,15 @@
   .botCol,
   .bubbleUser {
     max-width: 88%;
+  }
+  // 좁은 화면에서 파일명이 칩을 화면 밖으로 밀지 않게 한 단계 더 줄인다.
+  .attachmentName {
+    max-width: 120px;
+  }
+  .attachmentThumb,
+  .attachmentIcon {
+    width: 28px;
+    height: 28px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

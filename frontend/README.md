@@ -20,12 +20,12 @@ npm run dev
 
 `.env.example` 을 `.env` 로 복사해 채웁니다. 읽는 곳은 [`src/config/env.ts`](src/config/env.ts) 한 곳뿐입니다.
 
-| 키 | 설명 |
-| --- | --- |
-| `VITE_API_BASE_URL` | 백엔드 주소. **비우는 게 기본** — 아래 참고 |
-| `VITE_SUPABASE_URL` | Supabase Project URL (대시보드 → Settings → API) |
-| `VITE_SUPABASE_ANON_KEY` | anon public 키. 공개키라 프론트 노출 OK |
-| `VITE_KAKAO_MAP_JS_KEY` | 카카오맵 **JavaScript 키**. 선택 — 비우면 지도 대신 대체 화면 |
+| 키                       | 설명                                                          |
+| ------------------------ | ------------------------------------------------------------- |
+| `VITE_API_BASE_URL`      | 백엔드 주소. **비우는 게 기본** — 아래 참고                   |
+| `VITE_SUPABASE_URL`      | Supabase Project URL (대시보드 → Settings → API)              |
+| `VITE_SUPABASE_ANON_KEY` | anon public 키. 공개키라 프론트 노출 OK                       |
+| `VITE_KAKAO_MAP_JS_KEY`  | 카카오맵 **JavaScript 키**. 선택 — 비우면 지도 대신 대체 화면 |
 
 - **`VITE_API_BASE_URL` 은 비워두세요.** 비면 상대경로(`/api/...`)로 요청하고 vite 프록시가 `:8000` 으로 넘겨줍니다 — 같은 오리진이라 CORS 가 발생하지 않습니다. 값을 넣으면 브라우저가 그 주소를 직접 호출하므로 백엔드 `CORS_ORIGINS` 에 오리진을 추가해야 합니다.
 - **Supabase 값 둘 중 하나라도 비면 인증이 통째로 꺼집니다.** 로그인·회원가입 화면이 "설정 필요" 안내로 바뀌고, 토큰이 없으니 보호 엔드포인트는 401, 채팅 기록도 저장되지 않습니다 (앱 자체는 그대로 동작).

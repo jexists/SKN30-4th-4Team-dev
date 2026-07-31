@@ -36,6 +36,7 @@ class AnalysisJobRepository:
         file_names: Sequence[str],
         idempotency_key: str | None = None,
         job_id: uuid.UUID | None = None,
+        notify: bool = True,
     ) -> AnalysisJob:
         job = AnalysisJob(
             id=job_id or uuid.uuid4(),
@@ -43,6 +44,7 @@ class AnalysisJobRepository:
             file_names=list(file_names),
             idempotency_key=idempotency_key,
             status=JobStatus.QUEUED.value,
+            notify=notify,
         )
         self.db.add(job)
         return job

@@ -21,6 +21,12 @@ class ChatRequest(BaseModel):
     room_id: str | None = Field(
         default=None, description="첨부 계약서를 찾을 대화방 id (없으면 일반 질문)"
     )
+    # 첨부 실패로 질문까지 버리지 않기 위한 플래그. 프론트가 OCR·분석 단계에서 실패했을 때
+    # 계약서 없이 그대로 물어보며 켠다 — 모델이 답을 지어내지 않고 "못 읽었다"고 먼저 밝히게
+    # 하려는 것이다. 기본값이 False 라 이 필드를 모르는 예전 클라이언트도 그대로 동작한다.
+    attachment_failed: bool = Field(
+        default=False, description="이번 턴에 올린 첨부를 읽지 못했는지(OCR·분석 실패)"
+    )
 
 
 class ChatResponse(BaseModel):
@@ -30,6 +36,20 @@ class ChatResponse(BaseModel):
 
 # ── 대화 기록(chat_room / chat_message) ────────────────────────────────
 DbRole = Literal["USER", "ASSISTANT", "SYSTEM"]
+
+#: 한 메시지에 붙일 수 있는 첨부 개수. 분석 업로드 상한(analysis.py)과 같은 크기로 둔다.
+MAX_MESSAGE_ATTACHMENTS = 10
+
+
+class MessageAttachment(BaseModel):
+    """메시지와 함께 보낸 첨부파일 한 개.
+
+    **파일명과 종류만** 담는다 — 원본은 분석이 끝나면 지워지므로 서버가 다시 내려줄 수 없다.
+    그래서 화면은 새로고침 뒤 썸네일 대신 아이콘 + 파일명으로 그린다(의도된 폴백).
+    """
+
+    name: str = Field(min_length=1, max_length=255)
+    kind: Literal["image", "pdf", "file"] = "file"
 
 
 class CreateRoomIn(BaseModel):
@@ -60,6 +80,9 @@ class ChatRoomOut(BaseModel):
     analysis_job_id: str | None = None
     # 칩에 표시할 파일명(analysis_job.file_names 의 첫 항목). 첨부가 없으면 None.
     analysis_file_name: str | None = None
+    # 첨부한 파일 전체. 한 번에 여러 장을 올릴 수 있어 "계약서 3개 참고 중" 을 그리려면
+    # 개수가 필요하다. analysis_file_name 은 기존 호출자를 위해 그대로 둔다.
+    analysis_file_names: list[str] = Field(default_factory=list)
     # 목록 카드에 보여줄 마지막 메시지 한 줄. 메시지가 없으면 None.
     last_message_preview: str | None = None
 
@@ -81,6 +104,24 @@ class AddMessageIn(BaseModel):
     role: DbRole
     content: str = Field(min_length=1, max_length=20000)
     response_time: int | None = None
+    attachments: list[MessageAttachment] = Field(
+        default_factory=list, max_length=MAX_MESSAGE_ATTACHMENTS
+    )
+
+
+class UpdateMessageIn(BaseModel):
+    """이미 저장된 메시지의 본문(과 응답시간)을 교체한다.
+
+    첨부를 읽지 못한 채 답한 뒤 '파일 다시 첨부' 로 재시도해 성공하면, 화면에서만 실패 답변을
+    걷어내서는 부족하다 — 새로고침하면 DB 에 남은 실패 답변과 재시도 답변이 둘 다 보인다.
+    그래서 새로 저장하지 않고 기존 행을 갈아끼운다. created_at 은 건드리지 않으므로 대화
+    순서도 그대로다.
+
+    content 상한은 AddMessageIn 과 같다 — 같은 컬럼에 들어가는 같은 성격의 본문이다.
+    """
+
+    content: str = Field(min_length=1, max_length=20000)
+    response_time: int | None = None
 
 
 class ChatMessageOut(BaseModel):
@@ -88,3 +129,5 @@ class ChatMessageOut(BaseModel):
     role: DbRole
     content: str
     created_at: datetime
+    # 저장된 게 없으면 빈 배열. 프론트가 None 분기를 갖지 않도록 여기서 통일한다.
+    attachments: list[MessageAttachment] = Field(default_factory=list)

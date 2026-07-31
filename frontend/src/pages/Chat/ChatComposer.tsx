@@ -1,8 +1,10 @@
 import { useLayoutEffect, useRef } from 'react'
 
-import { Close, FileLines, Info, Paperclip, Send, Warn } from '../../components/icons'
+import { FileLines, Info, Paperclip, Send } from '../../components/icons'
+import { ACCEPT_ATTR } from '../../utils/uploadFiles'
+import { AttachmentList } from './AttachmentList'
 import styles from './Chat.module.scss'
-import type { Attachment } from './types'
+import type { PendingFile, RoomAttachment } from './types'
 
 interface Props {
   value: string
@@ -16,27 +18,25 @@ interface Props {
    */
   notice?: string
   maxLength: number
-  /** 이 대화에 첨부된 계약서. 없으면 칩을 그리지 않는다. */
-  attachment?: Attachment | null
-  onAttach: (file: File) => void
-  onRemoveAttachment: () => void
+  /** 아직 보내지 않은 첨부파일. 전송할 때 함께 올라간다. */
+  pendingFiles: PendingFile[]
+  onPickFiles: (files: File[]) => void
+  onRemovePendingFile: (key: string) => void
+  /** 이 대화가 지금 참고 중인 계약서. 없으면 배지를 그리지 않는다. */
+  roomAttachment?: RoomAttachment | null
+  onDetachRoomDocument: () => void
 }
 
 const PLACEHOLDER = '법률적인 상황을 설명해주세요...'
 const MAX_HEIGHT = 200 // px — 이 높이까지 늘고 그 뒤엔 내부 스크롤
-/** 백엔드 업로드 검증(analysis.py)과 같은 목록. 여기서 먼저 걸러 헛왕복을 줄인다. */
-const ACCEPT = '.pdf,.png,.jpg,.jpeg'
-
-const STATE_TEXT: Record<Attachment['state'], string> = {
-  PREPARING: '올리는 중…',
-  PROCESSING: '계약서를 읽는 중…',
-  READY: '이 대화에서 참고 중',
-  FAILED: '첨부 실패',
-}
 
 /**
  * 하단 고정 입력창. Enter 전송 / Shift+Enter 줄바꿈, 내용이 길어지면 높이만 증가(상한 후 내부 스크롤),
- * 전송 중엔 비활성. 첨부한 계약서는 입력창 위 칩으로 상태를 보여준다.
+ * 전송 중엔 비활성.
+ *
+ * 첨부는 두 층이다 — 입력창 위 **프리뷰**(아직 안 보낸 파일, ✕ 로 뺄 수 있다)와 그 위
+ * **참고 중 배지**(이 대화가 읽고 있는 계약서). 파일을 고르는 것만으로는 아무것도 업로드하지
+ * 않는다. 전송해야 올라가고, 그래야 ✕ 가 취소할 대상이 분명해진다.
  */
 export function ChatComposer({
   value,
@@ -45,9 +45,11 @@ export function ChatComposer({
   disabled,
   notice,
   maxLength,
-  attachment,
-  onAttach,
-  onRemoveAttachment,
+  pendingFiles,
+  onPickFiles,
+  onRemovePendingFile,
+  roomAttachment,
+  onDetachRoomDocument,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -60,8 +62,12 @@ export function ChatComposer({
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`
   }, [value])
 
+  // 첨부만 두고 보내는 것도 뜻이 분명한 요청이다("이거 봐줘") — 이때 무엇을 물었는지는
+  // Chat 이 기본 문구로 채운다. 빈 문자열은 서버가 422 로 막는다.
+  const canSubmit = Boolean(value.trim()) || pendingFiles.length > 0
+
   function submit() {
-    if (!disabled && value.trim()) onSubmit()
+    if (!disabled && canSubmit) onSubmit()
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -71,43 +77,45 @@ export function ChatComposer({
     }
   }
 
-  function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    // 같은 파일을 다시 골라도 change 가 오도록 값을 비운다(첨부 실패 후 재시도).
+  function pickFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    // 같은 파일을 다시 골라도 change 가 오도록 값을 비운다(뺐다가 다시 담는 경우).
     e.target.value = ''
-    if (file) onAttach(file)
+    if (files.length > 0) onPickFiles(files)
   }
-
-  // 처리 중에는 새 파일을 받지 않는다 — 회원당 진행 중 분석이 1건이라 어차피 거절된다.
-  const busy = attachment?.state === 'PREPARING' || attachment?.state === 'PROCESSING'
-  const failed = attachment?.state === 'FAILED'
 
   return (
     <div className={styles.composer}>
-      {attachment && (
-        <div
-          className={`${styles.attachment} ${failed ? styles.attachmentFailed : ''}`}
-          role="status"
-        >
-          {failed ? (
-            <Warn className={styles.attachmentIcon} />
-          ) : (
-            <FileLines className={styles.attachmentIcon} />
-          )}
-          <span className={styles.attachmentName}>{attachment.fileName}</span>
-          <span className={styles.attachmentState}>
-            {attachment.message ?? STATE_TEXT[attachment.state]}
+      {roomAttachment && roomAttachment.fileNames.length > 0 && (
+        <div className={styles.roomDoc} role="status">
+          <FileLines className={styles.roomDocIcon} />
+          <span className={styles.roomDocText}>
+            {roomAttachment.fileNames[0]}
+            {roomAttachment.fileNames.length > 1 &&
+              ` 외 ${roomAttachment.fileNames.length - 1}개`}{' '}
+            참고 중
           </span>
           <button
             type="button"
-            className={styles.attachmentRemove}
-            aria-label="첨부 해제"
-            onClick={onRemoveAttachment}
+            className={styles.roomDocRemove}
+            aria-label="참고 중인 계약서 해제"
+            onClick={onDetachRoomDocument}
           >
-            <Close />
+            해제
           </button>
         </div>
       )}
+
+      <AttachmentList
+        items={pendingFiles.map((f) => ({
+          key: f.key,
+          name: f.file.name,
+          kind: f.kind,
+          previewUrl: f.previewUrl,
+        }))}
+        variant="composer"
+        onRemove={onRemovePendingFile}
+      />
 
       <form
         className={styles.inputBar}
@@ -120,17 +128,19 @@ export function ChatComposer({
           ref={fileRef}
           type="file"
           className={styles.fileInput}
-          accept={ACCEPT}
-          onChange={pickFile}
+          accept={ACCEPT_ATTR}
+          multiple
+          onChange={pickFiles}
           tabIndex={-1}
           aria-hidden="true"
         />
         <button
           type="button"
           className={styles.attachBtn}
-          aria-label="계약서 첨부"
-          title={busy ? '계약서를 읽는 중입니다' : '계약서 첨부 (PDF·PNG·JPG)'}
-          disabled={busy}
+          aria-label="파일 첨부"
+          title="파일 첨부 (PDF·PNG·JPG)"
+          // 전송 중에만 잠근다 — 고르는 것 자체는 업로드가 아니라서 막을 이유가 없다.
+          disabled={disabled}
           onClick={() => fileRef.current?.click()}
         >
           <Paperclip />
@@ -151,7 +161,7 @@ export function ChatComposer({
           aria-label="전송"
           // 이미 초안을 써둬 플레이스홀더가 가려진 경우에도 이유를 확인할 수 있게.
           title={notice}
-          disabled={disabled || !value.trim()}
+          disabled={disabled || !canSubmit}
         >
           <Send />
         </button>

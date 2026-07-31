@@ -27,7 +27,7 @@ import {
   formatFileSize,
   isPdf,
   mergeFiles,
-} from './uploadFiles'
+} from '../../utils/uploadFiles'
 
 type SlotKey = 'register' | 'contract' | 'building'
 

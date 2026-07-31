@@ -33,6 +33,36 @@ function renderList({
   )
 }
 
+describe('메시지 안의 첨부', () => {
+  it('사용자 말풍선에 보낸 파일이 질문과 함께 남는다', () => {
+    renderList({
+      messages: [
+        {
+          id: 'm1',
+          role: 'user',
+          content: '계약서 분석해줘',
+          attachments: [
+            { name: '계약서.pdf', kind: 'pdf' },
+            { name: '등기부.jpg', kind: 'image' },
+          ],
+        },
+      ],
+    })
+
+    expect(screen.getByText('계약서 분석해줘')).toBeInTheDocument()
+    expect(screen.getByText('계약서.pdf')).toBeInTheDocument()
+    expect(screen.getByText('등기부.jpg')).toBeInTheDocument()
+  })
+
+  it('첨부를 읽는 동안에는 진행 말풍선을 보여준다', () => {
+    renderList({
+      messages: [{ id: 'm1', role: 'assistant', content: '계약서를 읽고 있습니다', pending: true }],
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('계약서를 읽고 있습니다')
+  })
+})
+
 function scrollUp() {
   const thread = screen.getByTestId('message-scroll')
   Object.defineProperties(thread, {

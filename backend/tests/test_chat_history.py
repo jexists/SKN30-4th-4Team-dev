@@ -109,6 +109,211 @@ def test_add_message_and_read_back(history_client):
     assert msgs[0]["content"] == "보증금 언제 돌려받나요?"
 
 
+def test_message_attachments_survive_a_reload(history_client):
+    """첨부는 메시지에 남아야 한다 — 방(analysis_job_id)만 알면 '어느 메시지에 무엇을
+    붙여 보냈는지' 를 복원할 수 없어 대화를 다시 열면 파일이 사라진다."""
+    client, _ = history_client
+    room_id = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]["id"]
+
+    created = client.post(
+        f"/api/v1/chat/rooms/{room_id}/messages",
+        json={
+            "role": "USER",
+            "content": "계약서 분석해줘",
+            "attachments": [
+                {"name": "계약서.pdf", "kind": "pdf"},
+                {"name": "등기부.jpg", "kind": "image"},
+            ],
+        },
+    )
+    assert created.status_code == 200
+    assert [a["name"] for a in created.json()["data"]["attachments"]] == [
+        "계약서.pdf",
+        "등기부.jpg",
+    ]
+
+    msgs = client.get(f"/api/v1/chat/rooms/{room_id}/messages").json()["data"]["items"]
+    assert [a["kind"] for a in msgs[0]["attachments"]] == ["pdf", "image"]
+
+
+def test_message_without_attachments_reads_back_as_empty_list(history_client):
+    """예전 메시지는 컬럼이 NULL 이다 — 프론트가 None 분기를 갖지 않도록 []로 정규화한다."""
+    client, _ = history_client
+    room_id = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]["id"]
+
+    created = client.post(
+        f"/api/v1/chat/rooms/{room_id}/messages", json={"role": "USER", "content": "안녕"}
+    )
+
+    assert created.json()["data"]["attachments"] == []
+    msgs = client.get(f"/api/v1/chat/rooms/{room_id}/messages").json()["data"]["items"]
+    assert msgs[0]["attachments"] == []
+
+
+def test_add_message_rejects_too_many_attachments(history_client):
+    client, _ = history_client
+    room_id = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]["id"]
+
+    response = client.post(
+        f"/api/v1/chat/rooms/{room_id}/messages",
+        json={
+            "role": "USER",
+            "content": "분석해줘",
+            "attachments": [{"name": f"{i}.pdf", "kind": "pdf"} for i in range(11)],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+# ── 메시지 교체 (첨부 실패 답변 → 재시도 답변) ─────────────────────────
+# 화면에서만 실패 답변을 걷어내면 DB 에는 남는다 → 새로고침하면 답변이 둘로 보인다.
+
+
+def _room_with_degraded_answer(client) -> tuple[str, dict]:
+    """질문 + '파일을 읽지 못했다' 답변까지 저장된 방을 만든다."""
+    room_id = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]["id"]
+    client.post(
+        f"/api/v1/chat/rooms/{room_id}/messages",
+        json={"role": "USER", "content": "이 계약서 봐줘"},
+    )
+    degraded = client.post(
+        f"/api/v1/chat/rooms/{room_id}/messages",
+        json={
+            "role": "ASSISTANT",
+            "content": "첨부하신 파일을 읽지 못했습니다.",
+            "response_time": 900,
+        },
+    ).json()["data"]
+    return room_id, degraded
+
+
+def test_update_message_replaces_answer_and_keeps_order(history_client):
+    """재시도 답변은 새 행이 아니라 기존 행을 갈아끼운다 — 다시 조회해도 답변은 하나다."""
+    client, _ = history_client
+    room_id, degraded = _room_with_degraded_answer(client)
+
+    resp = client.put(
+        f"/api/v1/chat/rooms/{room_id}/messages/{degraded['id']}",
+        json={"content": "계약서를 확인한 답변입니다.", "response_time": 1500},
+    )
+
+    assert resp.status_code == 200
+    updated = resp.json()["data"]
+    assert updated["id"] == degraded["id"]
+    assert updated["content"] == "계약서를 확인한 답변입니다."
+    # created_at 을 건드리면 대화 순서(커서 정렬)가 흐트러진다.
+    assert updated["created_at"] == degraded["created_at"]
+
+    # 새로고침(재조회)해도 실패 답변과 재시도 답변이 둘 다 남아 있으면 안 된다.
+    msgs = client.get(f"/api/v1/chat/rooms/{room_id}/messages").json()["data"]["items"]
+    assert [m["content"] for m in msgs] == ["이 계약서 봐줘", "계약서를 확인한 답변입니다."]
+
+
+def test_update_message_keeps_room_order(history_client):
+    """답변 교체는 새 대화가 아니다 — last_chat_at 이 바뀌면 목록에서 방이 튀어 오른다."""
+    client, _ = history_client
+    first_room, degraded = _room_with_degraded_answer(client)
+    second_room = client.post("/api/v1/chat/rooms", json={"title": "나중"}).json()["data"]["id"]
+    client.post(
+        f"/api/v1/chat/rooms/{second_room}/messages", json={"role": "USER", "content": "안녕"}
+    )
+
+    before = [r["id"] for r in client.get("/api/v1/chat/rooms").json()["data"]["items"]]
+    client.put(
+        f"/api/v1/chat/rooms/{first_room}/messages/{degraded['id']}",
+        json={"content": "교체된 답변"},
+    )
+    after = [r["id"] for r in client.get("/api/v1/chat/rooms").json()["data"]["items"]]
+
+    assert before == [second_room, first_room]
+    assert after == before
+
+
+def test_update_others_message_404(history_client):
+    """남의 방 메시지는 id 를 알아도 고칠 수 없다(존재 여부도 알려주지 않는다)."""
+    client, set_user = history_client
+    room_id, degraded = _room_with_degraded_answer(client)
+
+    set_user(USER_B)
+    resp = client.put(
+        f"/api/v1/chat/rooms/{room_id}/messages/{degraded['id']}", json={"content": "침입"}
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["error"]["title"] == "대화를 찾을 수 없습니다"
+
+    # 원본은 그대로다.
+    set_user(USER_A)
+    msgs = client.get(f"/api/v1/chat/rooms/{room_id}/messages").json()["data"]["items"]
+    assert msgs[-1]["content"] == "첨부하신 파일을 읽지 못했습니다."
+
+
+def test_update_message_from_another_room_404(history_client):
+    """내 방이어도 그 방에 속하지 않는 메시지는 고칠 수 없다."""
+    client, _ = history_client
+    _, degraded = _room_with_degraded_answer(client)
+    other_room = client.post("/api/v1/chat/rooms", json={"title": "다른 방"}).json()["data"]["id"]
+
+    resp = client.put(
+        f"/api/v1/chat/rooms/{other_room}/messages/{degraded['id']}", json={"content": "교체"}
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["error"]["title"] == "메시지를 찾을 수 없습니다"
+
+
+@pytest.mark.parametrize("message_id", ["not-a-uuid", str(uuid.uuid4())])
+def test_update_unknown_message_404(history_client, message_id):
+    client, _ = history_client
+    room_id = client.post("/api/v1/chat/rooms", json={"title": "질문"}).json()["data"]["id"]
+
+    resp = client.put(
+        f"/api/v1/chat/rooms/{room_id}/messages/{message_id}", json={"content": "교체"}
+    )
+
+    assert resp.status_code == 404
+
+
+def test_update_message_rejects_invalid_content(history_client):
+    """빈 본문·상한(20000자) 초과는 422 — 저장 API 와 같은 규칙이다.
+
+    (파라미터라이즈하지 않는 이유는 20001자가 테스트 id 로 환경변수에 실려 Windows 상한을
+    넘기 때문이다. test_add_message_rejects_oversized_content 도 같은 이유로 인라인이다.)
+    """
+    client, _ = history_client
+    room_id, degraded = _room_with_degraded_answer(client)
+    path = f"/api/v1/chat/rooms/{room_id}/messages/{degraded['id']}"
+
+    empty = client.put(path, json={"content": ""})
+    too_long = client.put(path, json={"content": "가" * 20001})
+
+    assert empty.status_code == 422
+    assert too_long.status_code == 422
+
+
+def test_update_message_requires_auth(client):
+    """require_user 오버라이드 없는 기본 client → 인증 없이 고칠 수 없다."""
+    resp = client.put(
+        f"/api/v1/chat/rooms/{uuid.uuid4()}/messages/{uuid.uuid4()}", json={"content": "교체"}
+    )
+
+    assert resp.status_code == 401
+    assert resp.json()["error"]["title"] == "로그인 필요"
+
+
+def test_update_message_has_no_toast_message(history_client):
+    """답변 교체는 말풍선이 바뀌는 것으로 이미 보인다 — 토스트까지 띄우면 중복이다."""
+    client, _ = history_client
+    room_id, degraded = _room_with_degraded_answer(client)
+
+    resp = client.put(
+        f"/api/v1/chat/rooms/{room_id}/messages/{degraded['id']}", json={"content": "교체된 답변"}
+    )
+
+    assert resp.json()["message"] == ""
+
+
 def test_list_rooms_preview_is_latest_message_and_none_when_empty(history_client):
     client, _ = history_client
     empty_room = client.post("/api/v1/chat/rooms", json={"title": "아직 대화 없음"}).json()["data"]

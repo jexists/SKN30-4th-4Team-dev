@@ -28,9 +28,20 @@ export interface ChatRoom {
    * 방 정보로 내려오므로 새로고침하거나 대화를 다시 열어도 첨부 칩이 복원된다.
    */
   analysis_job_id: string | null
-  /** 칩에 표시할 파일명. 첨부가 없으면 null. */
+  /** 표시용 파일명(첫 파일). 첨부가 없으면 null. */
   analysis_file_name: string | null
+  /**
+   * 첨부한 파일 전부. 한 번에 여러 장을 올릴 수 있어 "계약서 N개 참고 중" 에 쓴다.
+   * 배포 순서상 이 필드를 모르는 서버가 있을 수 있어 optional 로 둔다.
+   */
+  analysis_file_names?: string[]
   last_message_preview: string | null
+}
+
+/** 서버에 저장되는 첨부 정보 — 이름과 종류뿐이다(원본은 분석 후 지워진다). */
+export interface MessageAttachmentRow {
+  name: string
+  kind: 'image' | 'pdf' | 'file'
 }
 
 export interface ChatMessageRow {
@@ -38,6 +49,8 @@ export interface ChatMessageRow {
   role: DbRole
   content: string
   created_at: string
+  /** 저장된 게 없으면 빈 배열(서버가 정규화해서 내려준다). */
+  attachments: MessageAttachmentRow[]
 }
 
 const PAGE_SIZE = 30
@@ -52,7 +65,10 @@ function withCursor(path: string, cursor?: string | null, limit: number = PAGE_S
 }
 
 /** 내 채팅방 목록 (최신순, 한 페이지). cursor 로 다음(과거) 페이지. */
-export function listRooms(cursor?: string | null, limit: number = PAGE_SIZE): Promise<Page<ChatRoom>> {
+export function listRooms(
+  cursor?: string | null,
+  limit: number = PAGE_SIZE,
+): Promise<Page<ChatRoom>> {
   return apiGet<Page<ChatRoom>>(withCursor('/api/v1/chat/rooms', cursor, limit))
 }
 
@@ -104,15 +120,41 @@ export function detachDocument(roomId: string): Promise<ChatRoom> {
   return apiDelete<ChatRoom>(`/api/v1/chat/rooms/${roomId}/document`)
 }
 
-/** 메시지 저장. 방 last_chat_at/updated_at 갱신은 백엔드가 함께 처리한다. */
+/**
+ * 메시지 저장. 방 last_chat_at/updated_at 갱신은 백엔드가 함께 처리한다.
+ *
+ * attachments 는 "이 메시지에 무엇을 붙여 보냈는가" 라는 대화 기록이다. 지금 참고 중인
+ * 계약서(방 단위)와는 별개라, 새 계약서를 첨부해도 옛 메시지의 첨부 표시는 그대로 남는다.
+ */
 export function addMessage(
   roomId: string,
   role: DbRole,
   content: string,
   responseTime?: number,
+  attachments?: MessageAttachmentRow[],
 ): Promise<ChatMessageRow> {
   return apiPost<ChatMessageRow>(`/api/v1/chat/rooms/${roomId}/messages`, {
     role,
+    content,
+    response_time: responseTime ?? null,
+    attachments: attachments ?? [],
+  })
+}
+
+/**
+ * 이미 저장된 메시지의 본문을 교체한다 — 첨부를 못 읽고 답한 말풍선을 재시도 답변으로 갈아끼울 때.
+ *
+ * 새로 저장하지 않는 이유는 새로고침 때문이다. 화면에서만 실패 답변을 걷어내면 DB 에는 남아,
+ * 대화를 다시 열었을 때 실패 답변과 재시도 답변이 둘 다 보인다. created_at 은 서버가 건드리지
+ * 않으므로 대화 순서도 유지된다. 소유권(내 방의 메시지인지)은 백엔드가 검증한다.
+ */
+export function updateMessage(
+  roomId: string,
+  messageId: string,
+  content: string,
+  responseTime?: number,
+): Promise<ChatMessageRow> {
+  return apiPut<ChatMessageRow>(`/api/v1/chat/rooms/${roomId}/messages/${messageId}`, {
     content,
     response_time: responseTime ?? null,
   })

@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Header, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.cursor import decode_cursor, encode_cursor
@@ -53,11 +53,15 @@ def start_analysis(
     user: RequireMember,
     db: AppDb,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    notify: Annotated[bool, Form()] = True,
 ) -> ApiResponse[AnalysisJobOut]:
     """분석을 접수하고 즉시 202 로 작업 id 를 돌려준다.
 
     파일 형식·개수·크기처럼 **바로 알 수 있는 문제는 여기서 동기로 막는다** — 이런 걸
     알림으로 알리면 사용자는 한참 뒤에야 오타를 알게 된다. 시간이 걸리는 OCR·LLM 만 넘긴다.
+
+    notify=false 는 채팅 첨부가 쓴다. 대화 안에서 진행 상태와 결과를 그대로 보여주므로
+    알림까지 쌓으면 같은 사실이 두 번 전달된다. 기본값이 true 라 분석 화면은 그대로다.
     """
     uid = claims_user_id(user)
     repo = AnalysisJobRepository(db)
@@ -91,6 +95,7 @@ def start_analysis(
             job_id=job_id,
             file_names=[name for name, _ in payloads],
             idempotency_key=idempotency_key,
+            notify=notify,
         )
         db.flush()
         response = success_response(_job_out(job))
@@ -108,7 +113,8 @@ def start_analysis(
         raise
 
     # 작업이 커밋된 뒤에 알림 — 실패해도 접수는 유효하다(서비스가 예외를 삼킨다).
-    notify_analysis_started(db, uid, job_id)
+    if notify:
+        notify_analysis_started(db, uid, job_id)
     # message 를 비우는 이유: 프론트가 안내 Modal 을 띄우므로 토스트까지 뜨면
     # 같은 말이 두 번 나온다.
     return response

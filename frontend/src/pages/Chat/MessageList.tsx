@@ -22,9 +22,16 @@ interface Props {
   hasMoreOlder: boolean
   /** 사용자가 전송할 때마다 증가. 과거를 보고 있어도 최신 메시지 추적을 강제로 시작한다. */
   followLatestRequest: number
+  /**
+   * 지금 재시도할 수 있는 assistant 말풍선의 id. **이 하나에만** 재시도 버튼이 붙는다.
+   *
+   * 실패 말풍선이라고 다 누를 수 있는 게 아니다 — 그 뒤로 새 질문을 보냈거나 방을 옮겼으면
+   * 재시도에 쓸 질문·파일이 이미 폐기됐고, 그래도 버튼이 남아 있으면 엉뚱한 턴이 재전송된다.
+   */
+  retryMessageId?: string | null
   onLoadOlder: () => void
   onStreamingDone: (id: string) => void
-  onRegenerate: () => void
+  onRegenerate: (messageId: string) => void
   /** 스크롤 컨테이너를 밖에서도 관찰해야 할 때(모바일 액션 감춤 등). */
   onScroll?: (event: React.UIEvent<HTMLDivElement>) => void
 }
@@ -51,6 +58,7 @@ export function MessageList({
   isLoadingOlder,
   hasMoreOlder,
   followLatestRequest,
+  retryMessageId,
   onLoadOlder,
   onStreamingDone,
   onRegenerate,
@@ -187,7 +195,7 @@ export function MessageList({
               message={m}
               onStreamingDone={onStreamingDone}
               onContentGrow={followGrow}
-              onRegenerate={m.error ? onRegenerate : undefined}
+              onRegenerate={m.id === retryMessageId ? onRegenerate : undefined}
             />
           ))
         )}

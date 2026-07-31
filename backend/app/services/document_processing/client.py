@@ -40,6 +40,14 @@ def _error_body(exc: HTTPError) -> str:
 # 막힌다 — 워커가 죽은 것처럼 보이지만 실제로는 요청이 도착조차 하지 않는다.
 _USER_AGENT = "Mozilla/5.0 (compatible; homeshield-backend/1.0)"
 
+# Worker 가 "이 문서로는 못 한다"고 판단해서 돌려주는 상태 코드. 이것만 사용자 파일 문제다
+# (415 지원하지 않는 형식 · 413 크기 초과 · 422 페이지 수 초과·마스킹 검증 실패).
+# 나머지 4xx 는 **문서와 무관한 우리 쪽 인프라 문제**다 — RunPod pod 이 내려가 프록시가 404 를
+# 주거나, Cloudflare 가 403(error 1010) 으로 막거나, API 키가 틀려 401 이 오는 경우다.
+# 이걸 뭉쳐서 422 로 내면 서버 장애를 "파일 상태를 확인해 주세요" 로 사용자에게 떠넘기고,
+# 게다가 워커의 RETRYABLE_STATUS 에 없어 재시도 없이 즉시 실패로 닫힌다.
+_DOCUMENT_REJECTED_STATUS = frozenset({413, 415, 422})
+
 
 class OcrWorkerClient:
     """내부 OCR worker의 상태 확인과 계약서 처리 API를 호출한다."""
@@ -124,17 +132,25 @@ class OcrWorkerClient:
             return result
         except HTTPError as exc:
             # 워커가 붙여 보낸 사유(FastAPI 라면 {"detail": ...})가 여기 들어 있다.
+            rejected = exc.code in _DOCUMENT_REJECTED_STATUS
             logger.warning(
-                "OCR Worker 처리 거부 status=%s %s elapsed=%.1fs body=%s",
+                "OCR Worker %s status=%s %s elapsed=%.1fs body=%s",
+                "처리 거부" if rejected else "비정상 응답",
                 exc.code,
                 context,
                 time.perf_counter() - started,
                 _error_body(exc),
             )
+            if rejected:
+                raise AppError(
+                    "계약서 처리 실패",
+                    "계약서를 OCR 처리하지 못했습니다. 파일 상태를 확인해 주세요.",
+                    422,
+                ) from exc
             raise AppError(
-                "계약서 처리 실패",
-                "계약서를 OCR 처리하지 못했습니다. 파일 상태를 확인해 주세요.",
-                422 if 400 <= exc.code < 500 else 503,
+                "OCR 서버 연결 실패",
+                "계약서 처리 서버가 응답하지 않습니다. 잠시 후 다시 시도해 주세요.",
+                503,
             ) from exc
         except (URLError, TimeoutError) as exc:
             # 타임아웃과 연결 거부는 대응이 완전히 다르다(워커가 느린 것 vs 안 떠 있는 것).

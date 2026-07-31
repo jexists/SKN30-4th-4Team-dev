@@ -17,6 +17,10 @@ export interface ChatResult {
  * **계약서 본문은 요청으로 왕복하지 않는다** — 수만 자라 매 턴 실어 보낼 수 없고,
  * 방에 붙어 있는 것이 원본이므로 id 만 넘기는 편이 정확하다.
  *
+ * attachmentFailed 는 이번 턴에 올린 파일을 읽지 못했다는 표시다(OCR·분석 실패). 첨부가
+ * 실패했다고 질문까지 버리지 않고 계약서 없이 물어보되, 서버가 모델에게 "파일을 읽지 못했다"고
+ * 먼저 밝히게 한다 — 그러지 않으면 사용자는 봇이 자기 계약서를 보고 답한 줄로 읽는다.
+ *
  * 실패는 공통 오류 모달이 아니라 **대화창의 오류 말풍선 + 재생성 버튼**으로 보여준다.
  * 질문 맥락이 남은 자리에서 바로 다시 시도하는 편이 낫고, 모달은 그 흐름을 끊는다.
  */
@@ -24,10 +28,11 @@ export function sendChat(
   message: string,
   history: ChatTurn[] = [],
   roomId?: string | null,
+  attachmentFailed = false,
 ): Promise<ChatResult> {
   return apiPost<ChatResult>(
     '/api/v1/chat',
-    { message, history, room_id: roomId ?? null },
+    { message, history, room_id: roomId ?? null, attachment_failed: attachmentFailed },
     { silent: true },
   )
 }

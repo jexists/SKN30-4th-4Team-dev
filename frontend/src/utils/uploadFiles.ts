@@ -1,10 +1,13 @@
-// 업로드 카드의 파일 검증·중복제거와 거부 사유 문구. 백엔드가 최종 게이트키퍼지만,
+// 파일 업로드의 검증·중복제거와 거부 사유 문구. 백엔드가 최종 게이트키퍼지만,
 // 여기서 먼저 걸러야 사용자가 20MB 를 다 올린 뒤에 413 을 보는 일이 없다.
+//
+// 분석 화면의 업로드 카드와 채팅 입력창이 함께 쓴다 — 두 곳의 허용 확장자·개수 상한이
+// 어긋나면 한쪽에서만 통과하고 서버에서 거절되므로 규칙을 한곳에 둔다.
 //
 // 거부는 전부 토스트로 알린다(화면에 인라인 문구를 두지 않는다) — 문구 조립까지 여기서
 // 끝내고 화면은 showToast 에 넘기기만 한다.
 
-import type { ToastType } from '../../components/Toast/toastStore'
+import type { ToastType } from '../components/Toast/toastStore'
 
 /** backend/app/api/routes/documents.py 의 허용 확장자 집합과 같아야 한다. */
 export const ACCEPTED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg'] as const

@@ -56,9 +56,9 @@ def user(session_factory) -> uuid.UUID:
     return user_id
 
 
-def _queue_job(session_factory, user_id: uuid.UUID) -> uuid.UUID:
+def _queue_job(session_factory, user_id: uuid.UUID, *, notify: bool = True) -> uuid.UUID:
     with session_factory() as db:
-        job = AnalysisJobRepository(db).create(user_id, file_names=FILE_NAMES)
+        job = AnalysisJobRepository(db).create(user_id, file_names=FILE_NAMES, notify=notify)
         db.commit()
         return job.id
 
@@ -124,9 +124,7 @@ def test_active_job_blocks_a_second_one(session_factory, user):
 # ── 성공 ──────────────────────────────────────────────────────────────
 
 
-def test_success_stores_result_and_notifies(
-    session_factory, user, monkeypatch, discarded_inputs
-):
+def test_success_stores_result_and_notifies(session_factory, user, monkeypatch, discarded_inputs):
     job_id = _queue_job(session_factory, user)
     monkeypatch.setattr(pipeline, "run_analysis", lambda *a, **k: _fake_result())
 
@@ -147,6 +145,43 @@ def test_success_stores_result_and_notifies(
         assert result.payload["analysis"]["summary"] == "요약"
 
     assert _notification_types(session_factory) == [NotificationType.ANALYSIS_COMPLETED]
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
+
+
+def test_silent_job_succeeds_without_notifying(
+    session_factory, user, monkeypatch, discarded_inputs
+):
+    """채팅 첨부(notify=false)는 대화 안에서 결과를 보여주므로 알림을 만들지 않는다.
+
+    다만 결과 저장과 입력 정리는 알림 여부와 무관하게 그대로 돌아야 한다 — 여기가 무너지면
+    원본 파일이 공유 저장소에 영영 남는다.
+    """
+    job_id = _queue_job(session_factory, user, notify=False)
+    monkeypatch.setattr(pipeline, "run_analysis", lambda *a, **k: _fake_result())
+
+    assert runner.AnalysisWorker(session_factory).run_once() is True
+
+    assert _job(session_factory, job_id).status == JobStatus.SUCCEEDED
+    with session_factory() as db:
+        assert db.execute(select(AnalysisResult)).scalar_one().job_id == job_id
+    assert _notification_types(session_factory) == []
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
+
+
+def test_silent_job_fails_without_notifying(session_factory, user, monkeypatch, discarded_inputs):
+    job_id = _queue_job(session_factory, user, notify=False)
+    monkeypatch.setattr(
+        pipeline,
+        "run_analysis",
+        lambda *a, **k: (_ for _ in ()).throw(AppError("실패", "개인정보가 남아 있습니다.", 422)),
+    )
+
+    runner.AnalysisWorker(session_factory).run_once()
+
+    job = _job(session_factory, job_id)
+    assert job.status == JobStatus.FAILED
+    assert job.error_message == "개인정보가 남아 있습니다."
+    assert _notification_types(session_factory) == []
     assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
 
 
@@ -336,9 +371,27 @@ def test_expired_lease_at_attempt_limit_fails_and_discards_inputs(
     assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
 
 
-def test_expired_lease_recovery_is_idempotent(
-    session_factory, user, discarded_inputs
-):
+def test_expired_lease_of_silent_job_does_not_notify(session_factory, user, discarded_inputs):
+    """lease 만료 경로도 job.notify 를 본다 — 여기만 빠뜨리면 채팅 첨부가 타임아웃될 때
+    알림이 샌다."""
+    job_id = _queue_job(session_factory, user, notify=False)
+    with session_factory() as db:
+        AnalysisJobRepository(db).claim_next("w1", lease_seconds=60)
+    with session_factory() as db:
+        job = db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id)).scalar_one()
+        job.attempt_count = settings.ANALYSIS_JOB_MAX_ATTEMPTS
+        job.lease_expires_at = datetime.now(UTC) - timedelta(minutes=5)
+        db.commit()
+
+    with session_factory() as db:
+        assert runner.recover_expired_leases(db) == 1
+
+    assert _job(session_factory, job_id).status == JobStatus.FAILED
+    assert _notification_types(session_factory) == []
+    assert discarded_inputs == [(user, job_id, len(FILE_NAMES))]
+
+
+def test_expired_lease_recovery_is_idempotent(session_factory, user, discarded_inputs):
     job_id = _queue_job(session_factory, user)
     with session_factory() as db:
         AnalysisJobRepository(db).claim_next("w1", lease_seconds=60)

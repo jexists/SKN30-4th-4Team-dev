@@ -124,6 +124,21 @@ export const FileLines = ({ className }: IconProps) => (
   </svg>
 )
 
+/** 이미지 첨부. 썸네일을 못 그릴 때(새로고침 뒤 원본이 없을 때) 자리를 대신한다. */
+export const Photo = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="8.5" cy="10" r="1.4" stroke="currentColor" strokeWidth="1.4" />
+    <path
+      d="m4 17 4.5-4.5 3 3L15 12l5 5"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const Info = ({ className }: IconProps) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />

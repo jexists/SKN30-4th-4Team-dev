@@ -72,9 +72,7 @@ def test_accepts_immediately_with_202_and_job_id(member, db_sessionmaker):
         assert job.file_names == ["contract.pdf"]
 
 
-def test_files_are_stored_before_the_job_becomes_visible(
-    member, fake_input_store, monkeypatch
-):
+def test_files_are_stored_before_the_job_becomes_visible(member, fake_input_store, monkeypatch):
     """워커가 입력 없는 QUEUED 를 집어가면 안 된다."""
     client, user_id = member
     original_create = AnalysisJobRepository.create
@@ -104,6 +102,28 @@ def test_creates_started_notification_pointing_at_the_job(member, db_sessionmake
         assert note.resource_type == "ANALYSIS_JOB"
         assert note.resource_id == job_id
         assert note.read_at is None
+
+
+def test_notify_false_skips_the_started_notification(member, db_sessionmaker):
+    """채팅 첨부 경로. 대화 안에서 진행 상태를 그대로 보여주므로 알림까지 쌓지 않는다."""
+    client, _ = member
+
+    job_id = uuid.UUID(_post(client, data={"notify": "false"}).json()["data"]["id"])
+
+    with db_sessionmaker() as db:
+        assert db.execute(select(Notification)).scalars().all() == []
+        # 워커가 완료·실패 알림을 만들 때 다시 보도록 뜻이 행에 남아 있어야 한다.
+        assert db.get(AnalysisJob, job_id).notify is False
+
+
+def test_notify_defaults_to_true_when_the_field_is_absent(member, db_sessionmaker):
+    """분석 화면(/analyze)은 필드를 보내지 않는다 — 기본값이 바뀌면 알림이 통째로 사라진다."""
+    client, _ = member
+
+    job_id = uuid.UUID(_post(client).json()["data"]["id"])
+
+    with db_sessionmaker() as db:
+        assert db.get(AnalysisJob, job_id).notify is True
 
 
 # ── 중복 방지 ─────────────────────────────────────────────────────────
@@ -175,9 +195,7 @@ def test_rejects_oversized_file(member):
     assert response.status_code == 413
 
 
-def test_invalid_input_leaves_no_job_and_no_stored_input(
-    member, db_sessionmaker, fake_input_store
-):
+def test_invalid_input_leaves_no_job_and_no_stored_input(member, db_sessionmaker, fake_input_store):
     client, _ = member
 
     _post(client, files=[("file", ("contract.hwp", b"x", "application/octet-stream"))])

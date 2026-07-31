@@ -96,6 +96,12 @@ class ChatState(TypedDict, total=False):
     messages: Annotated[list, add_messages]
     # 이 방에 첨부된 계약서 본문(개인정보 치환 완료). 없으면 빈 문자열.
     document_context: str
+    # 이번 턴에 올린 첨부를 읽지 못했는지. 계약서 없이 답하되 그 사실을 먼저 밝히게 한다.
+    attachment_failed: bool
+    # 이 방에 계약서가 **붙어는 있는데** 본문을 가져오지 못했는지(분석 결과 없음·본문 없음).
+    # attachment_failed 와 층이 다르다 — 저쪽은 "이번에 올린 파일", 이쪽은 "이미 붙어 있던
+    # 계약서" 다. 같은 플래그로 뭉개면 고지 문구가 사실과 어긋난다.
+    document_unavailable: bool
     # 검색 / 생성
     query: str  # 검색어 (초기엔 질문, rewrite_query 가 갱신)
     retrieved: list
@@ -182,20 +188,81 @@ def generate(state: ChatState) -> dict:
     # 첨부가 없을 때 빈 블록을 넣으면 모델이 "계약서를 확인할 수 없다"는 군더더기를 붙이므로
     # 블록과 규칙을 통째로 넣지 않는다.
     document = (state.get("document_context") or "").strip()
-    doc_rule = (
-        "7) [첨부 계약서]는 사용자가 실제로 올린 계약서다. 계약서에 관한 질문이면 그 내용을 "
-        "먼저 확인하고, 법령·판례와 대조해 문제 소지를 짚어라. 계약서에 없는 조항·금액·날짜를 "
-        "지어내지 말고, 확인되지 않으면 '첨부된 계약서에서는 확인되지 않는다'고 밝혀라.\n"
-        if document
-        else ""
-    )
     doc_block = f"[첨부 계약서]\n{document[:MAX_DOCUMENT_CHARS]}\n\n" if document else ""
+
+    attachment_failed = bool(state.get("attachment_failed"))
+    # 본문이 실제로 들어왔으면 '못 가져왔다'는 고지는 사실이 아니다 — 플래그보다 본문을 믿는다.
+    document_unavailable = bool(state.get("document_unavailable")) and not document
+
+    # "첫 문장" 을 요구하는 규칙은 프롬프트 전체에서 **하나뿐이어야 한다.** 예전에는 고정 규칙
+    # 2번(첫 문장에서 질문에 직접 답하라)과 첨부 실패 규칙(첫 문장에서 못 읽었다고 밝혀라)이
+    # 동시에 첫 문장을 요구해, 모델이 둘 중 하나를 임의로 버렸다 — 고지가 밀리면 사용자는
+    # 봇이 자기 계약서를 보고 답한 줄로 읽는다. 그래서 순서 규칙 자체를 조건부로 조립한다.
+    # 첨부 실패와 계약서 조회 실패가 겹칠 수도 있으므로(예전 계약서가 붙은 방에서 새 파일까지
+    # 실패) 그 경우도 한 줄로 합쳐 둔다 — 두 줄이 되면 다시 첫 문장이 갈라진다.
+    answer_rule = (
+        "그다음 문장부터는 질문의 핵심 용어를 그대로 사용해 법령·판례에 근거한 결론부터 제시하라."
+    )
+    if attachment_failed and document_unavailable:
+        opening_rule = (
+            "첫 문장에서 이번에 올린 첨부 파일도, 이 대화에 연결된 계약서 내용도 읽지 못해 "
+            f"일반적인 기준으로 답변한다는 사실을 밝혀라. {answer_rule}"
+        )
+    elif attachment_failed:
+        opening_rule = (
+            "첫 문장에서 이번에 올린 첨부 파일을 읽지 못했다는 사실을 밝혀라. 그다음 문장부터는 "
+            "질문의 핵심 용어를 그대로 사용해 법령·판례에 근거한 결론부터 제시하라."
+        )
+    elif document_unavailable:
+        opening_rule = (
+            "첫 문장에서 현재 첨부된 계약서 내용을 불러오지 못해 일반적인 기준으로 답변한다는 "
+            f"사실을 밝혀라. {answer_rule}"
+        )
+    else:
+        opening_rule = (
+            "첫 문장에서 질문에 직접 답하라. 질문의 핵심 용어를 그대로 사용해 결론부터 제시하라."
+        )
+
+    # 고정 규칙 1~6 뒤에 상황별 규칙을 이어 붙인다. 번호는 여기서 매긴다 — 조건마다 하드코딩하면
+    # 첨부만 실패한 턴에서 "6) 다음 8)" 처럼 번호가 뛴다.
+    extra_rules: list[str] = []
+    if document:
+        extra_rules.append(
+            "[첨부 계약서]는 사용자가 실제로 올린 계약서다. 계약서에 관한 질문이면 그 내용을 "
+            "먼저 확인하고, 법령·판례와 대조해 문제 소지를 짚어라. 계약서에 없는 조항·금액·날짜를 "
+            "지어내지 말고, 확인되지 않으면 '첨부된 계약서에서는 확인되지 않는다'고 밝혀라."
+        )
+    # 첨부를 읽지 못한 턴. 질문까지 버리는 대신 계약서 없이 답하되, 사용자가 올린 파일을 봤다고
+    # 오해하지 않도록 모델이 그 사실을 먼저 밝히게 한다(순서는 위 opening_rule 이 정한다 —
+    # 여기서 다시 "첫 문장" 을 요구하면 규칙이 둘로 갈라진다).
+    if attachment_failed:
+        extra_rules.append(
+            "이번 질문에 올린 파일은 처리에 실패해 읽지 못했다. 그 사실을 밝힌 뒤에는 법령·판례에 "
+            "근거한 일반적인 기준으로 최대한 구체적으로 답하라. 사과나 재시도 안내는 넣지 마라"
+            "(화면이 이미 알린다). 읽지 못한 파일의 금액·날짜·조항을 아는 것처럼 말하거나 "
+            "지어내지 마라."
+        )
+        # 방에 예전 계약서가 붙어 있으면 doc_block 은 그 계약서다. 어느 쪽을 못 읽었는지 못 박는다.
+        if document:
+            extra_rules.append(
+                "위 [첨부 계약서]는 이번에 올린 파일이 아니라 **이 대화에 이미 붙어 있던** "
+                "계약서다. 그 내용을 근거로 쓸 때는 이번에 올린 파일과 혼동하지 마라."
+            )
+    # 이 대화에 계약서가 붙어는 있는데 본문을 가져오지 못한 턴. 질문을 막지 않고 일반 답변을
+    # 내되, 계약서를 읽은 것처럼 말하면 사용자가 자기 계약서를 근거로 한 답으로 오해한다.
+    if document_unavailable:
+        extra_rules.append(
+            "이 대화에 연결된 계약서의 내용을 이번 턴에는 불러오지 못했다. 계약서를 실제로 읽은 "
+            "것처럼 말하거나 그 금액·날짜·조항을 지어내지 말고, 법령·판례에 근거한 일반적인 "
+            "기준으로 최대한 구체적으로 답하라. 사과나 재시도 안내는 넣지 마라(화면이 이미 알린다)."
+        )
+    doc_rule = "".join(f"{i}) {rule}\n" for i, rule in enumerate(extra_rules, start=7))
 
     prompt = (
         "너는 세입자를 돕는 법률 상담봇이다. 아래 근거만 사용해 답하라.\n"
         "규칙:\n"
         "1) 딱딱한 보고서체(~한다/~이다)가 아니라 상담원이 말하듯 정중한 해요체로 답하라.\n"
-        "2) 첫 문장에서 질문에 직접 답하라. 질문의 핵심 용어를 그대로 사용해 결론부터 제시하라.\n"
+        f"2) {opening_rule}\n"
         "3) 결론의 법적 근거는 [법령·판례]에서 인용하고 출처(법령명·조항 또는 법원·사건번호)를 "
         "자연스럽게 문장 안에 녹여라.\n"
         "4) 근거가 부분적이면 그 범위 안에서 최대한 구체적으로 답하고, "
@@ -250,8 +317,18 @@ def run_turn(
     question: str,
     history: list[dict] | None = None,
     document_context: str | None = None,
+    attachment_failed: bool = False,
+    document_unavailable: bool = False,
 ) -> str:
-    """한 턴 실행. document_context 는 방에 첨부된 계약서 본문(개인정보 치환 완료)이다."""
+    """한 턴 실행.
+
+    document_context 는 방에 첨부된 계약서 본문(개인정보 치환 완료)이다.
+    attachment_failed 는 이번 턴에 올린 파일을 읽지 못했다는 뜻으로, 계약서 없이 답하되
+    모델이 그 사실을 먼저 밝히게 한다(첨부가 실패했다고 질문까지 버리지 않기 위한 것).
+    document_unavailable 은 방에 계약서가 붙어 있는데 그 본문을 가져오지 못했다는 뜻이다.
+    둘 다 "계약서 없이 답하되 그 사실을 알린다" 지만 **무엇을 못 읽었는지가 다르므로**
+    문구가 달라야 한다 — 한 플래그로 합치면 고지가 사실과 어긋난다.
+    """
     import uuid
 
     msgs = []
@@ -273,6 +350,8 @@ def run_turn(
             "retrieval_attempts": 0,  # 턴마다 재작성 예산 초기화
             "messages": msgs,
             "document_context": document_context or "",
+            "attachment_failed": attachment_failed,
+            "document_unavailable": document_unavailable,
         },
         config={"configurable": {"thread_id": uuid.uuid4().hex}},
     )

@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -108,6 +109,11 @@ class AnalysisJob(Base):
     attempt_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
 
     file_names: Mapped[list[str]] = mapped_column(JsonB, nullable=False, default=list)
+
+    # 이 작업의 결과를 알림으로 알릴지. 채팅 첨부는 대화 안에서 진행·결과를 그대로 보여주므로
+    # 알림을 끈다(false) — 벨 배지·토스트까지 뜨면 같은 사실이 두 번 전달된다. 완료·실패 알림은
+    # 워커가 만들기 때문에 "알리지 말 것" 이 요청이 아니라 **행에** 남아 있어야 한다.
+    notify: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # error_message 는 그대로 사용자에게 보인다. 내부 예외 문자열·API 키·경로·계약서
     # 개인정보를 넣지 않는다 — 원인은 error_code 와 logger.exception 에 남긴다.

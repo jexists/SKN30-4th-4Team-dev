@@ -11,6 +11,8 @@ import {
   detachDocument,
   listMessages,
   listRooms,
+  updateMessage,
+  type ChatMessageRow,
   type ChatRoom,
 } from '../../api/chatHistory'
 import { isRetryable } from '../../api/apiErrorHandler'
@@ -32,7 +34,15 @@ import { MessageList } from './MessageList'
 import { RenameRoomModal } from './RenameRoomModal'
 import { groupRoomsByDate } from './roomGroups'
 import { topicById } from './topics'
-import type { Attachment, Message } from './types'
+import type { AttachmentKind, Message, PendingFile, RetryContext, RoomAttachment } from './types'
+import { showToast } from '../../components/Toast/toastStore'
+import {
+  MAX_TOTAL_FILES,
+  describeRejections,
+  fileKey,
+  isPdf,
+  mergeFiles,
+} from '../../utils/uploadFiles'
 import styles from './Chat.module.scss'
 
 const MAX_LEN = 2000
@@ -52,11 +62,37 @@ const BUSY_ELSEWHERE_NOTICE = '다른 대화에서 답변을 생성 중입니다
 let _id = 0
 const newId = () => `m${Date.now()}-${_id++}`
 
-const toMessage = (r: { id: string; role: string; content: string }): Message => ({
+const toMessage = (r: ChatMessageRow): Message => ({
   id: r.id,
+  // 기록에서 되살아난 메시지는 로컬 id 없이 서버 id 로 산다 — 재시도가 이 행을 갈아끼울 수 있게
+  // serverId 에도 같은 값을 둔다.
+  serverId: r.id,
   role: r.role === 'ASSISTANT' ? 'assistant' : 'user',
   content: r.content,
+  // 서버에는 이름·종류만 있다. previewUrl 은 이번 세션에 고른 파일에만 있으므로
+  // 기록에서 되살아난 메시지는 썸네일 대신 아이콘으로 그려진다.
+  attachments: r.attachments?.length ? r.attachments.map((a) => ({ ...a })) : undefined,
 })
+
+/** 첨부만 두고 보냈을 때 대신 보내는 질문. 빈 문자열은 서버(min_length=1)가 막는다. */
+const ATTACHMENT_ONLY_QUESTION = '첨부한 계약서를 분석해 주세요.'
+/** 첨부를 읽는 동안 잠깐 보여주는 자리표시. DB 에 저장하지 않는다. */
+const READING_NOTICE = '계약서를 읽고 있습니다'
+/** 첨부 실패에 사유가 없을 때만 쓰는 문구 — 보통은 서버·폴링이 만든 구체적인 사유를 그대로 쓴다. */
+const ATTACH_FAILED_REASON = '첨부한 파일을 읽지 못했습니다.'
+
+const attachmentKind = (file: File): AttachmentKind => (isPdf(file) ? 'pdf' : 'image')
+
+/**
+ * 방에 붙은 계약서의 파일명들. 예전 서버는 analysis_file_names 를 내려주지 않으므로
+ * 단일 필드로 물러난다 — 배포 순서 때문에 배지가 빈 채로 보이지 않게.
+ */
+const roomFileNames = (room: ChatRoom): string[] =>
+  room.analysis_file_names?.length
+    ? room.analysis_file_names
+    : room.analysis_file_name
+      ? [room.analysis_file_name]
+      : ['첨부한 계약서']
 
 /**
  * 대화 영역을 막는 이유.
@@ -70,6 +106,18 @@ type ConversationBlock = { reason: 'unavailable' } | { reason: 'failed'; error: 
 /** 응답 자체를 못 받았을 때(ApiError 아님)만 쓰는 문구 — 그 밖엔 서버가 준 문구를 그대로 쓴다. */
 const CONVERSATION_NETWORK_ERROR = '대화를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'
 
+/**
+ * 아직 보내지 않은 첨부와 **그것을 고른 대화**. 파일 목록만 들고 있으면 A 에서 고른 파일이
+ * B 로 따라가 그대로 전송된다 — 어느 방의 것인지가 목록만큼 중요한 정보다.
+ */
+interface PendingAttachment {
+  roomId: string | null
+  files: PendingFile[]
+}
+
+/** 다른 방의 첨부를 볼 때 돌려주는 빈 목록. 매번 새 배열을 만들면 하위 렌더가 헛돈다. */
+const NO_PENDING_FILES: PendingFile[] = []
+
 export function Chat() {
   const { isAuthed } = useAuth()
   const navigate = useNavigate()
@@ -82,8 +130,11 @@ export function Chat() {
   const isMobile = useIsMobile()
   const [historyOpen, setHistoryOpen] = useState(false)
   // 떠 있는 액션은 대화 위에 겹치므로, 읽으려고 내릴 때는 비켜 준다.
-  const { hidden: actionsHidden, onScroll: onThreadScroll, reveal: revealActions } =
-    useHideOnScrollDown()
+  const {
+    hidden: actionsHidden,
+    onScroll: onThreadScroll,
+    reveal: revealActions,
+  } = useHideOnScrollDown()
 
   // 방 목록(커서 페이지네이션)
   const [rooms, setRooms] = useState<ChatRoom[]>([])
@@ -120,21 +171,58 @@ export function Chat() {
       return true
     }
   })
-  // 이 대화에 첨부한 계약서. READY 가 되면 이후 모든 질문에 계약서 맥락이 함께 들어간다
-  // (본문은 프론트가 들고 있지 않다 — 서버가 방에 붙은 분석에서 읽는다).
-  const [attachment, setAttachment] = useState<Attachment | null>(null)
+  // 아직 보내지 않은 첨부파일. 고르는 것만으로는 업로드하지 않고, 전송할 때 함께 올라간다 —
+  // 그래야 ✕ 로 뺄 수 있는 구간이 생긴다(예전엔 고르는 즉시 OCR 이 돌아 취소할 수 없었다).
+  // 어느 방에서 고른 것인지 함께 들고 있다가, 대화를 옮기면 폐기한다.
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment>(() => ({
+    roomId: activeRoomId,
+    files: [],
+  }))
+  // 이 대화가 지금 참고 중인 계약서(방 단위). 새로 첨부하면 통째로 교체된다.
+  // 본문은 프론트가 들고 있지 않다 — 서버가 방에 붙은 분석에서 읽는다.
+  const [roomAttachment, setRoomAttachment] = useState<RoomAttachment | null>(null)
+  // 다시 시도할 수 있는 **실패한 턴 하나**(가장 최근 것). 질문·파일·대상 말풍선이 한 덩어리다 —
+  // 따로 들고 있으면 "A 첨부 실패 → 질문 B 전송 → 실패 말풍선의 재시도" 에서 계약서 A 와 질문 B 가
+  // 함께 나간다. 새 질문·방 이동·성공은 이 덩어리째 버려서 원본 File 참조까지 함께 놓아준다.
+  const [retryContext, setRetryContext] = useState<RetryContext | null>(null)
 
-  const lastQuestion = useRef('')
   const activeRoomIdRef = useRef<string | null>(activeRoomId)
   const createdRoomIdRef = useRef<string | null>(null)
-  // 첨부가 진행 중인 동안에는 방 목록 동기화가 칩을 덮어쓰지 않게 막는다.
-  const attachingRef = useRef(false)
+  // 업로드가 진행 중인 **방들**. 그 방의 배지만 방 목록 동기화에서 지켜 준다 — 전역 플래그였을
+  // 때는 A 가 업로드하는 동안 B 로 옮기면 B 의 배지 동기화까지 통째로 걸러져, 다른 방의
+  // '참고 중' 표시가 낡은 채로 남았다.
+  const uploadingRoomsRef = useRef<Set<string>>(new Set())
+  // 언마운트·제거 때 revoke 하려고 만들어 둔 objectURL 을 모아 둔다(놔두면 메모리에 남는다).
+  const objectUrlsRef = useRef<Set<string>>(new Set())
   // 목록 무한스크롤의 스크롤 컨테이너. 사이드바·드로어 중 지금 마운트된 쪽이 채운다.
   const roomsScrollRef = useRef<HTMLDivElement>(null)
   const roomsSentinel = useRef<HTMLDivElement>(null)
   // pendingRooms 는 리렌더 후에야 반영된다 — 연타로 두 요청이 새는 걸 막으려면 즉시 잠가야 한다.
   const generatingRef = useRef(false)
   activeRoomIdRef.current = activeRoomId
+
+  // 지금 보고 있는 방에서 고른 첨부만 화면에 있는 셈이다. 폐기 effect 가 돌기 전(같은 커밋)
+  // 에도 B 의 입력창에 A 의 첨부가 비치지 않게, 렌더 단계에서 방을 대조한다.
+  const pendingFiles =
+    pendingAttachment.roomId === activeRoomId ? pendingAttachment.files : NO_PENDING_FILES
+
+  // 재시도 버튼을 달아 줄 말풍선. 폐기 effect 가 돌기 전(같은 커밋)에도 다른 방의 재시도가
+  // 이 화면에 비치지 않게, 여기서도 방을 대조한다.
+  const retryMessageId =
+    retryContext && retryContext.roomId === activeRoomId ? retryContext.localMessageId : null
+  // memo 된 콜백이 최신 재시도 대상을 보되 identity 는 고정되게 붙잡아 둔다.
+  const retryRef = useRef<RetryContext | null>(retryContext)
+  retryRef.current = retryContext
+
+  /**
+   * 썸네일 objectURL 반납. **state updater 안에서 부르지 않는다** — updater 는 StrictMode 에서
+   * 두 번 실행될 수 있어 부수효과를 넣으면 같은 URL 을 두 번 반납한다.
+   * 이미 반납한 URL 은 Set 에서 빠져 있으므로 두 번 불러도 한 번만 처리된다.
+   */
+  const revokePreview = useCallback((url: string | undefined) => {
+    if (!url || !objectUrlsRef.current.delete(url)) return
+    URL.revokeObjectURL(url)
+  }, [])
 
   const setPending = useCallback((key: string, on: boolean) => {
     setPendingRooms((prev) => {
@@ -226,7 +314,6 @@ export function Chat() {
       return
     }
 
-    lastQuestion.current = ''
     setMessages([])
 
     if (!activeRoomId) {
@@ -320,7 +407,7 @@ export function Chat() {
     setMessages([])
     setMessagesCursor(null)
     setConversationBlock(null)
-    lastQuestion.current = ''
+    setRetryContext(null) // 화면을 비웠으니 재시도할 말풍선도 없다.
   }
 
   function dismissLegalNotice() {
@@ -411,25 +498,62 @@ export function Chat() {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, streaming: false } : m)))
   }, [])
 
-  // 방을 열거나 목록이 갱신되면 첨부 칩을 방 정보로 복원한다 — 새로고침·대화 재진입에서도
-  // "이 대화는 계약서를 보고 있다"가 보여야 한다.
-  // 진행 중인 첨부는 덮지 않는다(목록에 아직 반영 전이라 칩이 깜빡였다 사라진다).
+  // 방을 열거나 목록이 갱신되면 '참고 중' 배지를 방 정보로 복원한다 — 새로고침·대화 재진입
+  // 에서도 "이 대화는 계약서를 보고 있다"가 보여야 한다.
+  // **지금 보는 방**의 업로드가 진행 중일 때만 덮지 않는다(목록에 아직 반영 전이라 배지가
+  // 깜빡였다 사라진다). 다른 방이 업로드 중이어도 이 방의 배지는 제 정보로 채운다.
   useEffect(() => {
-    if (attachingRef.current) return
     if (!activeRoomId) {
-      setAttachment(null)
+      setRoomAttachment(null)
       return
     }
+    if (uploadingRoomsRef.current.has(activeRoomId)) return
     const room = rooms.find((r) => r.id === activeRoomId)
-    // 목록에 아직 없으면(깊은 링크로 들어와 첫 페이지 밖) 그대로 둔다. 칩은 표시일 뿐이고,
+    // 목록에 아직 없으면(깊은 링크로 들어와 첫 페이지 밖) 그대로 둔다. 배지는 표시일 뿐이고,
     // 답변에 계약서를 넣을지는 서버가 방 정보를 보고 정한다.
     if (!room) return
-    setAttachment(
-      room.analysis_job_id
-        ? { fileName: room.analysis_file_name ?? '첨부한 계약서', state: 'READY' }
-        : null,
-    )
+    setRoomAttachment(room.analysis_job_id ? { fileNames: roomFileNames(room) } : null)
   }, [activeRoomId, rooms])
+
+  // 대화를 옮기면 **아직 보내지 않은** 첨부는 버린다 — A 에서 고른 파일이 B 에 보이거나 B 로
+  // 전송되면 안 된다. 화면 어디에서도 쓰지 않게 된 썸네일 URL 은 그 자리에서 반납한다
+  // (언마운트까지 들고 있으면 원본 File 이 통째로 메모리에 남는다).
+  useEffect(() => {
+    if (pendingAttachment.roomId === activeRoomId) return
+    const dropped = pendingAttachment.files
+    setPendingAttachment({ roomId: activeRoomId, files: [] })
+    dropped.forEach((p) => revokePreview(p.previewUrl))
+  }, [activeRoomId, pendingAttachment, revokePreview])
+
+  // 대화를 옮기면 그 방의 재시도 권한도 함께 버린다. 그 실패 말풍선은 이제 화면에 없고, 남겨
+  // 두면 A 에서 실패한 파일이 B 의 재시도에 실려 나간다 — 붙잡고 있던 원본 File 도 여기서
+  // 놓아준다(썸네일 URL 은 아래 정리 effect 가 화면 기준으로 반납한다).
+  useEffect(() => {
+    setRetryContext((prev) => (prev && prev.roomId !== activeRoomId ? null : prev))
+  }, [activeRoomId])
+
+  // 화면 어디에서도 더 이상 참조하지 않는 objectURL 을 반납한다. 방을 옮겨 메시지가 통째로
+  // 바뀌거나, 재시도로 실패 말풍선이 걷히면 그 썸네일은 즉시 쓸모가 없어진다 — 재시도용으로
+  // File 을 들고 있더라도 화면에 없는 preview URL 까지 살려 둘 이유는 없다.
+  useEffect(() => {
+    const inUse = new Set<string>()
+    for (const m of messages) {
+      for (const a of m.attachments ?? []) if (a.previewUrl) inUse.add(a.previewUrl)
+    }
+    for (const p of pendingFiles) if (p.previewUrl) inUse.add(p.previewUrl)
+    for (const url of [...objectUrlsRef.current]) {
+      if (!inUse.has(url)) revokePreview(url)
+    }
+  }, [messages, pendingFiles, revokePreview])
+
+  // 화면을 떠날 때 남은 썸네일 URL 을 정리한다.
+  useEffect(() => {
+    const urls = objectUrlsRef.current
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url))
+      urls.clear()
+    }
+  }, [])
 
   /** 분석이 끝날 때까지 폴링한다. 실패·취소·시간초과는 사용자에게 보일 문구로 던진다. */
   async function waitForAnalysis(jobId: string): Promise<void> {
@@ -449,99 +573,182 @@ export function Chat() {
   }
 
   /**
-   * 계약서를 이 대화에 첨부한다. 기존 분석 파이프라인(OCR·마스킹·개인정보 검증)을 그대로 쓰고,
-   * 완료된 분석을 방에 연결해 이후 질문마다 서버가 계약서를 함께 읽게 한다.
+   * 고른 파일을 프리뷰에 담는다. **여기서는 아무것도 업로드하지 않는다** — 전송할 때
+   * 한 건의 분석으로 함께 올라간다. 그래서 보내기 전까지는 ✕ 로 자유롭게 뺄 수 있다.
    *
-   * 실패는 공통 오류 모달이 아니라 칩에 남긴다 — 첨부한 자리에서 사유를 보고 바로 다시
-   * 고르는 편이 낫고, 모달은 그 흐름을 끊는다.
+   * objectURL 생성과 토스트는 **state updater 밖**에서 한다. updater 안에 두면 StrictMode 가 그
+   * 함수를 두 번 실행할 때 URL 이 두 개 생기고(하나는 영영 반납되지 않는다) 거부 토스트도
+   * 두 번 뜬다.
    */
-  async function handleAttach(file: File) {
+  function handlePickFiles(files: File[]) {
     if (!persistent) {
-      setAttachment({
-        fileName: file.name,
-        state: 'FAILED',
-        message: '로그인하면 계약서를 첨부할 수 있습니다',
-      })
+      showToast('로그인하면 계약서를 첨부할 수 있습니다', 'info')
       return
     }
+    const prev = pendingFiles
+    const { files: merged, rejected } = mergeFiles(
+      prev.map((p) => p.file),
+      files,
+      MAX_TOTAL_FILES - prev.length,
+    )
+    // 거부 사유(형식·용량·개수·중복)는 공통 유틸이 문구까지 만들어 준다.
+    describeRejections(rejected, '첨부').forEach((n) => showToast(n.message, n.type))
 
-    attachingRef.current = true
-    setAttachment({ fileName: file.name, state: 'PREPARING' })
-    // 분석은 수 분까지 걸린다. 그 사이 사용자가 다른 대화를 열었으면 칩을 건드리지 않는다 —
-    // 첨부 자체는 원래 방에 그대로 붙고, 그 방으로 돌아오면 목록 동기화가 칩을 복원한다.
-    let roomId = activeRoomIdRef.current
-    const stillHere = () => activeRoomIdRef.current === roomId
-    try {
-      // 새 대화에서 첨부하면 방이 아직 없다. 여기서 만들고 ref·URL 까지 맞춰 둬야
-      // 곧이어 질문을 보낼 때 submitQuestion 이 같은 방을 또 만들지 않는다.
-      if (!roomId) {
-        const room = await createRoom(file.name.slice(0, 40))
-        roomId = room.id
-        createdRoomIdRef.current = roomId
-        activeRoomIdRef.current = roomId
-        setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)])
-        navigate(`/chat/${encodeURIComponent(roomId)}`)
+    const next = merged.map((file) => {
+      const key = fileKey(file)
+      const existing = prev.find((p) => p.key === key)
+      if (existing) return existing
+      const kind = attachmentKind(file)
+      // 이미지는 보내기 전에도 무엇을 골랐는지 보여야 한다. URL 은 제거·대화 전환·언마운트 때
+      // 반납한다. 썸네일을 못 만들어도 파일까지 잃지는 않는다 — 아이콘으로 떨어질 뿐이다.
+      let previewUrl: string | undefined
+      if (kind === 'image') {
+        try {
+          previewUrl = URL.createObjectURL(file)
+          objectUrlsRef.current.add(previewUrl)
+        } catch {
+          previewUrl = undefined
+        }
       }
-
-      const job = await startAnalysis([file], undefined, { silent: true })
-      if (stillHere()) setAttachment({ fileName: file.name, state: 'PROCESSING' })
-      await waitForAnalysis(job.id)
-
-      const updated = await attachDocument(roomId, job.id)
-      setRooms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
-      if (stillHere()) {
-        setAttachment({ fileName: updated.analysis_file_name ?? file.name, state: 'READY' })
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 401) return // client.ts 가 로그아웃 처리
-      if (!stillHere()) return // 다른 대화를 보고 있으면 그 방의 칩을 건드리지 않는다
-      setAttachment({
-        fileName: file.name,
-        state: 'FAILED',
-        // 서버 문구가 있으면 그대로 쓴다(첨부 제한·용량 초과 등 사유가 구체적이다).
-        message: error instanceof Error ? error.message : '계약서를 첨부하지 못했습니다',
-      })
-    } finally {
-      attachingRef.current = false
-    }
+      return { key, file, kind, previewUrl }
+    })
+    // 고른 파일은 **지금 보고 있는 대화**의 것이다.
+    setPendingAttachment({ roomId: activeRoomId, files: next })
   }
 
-  /** 첨부만 해제한다. 분석과 위험 보고서는 그대로 남는다. */
-  async function handleRemoveAttachment() {
+  /** 아직 보내지 않은 첨부 하나를 뺀다. 서버에는 올라간 적이 없으므로 로컬만 지우면 된다. */
+  function handleRemovePendingFile(key: string) {
+    const removed = pendingFiles.find((p) => p.key === key)
+    setPendingAttachment({
+      roomId: activeRoomId,
+      files: pendingFiles.filter((p) => p.key !== key),
+    })
+    // 화면에서 뺐으면 썸네일도 그 자리에서 반납한다(updater 밖이라 한 번만 실행된다).
+    revokePreview(removed?.previewUrl)
+  }
+
+  /** 방이 참고 중인 계약서를 뗀다. 분석과 위험 보고서는 그대로 남는다. */
+  async function handleDetachRoomDocument() {
     const roomId = activeRoomIdRef.current
-    // 실패한 첨부는 서버에 붙은 적이 없으므로 칩만 지운다.
-    if (!roomId || attachment?.state !== 'READY') {
-      setAttachment(null)
-      return
-    }
-    setAttachment(null)
+    setRoomAttachment(null)
+    if (!roomId) return
     try {
       const updated = await detachDocument(roomId)
       setRooms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
     } catch {
-      // 실패하면 방 목록이 다음 동기화에서 칩을 되살린다 — 공통 모달이 이미 사유를 알렸다.
+      // 실패하면 방 목록이 다음 동기화에서 배지를 되살린다 — 공통 모달이 이미 사유를 알렸다.
     }
   }
 
-  async function submitQuestion(text: string, regenerate = false) {
-    const q = text.trim()
+  /**
+   * 첨부파일을 올려 이 방에 연결한다. 기존 분석 파이프라인(OCR·마스킹·개인정보 검증)을
+   * 그대로 쓰고, 완료된 분석을 방에 붙여 이후 질문마다 서버가 계약서를 함께 읽게 한다.
+   *
+   * 여러 파일은 **한 건의 분석**으로 올린다 — 방이 참고하는 계약서는 한 세트이고, 나눠
+   * 올리면 회원당 진행 중 분석 1건 제약에 스스로 걸린다.
+   */
+  async function uploadAndAttach(roomId: string, files: File[]): Promise<void> {
+    // 올리는 동안에는 이 방의 배지만 목록 동기화에서 지켜 준다(다른 방 배지는 계속 갱신된다).
+    uploadingRoomsRef.current.add(roomId)
+    try {
+      // 채팅은 대화 안에서 진행 상태와 결과를 그대로 보여준다 — 알림까지 쌓으면 중복이다.
+      const job = await startAnalysis(files, undefined, { silent: true, notify: false })
+      await waitForAnalysis(job.id)
+      const updated = await attachDocument(roomId, job.id)
+      setRooms((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+      if (activeRoomIdRef.current === roomId) {
+        setRoomAttachment({ fileNames: roomFileNames(updated) })
+      }
+    } finally {
+      uploadingRoomsRef.current.delete(roomId)
+    }
+  }
+
+  /**
+   * 한 턴 전송. `retry` 가 있으면 **그 실패한 턴을** 다시 보낸다 — 질문·파일·갈아끼울 말풍선이
+   * 전부 그 덩어리에서 나오므로, 그 사이 다른 질문을 보냈어도 섞이지 않는다.
+   */
+  async function submitQuestion(text: string, retry: RetryContext | null = null) {
+    // 재시도는 **아직 못 붙인** 첨부만 다시 올린다. 방에 이미 붙은 계약서는 서버가 들고 있어
+    // 다시 올릴 이유가 없지만(그때는 files 가 비어 있다), 첨부 단계에서 실패한 파일은 여기서
+    // 되살리지 않으면 계약서 없이 되묻게 되고 사용자는 그 사실을 알 수 없다.
+    const outgoing = retry ? retry.files : pendingFiles
+    // 사용자가 실제로 쓴 글이 있었는지. 있으면 첨부가 실패해도 계약서 없이라도 답한다.
+    const typed = retry ? retry.typed : text.trim().length > 0
+    // 첨부만 두고 보내는 것도 뜻이 분명한 요청이다. 무엇을 물었는지는 기본 문구가 채운다.
+    const q = retry
+      ? retry.question
+      : text.trim() || (outgoing.length > 0 ? ATTACHMENT_ONLY_QUESTION : '')
     // 어느 방이든 생성 중이면 보내지 않는다(방을 옮겨도 마찬가지). 막힌 이유는 입력창이 안내한다.
     if (!q || generatingRef.current) return
     generatingRef.current = true
+    // 이 전송으로 이전 실패 턴의 재시도 권한은 사라진다. 새 질문이면 남은 경고 문구에서 버튼만
+    // 걷히고(문구는 그 턴의 기록이라 남긴다), 재시도면 자기 자신을 대체한다. 어느 쪽이든 여기서
+    // 붙잡고 있던 원본 File 참조를 놓아준다 — 이게 옛 파일이 새 질문에 실리던 통로였다.
+    setRetryContext(null)
+    // 실패하면 다시 올릴 파일. 첨부에 성공하면 서버가 계약서를 들고 있으므로 비운다.
+    let retryFiles = outgoing
 
-    // 직접 전송(재생성 포함)은 과거를 읽던 중이어도 최신 메시지 추적을 강제로 시작한다.
+    // 직접 전송(재시도 포함)은 과거를 읽던 중이어도 최신 메시지 추적을 강제로 시작한다.
     setFollowLatestRequest((request) => request + 1)
 
-    const history: ChatTurn[] = messages
-      .filter((m) => !m.error)
+    // 재시도면 그 턴의 실패 말풍선을 걷어내고 다시 시도한다(에러 버블, 그리고 첨부를 못 읽은 채
+    // 답한 말풍선). 남겨두면 같은 질문의 답이 둘로 쌓이고 어느 쪽이 계약서를 본 답인지 알 수 없다.
+    // **id 로** 지운다 — '마지막 말풍선' 을 지우던 예전 방식은 무엇을 지우는지 클릭한 버튼과
+    // 무관했다.
+    const dropRetryTarget = (list: Message[]) =>
+      retry ? list.filter((m) => m.id !== retry.localMessageId) : list
+
+    // 걷어낼 말풍선이 DB 에도 저장돼 있으면(첨부 실패 답변) 새로 쌓지 말고 그 행을 갈아끼운다.
+    // 안 그러면 새로고침했을 때 실패 답변과 재시도 답변이 나란히 남는다.
+    const replacingMessageId = retry?.serverMessageId ?? null
+
+    // 맥락도 걷어낸 뒤 기준이다 — 계약서를 못 읽고 답한 말풍선을 그대로 보내면, 모델이
+    // "앞에서 이미 설명한 내용은 반복하지 마라" 규칙을 그 답에 적용해 같은 답을 되풀이한다.
+    const history: ChatTurn[] = dropRetryTarget(messages)
+      .filter((m) => !m.error && !m.pending)
       .slice(-HISTORY_TURNS)
       .map((m) => ({ role: m.role, content: m.content }))
 
-    if (!regenerate) {
-      setMessages((m) => [...m, { id: newId(), role: 'user', content: q }])
+    // 보낸 첨부는 이 메시지의 기록으로 남는다(서버에는 이름·종류만, 화면에는 썸네일까지).
+    const sentAttachments = outgoing.map((p) => ({
+      name: p.file.name,
+      kind: p.kind,
+      previewUrl: p.previewUrl,
+    }))
+    // 진행 버블을 나중에 지우려면 id 가 필요하다.
+    const noticeId = newId()
+    // 계약서를 읽는 동안 빈 화면을 두지 않는다. 답변이 오면 이 자리가 교체된다.
+    const notice: Message[] =
+      outgoing.length > 0
+        ? [{ id: noticeId, role: 'assistant', content: READING_NOTICE, pending: true }]
+        : []
+
+    // 진행 버블("계약서를 읽고 있습니다")은 결과가 나오면 자리를 내준다.
+    const dropPendingNotice = (list: Message[]) => list.filter((m) => m.id !== noticeId)
+
+    if (!retry) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: newId(),
+          role: 'user',
+          content: q,
+          attachments: sentAttachments.length > 0 ? sentAttachments : undefined,
+        },
+        ...notice,
+      ])
+    } else if (notice.length > 0) {
+      // 재시도도 계약서를 다시 읽는다. 실패 말풍선을 지금 걷어내야 그 자리에 진행 상태가 보인다.
+      setMessages((m) => [...dropRetryTarget(m), ...notice])
     }
-    lastQuestion.current = q
     setInput('')
+    // 프리뷰는 즉시 비운다 — 말풍선으로 옮겨 갔으므로 입력창에 남으면 두 번 보인다.
+    // objectURL 은 말풍선이 계속 쓰므로 여기서 revoke 하지 않는다(말풍선이 화면에서 사라지면
+    // 위의 정리 effect 가 그때 반납한다).
+    // 재시도는 자기 파일을 따로 들고 있다 — 그 사이 사용자가 다음 질문용으로 고른 첨부까지
+    // 대신 비우면 안 된다.
+    if (!retry && outgoing.length > 0) setPendingAttachment({ roomId: activeRoomId, files: [] })
     // 이 요청이 어느 방의 것인지 들고 다닌다 — 방을 옮겨도 '작성중' 은 자기 방에만 남는다.
     // 새 대화는 방을 만든 뒤 URL 전환까지 한 왕복(질문 저장)이 더 걸려서 그 사이 두 슬롯을
     // 함께 켜 둔다. 그래서 정리는 하나가 아니라 켜 둔 것 전부를 대상으로 한다.
@@ -552,10 +759,9 @@ export function Chat() {
     }
     markPending(roomKey(activeRoomId))
 
-    // regenerate 면 끝에 붙어있던 에러 버블을 제거하고 다시 시도한다.
-    const dropTrailingError = (list: Message[]) =>
-      regenerate && list[list.length - 1]?.error ? list.slice(0, -1) : list
-
+    // 아래 catch 가 "무엇이 실패했는지" 로 문구를 고른다. 첨부 실패는 대부분 여기서 흡수되므로
+    // (질문은 그대로 나간다) outgoing 유무만 보고는 더 이상 첨부 탓인지 알 수 없다.
+    let attachThrew = false
     let roomId = activeRoomId
     try {
       if (persistent && !roomId) {
@@ -567,7 +773,16 @@ export function Chat() {
         markPending(roomId)
         setRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)])
       }
-      if (persistent && roomId && !regenerate) await addMessage(roomId, 'USER', q)
+      if (persistent && roomId && !retry) {
+        // 첨부는 이름·종류만 저장한다 — previewUrl 은 이 세션에서만 유효한 objectURL 이다.
+        await addMessage(
+          roomId,
+          'USER',
+          q,
+          undefined,
+          sentAttachments.map(({ name, kind }) => ({ name, kind })),
+        )
+      }
       // 방을 만드는 사이 사용자가 다른 대화를 열었으면 새 방으로 끌고 오지 않는다.
       if (persistent && roomId && activeRoomId === null && activeRoomIdRef.current === null) {
         createdRoomIdRef.current = roomId
@@ -582,32 +797,111 @@ export function Chat() {
         setPending(NEW_CHAT_KEY, false)
       }
 
+      // 첨부가 있으면 답변 전에 먼저 읽힌다(OCR·분석은 수 분까지 걸린다).
+      //
+      // 여기서 실패해도 **사용자가 쓴 글이 있으면 질문까지 버리지 않는다** — 계약서 없이 답할 수
+      // 있는 질문이 대부분이고, 예전처럼 오류 말풍선만 남기면 사용자는 다시 타이핑해야 했다.
+      // 대신 못 읽었다는 사실은 두 곳에서 알린다: 답변 위 경고 줄(사유 그대로)과, 서버 플래그로
+      // 모델이 답변 첫 문장에 넣는 인정 문구(이쪽만 DB 에 남는다).
+      let degradedReason: string | null = null
+      if (outgoing.length > 0 && roomId) {
+        try {
+          await uploadAndAttach(
+            roomId,
+            outgoing.map((p) => p.file),
+          )
+          // 방에 붙었으니 더는 들고 있을 이유가 없다 — 이제 재시도는 계약서를 다시 올리지 않는다.
+          retryFiles = []
+        } catch (e) {
+          attachThrew = true
+          // 세션 만료는 첨부 문제가 아니다. 삼키면 로그아웃 흐름을 놓치고 답변만 계속 시도한다.
+          if (e instanceof ApiError && e.code === 401) throw e
+          // 첨부만 보낸 턴은 예전대로 오류 말풍선. 계약서 없이 "계약서를 분석해 주세요" 에
+          // 답하면 아무것도 못 본 채 지어낸 답이 된다.
+          if (!typed) throw e
+          degradedReason = e instanceof Error && e.message ? e.message : ATTACH_FAILED_REASON
+          // retryFiles 는 그대로 둔다 — 경고 줄의 '파일 다시 첨부' 가 이 파일을 다시 올린다.
+        }
+      }
+
       // roomId 를 함께 넘기면 서버가 그 방에 첨부된 계약서를 근거에 넣는다.
-      const res = await sendChat(q, history, roomId)
+      const res = await sendChat(q, history, roomId, degradedReason !== null)
+      // 저장이 끝난 뒤 이 말풍선에 서버 id 를 붙여야 하므로 id 를 미리 잡아 둔다.
+      const answerId = newId()
       if (!persistent || activeRoomIdRef.current === roomId) {
         setMessages((m) => [
-          ...dropTrailingError(m),
-          { id: newId(), role: 'assistant', content: res.answer, streaming: true },
+          ...dropPendingNotice(dropRetryTarget(m)),
+          {
+            id: answerId,
+            role: 'assistant',
+            content: res.answer,
+            streaming: true,
+            degradedNotice: degradedReason ?? undefined,
+          },
         ])
+        // 계약서를 못 읽고 답한 턴만 다시 시도할 수 있다. 대상은 방금 만든 이 말풍선이고,
+        // 질문과 파일도 이 턴의 것으로 못 박는다 — 다음 질문이 들어오면 통째로 폐기된다.
+        if (degradedReason !== null) {
+          setRetryContext({
+            roomId,
+            question: q,
+            typed,
+            files: retryFiles,
+            localMessageId: answerId,
+            // 재시도가 또 계약서 없이 답했다면 갈아끼울 행은 여전히 방금 PUT 한 그 행이다.
+            // (저장이 끝나면 아래에서 실제 id 로 확정한다.)
+            serverMessageId: replacingMessageId,
+          })
+        }
       }
 
       if (persistent && roomId) {
-        await addMessage(roomId, 'ASSISTANT', res.answer, res.response_time_ms)
+        // 첨부 실패 답변을 교체하는 재시도면 **기존 행을 갈아끼운다.** 새로 저장하면 DB 에는
+        // 실패 답변이 남아, 새로고침했을 때 답이 둘로 보인다(화면에서만 걷어낸 탓이었다).
+        // created_at 은 서버가 건드리지 않으므로 대화 순서도 그대로다.
+        const saved = replacingMessageId
+          ? await updateMessage(roomId, replacingMessageId, res.answer, res.response_time_ms)
+          : await addMessage(roomId, 'ASSISTANT', res.answer, res.response_time_ms)
+        // 이 답변도 첨부를 못 읽은 채 나갔다면 다음 재시도가 같은 행을 교체할 수 있어야 한다.
+        // (그 사이 새 질문이 들어와 재시도가 폐기됐으면 되살리지 않는다 — id 로 확인한다.)
+        if (degradedReason !== null) {
+          setMessages((m) => m.map((x) => (x.id === answerId ? { ...x, serverId: saved.id } : x)))
+          setRetryContext((prev) =>
+            prev?.localMessageId === answerId ? { ...prev, serverMessageId: saved.id } : prev,
+          )
+        }
         touchRoom(roomId)
       }
     } catch (e) {
       // 401 이면 세션이 끊긴 것이다 — client.ts 가 로그아웃시키고 로그인 화면으로 넘긴다.
       // 답변 생성 실패로 보이게 하면 사용자가 재시도만 반복하게 된다.
       if (e instanceof ApiError && e.code === 401) return
+      // 여기까지 온 첨부 실패는 되살릴 글이 없는 경우(첨부만 보낸 턴)다. 사유가 구체적이므로
+      // (형식·용량·개인정보 잔존·진행 중 분석 1건 제약) 서버·폴링이 만든 문구를 그대로 보여준다
+      // — "답변 생성 실패" 로 뭉개면 사용자가 파일을 고칠 생각을 못 하고 재시도만 반복한다.
       const content =
-        e instanceof ApiError
-          ? '답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-          : '답변을 생성하지 못했습니다. 네트워크 연결을 확인해 주세요.'
+        attachThrew && e instanceof Error && e.message
+          ? e.message
+          : e instanceof ApiError
+            ? '답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+            : '답변을 생성하지 못했습니다. 네트워크 연결을 확인해 주세요.'
+      const errorId = newId()
       if (!persistent || activeRoomIdRef.current === roomId) {
         setMessages((m) => [
-          ...dropTrailingError(m),
-          { id: newId(), role: 'assistant', content, error: true },
+          ...dropPendingNotice(dropRetryTarget(m)),
+          { id: errorId, role: 'assistant', content, error: true },
         ])
+        // '다시 생성' 은 **실패했던 그 질문**을 다시 보낸다. 오류 버블 자체는 DB 에 저장된 적이
+        // 없지만, 재시도가 실패한 경우라면 갈아끼우려던 degraded 행은 아직 그대로 있다 —
+        // 그 대상까지 넘겨줘야 다음 성공이 새 행을 쌓지 않고 그 자리를 채운다.
+        setRetryContext({
+          roomId,
+          question: q,
+          typed,
+          files: retryFiles,
+          localMessageId: errorId,
+          serverMessageId: replacingMessageId,
+        })
       }
     } finally {
       generatingRef.current = false
@@ -622,8 +916,16 @@ export function Chat() {
   const submitRef = useRef(submitQuestion)
   submitRef.current = submitQuestion
 
-  const regenerate = useCallback(() => {
-    void submitRef.current(lastQuestion.current, true)
+  /**
+   * 실패 말풍선의 '다시 생성'·'파일 다시 첨부'. **클릭한 말풍선**의 재시도만 받아들인다 —
+   * 그 사이 새 질문을 보냈거나 방을 옮겨 재시도가 폐기됐으면 아무 일도 하지 않는다(버튼도
+   * 이미 사라져 있다). 이 대조가 없으면 옛 파일이 최신 질문에 실려 나간다.
+   */
+  const regenerate = useCallback((messageId: string) => {
+    const context = retryRef.current
+    if (!context || context.localMessageId !== messageId) return
+    if (context.roomId !== activeRoomIdRef.current) return
+    void submitRef.current('', context)
   }, [])
 
   /**
@@ -650,8 +952,7 @@ export function Chat() {
     )
   }
 
-  const showEmpty =
-    activeRoomId === null && messages.length === 0 && !openingRoom && !sending
+  const showEmpty = activeRoomId === null && messages.length === 0 && !openingRoom && !sending
 
   // 데스크탑 사이드바와 모바일 드로어가 **같은 목록 컴포넌트**를 쓴다 — 담는 그릇만 다르다.
   const historyPanel = (
@@ -728,7 +1029,10 @@ export function Chat() {
             {conversationBlock?.reason === 'unavailable' ? (
               // API 실패가 아니라 로그인·저장소 설정 문제다 — 다시 시도해도 결과가 같다.
               <div className={styles.conversationError}>
-                <ErrorState variant="plain" message="로그인 상태와 채팅 저장소 설정을 확인해 주세요." />
+                <ErrorState
+                  variant="plain"
+                  message="로그인 상태와 채팅 저장소 설정을 확인해 주세요."
+                />
               </div>
             ) : conversationBlock ? (
               <div className={styles.conversationError}>
@@ -761,6 +1065,7 @@ export function Chat() {
                 isLoadingOlder={loadingOlder}
                 hasMoreOlder={messagesCursor !== null}
                 followLatestRequest={followLatestRequest}
+                retryMessageId={retryMessageId}
                 onLoadOlder={loadOlder}
                 onStreamingDone={onStreamingDone}
                 onRegenerate={regenerate}
@@ -776,9 +1081,11 @@ export function Chat() {
                 disabled={sending || openingRoom || busyElsewhere}
                 notice={busyElsewhere ? BUSY_ELSEWHERE_NOTICE : undefined}
                 maxLength={MAX_LEN}
-                attachment={attachment}
-                onAttach={(file) => void handleAttach(file)}
-                onRemoveAttachment={() => void handleRemoveAttachment()}
+                pendingFiles={pendingFiles}
+                onPickFiles={handlePickFiles}
+                onRemovePendingFile={handleRemovePendingFile}
+                roomAttachment={roomAttachment}
+                onDetachRoomDocument={() => void handleDetachRoomDocument()}
               />
             )}
           </div>
@@ -786,18 +1093,10 @@ export function Chat() {
       </div>
 
       {renameTarget && (
-        <RenameRoomModal
-          room={renameTarget}
-          onClose={closeRenameModal}
-          onSaved={handleRenamed}
-        />
+        <RenameRoomModal room={renameTarget} onClose={closeRenameModal} onSaved={handleRenamed} />
       )}
       {deleteTarget && (
-        <DeleteRoomModal
-          room={deleteTarget}
-          onClose={closeDeleteModal}
-          onDeleted={handleDeleted}
-        />
+        <DeleteRoomModal room={deleteTarget} onClose={closeDeleteModal} onDeleted={handleDeleted} />
       )}
     </div>
   )

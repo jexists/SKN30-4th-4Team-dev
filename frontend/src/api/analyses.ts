@@ -14,20 +14,27 @@ export const ANALYSIS_TITLE_MAX = 200
  * 않게 한다 — 서버가 같은 키의 기존 작업을 그대로 돌려준다.
  *
  * options 는 채팅 첨부처럼 **화면이 실패를 직접 표현하는 자리**를 위한 것이다
- * (첨부 칩이 사유를 보여주므로 공통 오류 모달까지 뜨면 같은 말이 두 번 나온다).
+ * (말풍선이 사유를 보여주므로 공통 오류 모달까지 뜨면 같은 말이 두 번 나온다).
+ *
+ * notify: false 는 채팅이 쓴다 — 대화 안에서 진행 상태와 결과를 그대로 보여주므로 알림까지
+ * 쌓이면 같은 사실이 벨 배지·토스트로 두 번 전달된다. 완료·실패 알림은 백그라운드 워커가
+ * 만들기 때문에 이 뜻은 접수 시점에 작업 행에 저장된다.
  */
 export function startAnalysis(
   files: File[],
   idempotencyKey?: string,
-  options?: ApiOptions,
+  options?: ApiOptions & { notify?: boolean },
 ): Promise<AnalysisJob> {
+  const { notify, ...apiOptions } = options ?? {}
   const form = new FormData()
   for (const file of files) {
     // FastAPI 의 list[UploadFile] 계약에 맞춰 같은 필드 이름을 반복한다.
     form.append('file', file)
   }
+  // 생략하면 서버 기본값(true)이다 — 분석 화면은 지금처럼 알림을 받는다.
+  if (notify === false) form.append('notify', 'false')
   return apiPostForm<AnalysisJob>(BASE, form, {
-    ...options,
+    ...apiOptions,
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
   })
 }
@@ -42,7 +49,10 @@ export function getAnalysis(jobId: string, silent = false): Promise<AnalysisJobD
   return apiGet<AnalysisJobDetail>(`${BASE}/${jobId}`, { silent })
 }
 
-export function listAnalyses(cursor?: string | null, limit = 20): Promise<Page<AnalysisJobSummary>> {
+export function listAnalyses(
+  cursor?: string | null,
+  limit = 20,
+): Promise<Page<AnalysisJobSummary>> {
   const params = new URLSearchParams({ limit: String(limit) })
   if (cursor) params.set('cursor', cursor)
   return apiGet<Page<AnalysisJobSummary>>(`${BASE}?${params}`)

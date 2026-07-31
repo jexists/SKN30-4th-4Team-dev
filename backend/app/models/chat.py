@@ -16,11 +16,15 @@ import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import DateTime, ForeignKey
+from sqlalchemy import JSON, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 from app.db.base import Base
+
+# SQLite 폴백(테스트)에서도 같은 컬럼을 쓰기 위한 변형. analysis_job.py 와 같은 방식이다.
+JsonB = JSONB().with_variant(JSON(), "sqlite")
 
 _clock_lock = threading.Lock()
 _last_ts: datetime | None = None
@@ -82,6 +86,12 @@ class ChatMessage(Base):
     )
     role: Mapped[str] = mapped_column()  # USER / ASSISTANT / SYSTEM
     content: Mapped[str] = mapped_column()
+    # 이 메시지와 함께 보낸 첨부파일 — [{"name": ..., "kind": "image"|"pdf"|"file"}].
+    # **파일명과 종류만** 담는다. 원본 바이트는 워커가 분석을 끝내며 지우므로 서버에 없다.
+    # "지금 이 대화가 무슨 계약서를 읽는가" 는 chat_room.analysis_job_id 가 들고, 이 컬럼은
+    # "어느 메시지에 무엇을 붙여 보냈는가" 라는 대화 기록만 담당한다(둘은 어긋날 수 있다 —
+    # 새 계약서를 첨부하면 방은 최신 것만 참고하지만 옛 메시지의 첨부 표시는 그대로 남는다).
+    attachments: Mapped[list[dict[str, str]] | None] = mapped_column(JsonB, nullable=True)
     response_time: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=monotonic_utcnow)
 
